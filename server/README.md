@@ -25,7 +25,7 @@ provisioned account token in the panel; the server exchanges it for a one-day
 HttpOnly, SameSite=Strict session cookie (Secure on HTTPS). Tokens are cleared
 from the form and never saved to browser storage. Logout revokes that session
 in SQLite, and login rotates an existing session. Customer sign-up is available separately as an opt-in preview below. Identity
-verification, recovery, and development token revocation remain unimplemented. Do not expose this API publicly yet.
+Real email delivery and development token management are not configured. Do not expose this API publicly yet.
 
 Authenticated requests use `Authorization: Bearer <development token>`:
 
@@ -95,7 +95,7 @@ passwords, session persistence and logout through a real browser on desktop
 and mobile with an isolated in-memory DB. Backend tests cover normalization,
 password hashes, duplicate registration, session rotation and throttling.
 
-Before public account launch: implement email verification, password recovery, account deletion, broader abuse controls, and hosted TLS/routing.
+Before public account launch: connect and validate real email delivery, account deletion, broader abuse controls, and hosted TLS/routing.
 Customer account support here does not enable live purchases or paid exports.
 
 ## Account controls and activity
@@ -119,8 +119,8 @@ POST /api/logout-all invalidates all sessions and bearer tokens for a customer
 account and clears this browser's cookie. It requires exact Origin. It is not
 offered for development-token-only accounts because revoking their only login
 method would make them inaccessible; these accounts retain Disconnect instead.
-Password recovery is still unavailable, so this feature requires knowing the
-current password and is not a forgotten-password reset.
+This password-change feature requires knowing the current password. The separate
+forgotten-password recovery flow described below uses a mailbox link.
 
 ## Checkout retries and confirmation
 
@@ -146,3 +146,39 @@ confirmation with bounded sequential polling and then refreshes the ledger
 balance. A browser redirect and query parameters never grant credits. A pending
 state means no verified credit grant has been recorded; it is not proof that a
 card was charged. A canceled return retains the attempt so it can be resumed.
+
+## Verification, recovery and local inbox
+
+`npm run dev` explicitly enables customer accounts and the loopback-only local
+mailbox while rejecting Stripe credential configuration. It starts the same
+server and persistent account DB; `npm start` retains explicit feature flags.
+ENABLE_DEV_INBOX=1 supplies a temporary DevelopmentMailbox, not an SMTP service.
+The local mailbox never sends mail over the network, logs links or persists raw
+links; it keeps at most 50 messages for 24 hours in memory. Restart clears it.
+The inbox API requires the explicit flag, a loopback socket and a loopback origin.
+There is no hosted email provider adapter configured yet. The injectable mailer
+interface is `send({to,subject,url})`; connecting it to real delivery is separate.
+
+Registration attempts to send verification when a mailer is configured. Failed
+delivery does not roll back a created account; sign in and resend instead. The
+account response reports emailVerified and the panel can resend verification.
+POST /api/send-verification requires an authenticated customer, exact Origin and
+an account rate limit. POST /api/verify-email consumes a 24-hour verification
+challenge. Links open a confirmation page and are not consumed by GET requests.
+
+POST /api/recovery accepts email and returns the same public message for known
+and unknown accounts (including provider failure). Email/IP throttles limit
+requests. POST /api/reset-password accepts a 30-minute challenge and new password.
+A successful reset atomically changes the password, invalidates every session and
+bearer token, and consumes all outstanding account challenges. The user then
+signs in again. Paid balances and account identity are preserved. Password
+changes also invalidate outstanding recovery challenges. A concurrent reset
+cannot reuse a challenge or overwrite a newer password.
+
+Only SHA-256 challenge hashes are stored in SQLite, alongside a credential hash
+version to reject stale resets. No raw recovery links are stored there. Link
+tokens travel in URL fragments, not query strings, and are removed from the
+address bar when read by the account page. Pages set no-referrer and API responses
+use no-store. Both email routes and local mailbox are unavailable without their
+explicit configuration. Real mailbox delivery and verification of deliverability
+remain pending; verification logic alone does not launch public accounts.
