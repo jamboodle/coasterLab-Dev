@@ -52,3 +52,11 @@ release archives are unchanged.
 Run `node scripts/verify-pricing.cjs` with the documented server running to
 check the flow at four viewport sizes. Styles and scripts for this standalone
 page use direct references; no release asset regeneration is needed for it.
+
+## Credit backend foundation
+
+A Node 24 / SQLite test API now supports development account tokens, persistent
+credit balances, server-priced Stripe test checkout, and signed idempotent
+payment webhooks. Run `npm test` and `npm start`; see [server setup](server/README.md).
+The pricing simulator remains separate. No live payment, customer sign-in, or
+paid export enforcement is enabled. CI runs the backend tests on pushes and PRs.

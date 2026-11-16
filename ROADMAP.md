@@ -9,10 +9,11 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - [ ] Decide the number of free
   exports and the definition of one billable export before enforcing credits.
 - Establish a source/build workflow before modifying release assets.
-- Add authenticated accounts and a server-side credit ledger. Browser storage is
-  insufficient for balances or payment authorization.
-- Integrate a payment provider in test mode first. Use verified, idempotent payment
-  webhooks; never grant credits solely because a browser returns from checkout.
+- [x] Add a persistent SQLite credit ledger and development bearer-token authentication.
+- [ ] Replace development tokens with customer sign-in and session lifecycle.
+- [x] Implement Stripe test checkout adapter and signed, idempotent payment webhooks; mocked integration tests pass.
+- [ ] Validate real Stripe sandbox checkout and webhook delivery with secure credentials.
+- [ ] Connect checkout and account balance to the frontend.
 - Show the balance and cost before export. Keep canceled/failed payments and failed
   exports from consuming credits; support webhook retries and duplicate callbacks.
 - Decide how to enforce paid exports while retaining local image processing. The
