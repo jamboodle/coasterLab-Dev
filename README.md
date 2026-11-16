@@ -1,5 +1,7 @@
 # CoasterLab
 
+Development repository: https://github.com/jamboodle/coasterLab-Dev (branch `main`).
+
 Standalone development copy of the CoasterLab browser application, imported from
 the owner-supplied r27 complete project ZIP, identified as Sites commit
 `9c365be25cc14d218857750d743f1f40dbf2b69e`. The initial r25 import is retained

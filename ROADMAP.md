@@ -44,9 +44,10 @@ third-party images customers upload. Confirm rights for any sold design packs.
 
 - [x] Import owner-supplied r27 complete project; preserve original dist layout, assets, historical releases and license files.
 - [x] Document local startup and monetization priorities.
-- [ ] Create private `jamboodle/coasterlab` on GitHub and push the standalone history.
+- [x] Push standalone r27 history to `jamboodle/coasterLab-Dev` on GitHub.
 - [ ] Attach the development repository to the cloud environment.
 - [ ] Establish asset regeneration and automated CI before paid feature development.
 
-Remote creation is currently blocked: the available GitHub API identity receives
-Forbidden. Existing read access to the website repository does not grant repo creation.
+Git remote: https://github.com/jamboodle/coasterLab-Dev.git (main).
+Use this repository as the development source. The Sites-managed repository and
+the website deployment copy are separate and do not synchronize automatically.
