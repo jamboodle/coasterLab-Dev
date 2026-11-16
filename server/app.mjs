@@ -52,7 +52,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
             if(!id)return send(409,{error:'An account already exists for this email. Sign in instead.'});
           }else{
             const identity=ledger.identity(input.email);
-            if(!await passwordMatches(input.password,identity))return send(401,{error:'Email or password is incorrect.'});
+            if(!await passwordMatches(input.password,identity) || ledger.identity(input.email)?.digest!==identity?.digest)return send(401,{error:'Email or password is incorrect.'});
             id=identity.account;
           }
           ledger.revokeSession(session);cookie(ledger.createSession(id),86400);
@@ -73,6 +73,32 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       }
       const account=ledger.authenticate(bearer) || ledger.sessionAccount(session);
       if (!account) return send(401,{error:'Authentication required'});
+      if (req.method==='GET' && path==='/api/account') {
+        const identity=ledger.identityForAccount(account);
+        return send(200,{credits:ledger.balance(account),email:identity?.email || null,passwordAccount:Boolean(identity),activity:ledger.activity(account)});
+      }
+      if(req.method==='POST' && path==='/api/logout-all') {
+        if(!ledger.identityForAccount(account))return send(403,{error:'Use Disconnect for development-token accounts.'});
+        if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+        ledger.revokeAllSessions(account);cookie('',0);return send(200,{ok:true});
+      }
+      if(req.method==='POST' && path==='/api/password') {
+        if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+        if(!ledger.allowAuth(req.socket.remoteAddress || 'unknown'))return send(429,{error:'Too many attempts. Try again in 15 minutes.'});
+        if(activePasswordRequests>=4)return send(503,{error:'Account service is busy. Try again.'});
+        activePasswordRequests++;
+        try{
+          let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>4096)return send(413,{error:'Payload too large'});}
+          let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
+          if(!body || typeof body.currentPassword!=='string' || body.currentPassword.length>128 || typeof body.newPassword!=='string' || body.newPassword.length<12 || body.newPassword.length>128)return send(400,{error:'Enter your current password and a new password of 12 to 128 characters.'});
+          const identity=ledger.identityForAccount(account);
+          if(!await passwordMatches(body.currentPassword,identity))return send(401,{error:'Current password is incorrect.'});
+          if(body.currentPassword===body.newPassword)return send(400,{error:'Choose a different password.'});
+          const next=await passwordHash(body.newPassword);
+          if((ledger.authenticate(bearer) || ledger.sessionAccount(session))!==account || !ledger.changePassword(account,identity.digest,next.salt,next.digest))return send(409,{error:'Account access changed. Sign in again.'});
+          cookie(ledger.createSession(account),86400);return send(200,{ok:true});
+        }finally{activePasswordRequests--;}
+      }
       if (req.method==='GET' && path==='/api/balance') return send(200,{credits:ledger.balance(account)});
       if (req.method==='POST' && path==='/api/checkout') {
         if (!paymentsEnabled) return send(503,{error:'Test payments are not configured'});

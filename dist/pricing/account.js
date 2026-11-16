@@ -12,8 +12,14 @@
   function disconnected(){el('connected-account').hidden=true;el('account-login').hidden=!developmentLogin;el('customer-login').hidden=!customerAccounts;el('account-balance').textContent='—';}
   async function refresh(){
     try{
-      const data=await request('/api/balance');
+      const data=await request('/api/account');
       el('account-balance').textContent=data.credits;
+      el('account-security').hidden=!data.passwordAccount;
+      el('signout-everywhere').hidden=!data.passwordAccount;
+      el('account-email').textContent=data.email || '';
+      const history=el('account-activity');history.replaceChildren();
+      for(const entry of data.activity){const item=document.createElement('li');item.textContent=(entry.delta>0?'+':'')+entry.delta+' credits · '+(entry.kind==='purchase'?'Test purchase':entry.kind);history.append(item);}
+      if(!data.activity.length){const item=document.createElement('li');item.textContent='No credit activity yet.';history.append(item);}
       el('account-login').hidden=true;el('customer-login').hidden=true;el('connected-account').hidden=false;
       el('test-checkout').disabled=!configured;
       return true;
@@ -55,6 +61,16 @@
   el('refresh-balance').addEventListener('click',async()=>{if(await refresh())status('Balance refreshed from the server.');});
   el('disconnect-account').addEventListener('click',async()=>{
     try{await request('/api/logout',{method:'POST'});disconnected();status('Disconnected.');}catch(error){status(error.message);}
+  });
+  el('password-change').addEventListener('submit',async event=>{
+    event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;
+    try{
+      await request('/api/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({currentPassword:el('current-password').value,newPassword:el('new-password').value})});
+      status('Password changed. Other sessions have been signed out.');
+    }catch(error){status(error.message);}finally{event.target.reset();button.disabled=false;}
+  });
+  el('signout-everywhere').addEventListener('click',async()=>{
+    try{await request('/api/logout-all',{method:'POST'});el('password-change').reset();disconnected();status('Signed out everywhere.');}catch(error){status(error.message);}
   });
   el('test-checkout').addEventListener('click',async()=>{
     el('test-checkout').disabled=true;status('Opening Stripe test checkout…');

@@ -11,7 +11,8 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - Establish a source/build workflow before modifying release assets.
 - [x] Add a persistent SQLite credit ledger and development bearer-token authentication.
 - [x] Add opt-in customer email/password registration, sign-in, throttling and session lifecycle.
-- [ ] Add email verification, password recovery/change and account deletion before public launch.
+- [x] Add current-password-verified password changes, sign out everywhere and account credit activity.
+- [ ] Add email verification, forgotten-password recovery and account deletion before public launch.
 - [x] Implement Stripe test checkout adapter and signed, idempotent payment webhooks; mocked integration tests pass.
 - [ ] Validate real Stripe sandbox checkout and webhook delivery with secure credentials.
 - [x] Connect test checkout and server account balance to an opt-in development panel using expiring, revocable HttpOnly sessions.

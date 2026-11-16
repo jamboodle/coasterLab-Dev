@@ -95,6 +95,29 @@ passwords, session persistence and logout through a real browser on desktop
 and mobile with an isolated in-memory DB. Backend tests cover normalization,
 password hashes, duplicate registration, session rotation and throttling.
 
-Before public account launch: implement email verification, password recovery
-and change, account deletion, broader abuse controls, and hosted TLS/routing.
+Before public account launch: implement email verification, password recovery, account deletion, broader abuse controls, and hosted TLS/routing.
 Customer account support here does not enable live purchases or paid exports.
+
+## Account controls and activity
+
+GET /api/account returns the authenticated account's balance, email (when
+registered), password-account flag, and latest 50 credit entries. It never
+accepts an account ID from the browser, and never returns password hashes or
+session identifiers. Legacy entries do not have dates; the UI does not invent
+purchase timestamps.
+
+POST /api/password accepts currentPassword and newPassword for customer
+accounts. It requires the current password, a different 12–128-character new
+password, exact Origin, and the authentication rate/concurrency limits. Password
+updates are conditional on the previously verified hash so concurrent changes
+cannot overwrite a newer password. The update invalidates all existing sessions
+and bearer tokens, then issues a fresh session for the requesting browser.
+Credits and purchase history are preserved. In-progress login checks also
+recheck the current password hash before creating a session.
+
+POST /api/logout-all invalidates all sessions and bearer tokens for a customer
+account and clears this browser's cookie. It requires exact Origin. It is not
+offered for development-token-only accounts because revoking their only login
+method would make them inaccessible; these accounts retain Disconnect instead.
+Password recovery is still unavailable, so this feature requires knowing the
+current password and is not a forgotten-password reset.

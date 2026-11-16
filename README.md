@@ -72,3 +72,8 @@ Customer registration and sign-in are available as an opt-in preview via
 accounts and the persistent credit balance. Run `node scripts/verify-accounts.mjs`
 for the self-contained browser test. Email verification and recovery are pending;
 this preview is not a public account launch.
+
+Signed-in customer accounts can change their password and sign out every session.
+The account panel also shows the latest 50 ledger entries. Password changes
+require the current password and preserve the credit balance; password recovery
+and email verification still require further development.

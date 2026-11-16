@@ -47,6 +47,22 @@ export class Ledger {
     return token ? this.db.prepare('SELECT account FROM sessions WHERE hash=? AND expires>?').get(hash(token),Date.now())?.account : undefined;
   }
   revokeSession(token) { if(token)this.db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token)); }
+  identityForAccount(account) {return this.db.prepare('SELECT * FROM identities WHERE account=?').get(account);}
+  revokeAllSessions(account) {
+    this.db.prepare('DELETE FROM sessions WHERE account=?').run(account);
+    this.db.prepare('UPDATE accounts SET token_hash=? WHERE id=?').run(hash(randomBytes(32).toString('hex')),account);
+  }
+  changePassword(account,expectedDigest,salt,digest) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      const result=this.db.prepare('UPDATE identities SET salt=?,digest=? WHERE account=? AND digest=?').run(salt,digest,account,expectedDigest);
+      if(!result.changes){this.db.exec('ROLLBACK');return false;}
+      this.revokeAllSessions(account);this.db.exec('COMMIT');return true;
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  activity(account) {
+    return this.db.prepare('SELECT delta,kind FROM entries WHERE account=? ORDER BY rowid DESC LIMIT 50').all(account);
+  }
   balance(account) {
     return this.db.prepare('SELECT COALESCE(SUM(delta),0) AS balance FROM entries WHERE account=?').get(account).balance;
   }

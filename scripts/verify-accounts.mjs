@@ -33,7 +33,19 @@ try{
   await page.locator('#connected-account').waitFor({state:'visible'});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
+  assert.equal(await page.locator('#account-activity').textContent(),'No credit activity yet.');
+  await page.locator('#account-security summary').click();
+  await page.locator('#current-password').fill('browser-test-password');
+  await page.locator('#new-password').fill('replacement-test-password');
+  await page.locator('#password-change button').click();
+  await page.waitForFunction(()=>document.getElementById('account-status').textContent==='Password changed. Other sessions have been signed out.');
+  assert.equal(await page.locator('#new-password').inputValue(),'');
+  await page.locator('#signout-everywhere').click();await page.locator('#customer-login').waitFor({state:'visible'});
+  await page.locator('#customer-password').fill('browser-test-password');await page.locator('#customer-signin').click();
+  await page.waitForFunction(()=>document.getElementById('account-status').textContent==='Email or password is incorrect.');
+  await page.locator('#customer-password').fill('replacement-test-password');await page.locator('#customer-signin').click();
+  await page.locator('#connected-account').waitFor({state:'visible'});
   assert.deepEqual(errors,[]);await context.close();
-  console.log(`PASS ${width}px customer account: registration, persistent session, logout, wrong password, sign-in and unavailable checkout`);
+  console.log(`PASS ${width}px customer account: registration, persistent session, logout, wrong password, sign-in, password change, sign-out everywhere, history and unavailable checkout`);
  }
 }finally{await browser?.close();await new Promise(r=>server.close(r));ledger.close();}

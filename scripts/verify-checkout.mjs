@@ -43,6 +43,7 @@ try{
  const timestamp=Math.floor(Date.now()/1000);const signature=createHmac('sha256',secret).update(timestamp+'.'+body).digest('hex');
  const response=await fetch(origin+'/api/webhooks/stripe',{method:'POST',body,headers:{'stripe-signature':`t=${timestamp},v1=${signature}`}});assert.equal(response.status,200);
  await page.locator('#refresh-balance').click();await page.waitForFunction(()=>document.getElementById('account-balance').textContent==='10');
+ assert.match(await page.locator('#account-activity').textContent(),/\+10 credits · Test purchase/);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.locator('#disconnect-account').click();await page.locator('#account-login').waitFor({state:'visible'});
  assert.equal((await page.request.get(origin+'/api/balance')).status(),401);
