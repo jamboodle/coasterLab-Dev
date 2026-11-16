@@ -8,6 +8,6 @@
   "scripts": {
     "start": "node server/index.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node scripts/smoke.cjs && node scripts/verify-pricing.cjs && node scripts/verify-checkout.mjs"
+    "test:browser": "node scripts/smoke.cjs && node scripts/verify-pricing.cjs && node scripts/verify-checkout.mjs && node scripts/verify-accounts.mjs"
   }
 }

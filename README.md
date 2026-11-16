@@ -37,8 +37,8 @@ files are retained; this import does not assign a new license to the application
 ## Next development
 
 See [ROADMAP.md](ROADMAP.md). The first selected priority is export credits and the
-pricing flow. Payments, accounts, credit accounting, and export enforcement are not
-implemented in this baseline. No production deployment is configured here.
+pricing flow. The opt-in backend now provides accounts, test checkout and credit accounting.
+Real payment verification, account recovery and paid export enforcement are pending. No production deployment is configured here.
 
 ## Pricing prototype
 
@@ -58,11 +58,17 @@ page use direct references; no release asset regeneration is needed for it.
 A Node 24 / SQLite test API now supports development account tokens, persistent
 credit balances, server-priced Stripe test checkout, and signed idempotent
 payment webhooks. Run `npm test` and `npm start`; see [server setup](server/README.md).
-The pricing simulator remains separate. No live payment, customer sign-in, or
-paid export enforcement is enabled. CI runs the backend tests on pushes and PRs.
+The pricing simulator remains separate. Customer sign-in is an opt-in preview;
+live payments and paid export enforcement are disabled. CI runs the backend tests on pushes and PRs.
 
 For integrated account/checkout testing, use `ENABLE_DEV_LOGIN=1 npm start` and
 the same-origin server on port 3003. Its pricing page includes an opt-in
 development account panel; the static-only server on port 3002 keeps that panel
 hidden. Run `node scripts/verify-checkout.mjs` for a self-contained mocked-provider
-browser test. Customer sign-in and real Stripe sandbox verification are pending.
+browser test. Real Stripe sandbox verification is pending.
+
+Customer registration and sign-in are available as an opt-in preview via
+`ENABLE_CUSTOMER_ACCOUNTS=1 npm start`. The pricing page then uses email/password
+accounts and the persistent credit balance. Run `node scripts/verify-accounts.mjs`
+for the self-contained browser test. Email verification and recovery are pending;
+this preview is not a public account launch.

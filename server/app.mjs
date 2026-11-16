@@ -1,4 +1,5 @@
 import {createHmac, timingSafeEqual} from 'node:crypto';
+import {credentials,passwordHash,passwordMatches} from './passwords.mjs';
 export function verifyWebhook(body, signature, secret, now=Date.now()) {
   if (!secret || typeof signature !== 'string') return false;
   const parts=signature.split(',').map(x=>x.split('='));
@@ -7,8 +8,9 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, fetchImpl=fetch}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, fetchImpl=fetch}) {
   const paymentsEnabled=secretKey?.startsWith('sk_test_') && Boolean(webhookSecret);
+  let activePasswordRequests=0;
   return async (req,res) => {
     const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
     try {
@@ -21,19 +23,46 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         const body=Buffer.concat(chunks);
         if (!verifyWebhook(body,req.headers['stripe-signature'],webhookSecret)) return send(400,{error:'Invalid webhook signature'});
         let event;try {event=JSON.parse(body);} catch {return send(400,{error:'Invalid JSON'});}
-        if (typeof event.id!=='string' || !event.id || typeof event.type!=='string') return send(400,{error:'Invalid event'});
+        if (!event || typeof event.id!=='string' || !event.id || typeof event.type!=='string') return send(400,{error:'Invalid event'});
         ledger.creditPayment(event);
         return send(200,{received:true});
       }
       const session=req.headers.cookie?.match(/(?:^|;\s*)cl_session=([a-f0-9]{64})(?:;|$)/)?.[1];
       const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
-      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,paymentsEnabled:Boolean(paymentsEnabled),mode:'test'});
+      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test'});
       if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
+      if(req.method==='POST' && ['/api/register','/api/login'].includes(path)) {
+        if(!customerAccounts)return send(404,{error:'Account sign-in is not enabled'});
+        if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+        if(!ledger.allowAuth(req.socket.remoteAddress || 'unknown')){
+          res.setHeader('Retry-After','900');return send(429,{error:'Too many attempts. Try again in 15 minutes.'});
+        }
+        if(activePasswordRequests>=4)return send(503,{error:'Sign-in is busy. Please try again.'});
+        activePasswordRequests++;
+        try{
+          let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>4096)return send(413,{error:'Payload too large'});}
+          let parsed;try{parsed=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
+          const input=credentials(parsed);
+          if(!input)return send(400,{error:'Enter a valid email and a password of 12 to 128 characters.'});
+          let id;
+          if(path==='/api/register') {
+            const {salt,digest}=await passwordHash(input.password);
+            id=ledger.registerIdentity(input.email,salt,digest);
+            if(!id)return send(409,{error:'An account already exists for this email. Sign in instead.'});
+          }else{
+            const identity=ledger.identity(input.email);
+            if(!await passwordMatches(input.password,identity))return send(401,{error:'Email or password is incorrect.'});
+            id=identity.account;
+          }
+          ledger.revokeSession(session);cookie(ledger.createSession(id),86400);
+          return send(path==='/api/register'?201:200,{ok:true});
+        }finally{activePasswordRequests--;}
+      }
       if (req.method==='POST' && path==='/api/session') {
         if(!developmentLogin)return send(404,{error:'Development login disabled'});
         let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>2048)return send(413,{error:'Payload too large'});}
-        let token;try{token=JSON.parse(body).token;}catch{return send(400,{error:'Invalid request'});}
+        let token;try{token=JSON.parse(body)?.token;}catch{return send(400,{error:'Invalid request'});}
         const id=typeof token==='string' && /^[a-f0-9]{64}$/.test(token) ? ledger.authenticate(token) : undefined;
         if(!id)return send(401,{error:'Invalid development token'});
         ledger.revokeSession(session);

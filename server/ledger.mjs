@@ -9,6 +9,8 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), session TEXT UNIQUE);
       CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), delta INTEGER NOT NULL, kind TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
+      CREATE TABLE IF NOT EXISTS identities(email TEXT PRIMARY KEY, account TEXT UNIQUE NOT NULL REFERENCES accounts(id), salt TEXT NOT NULL, digest TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), expires INTEGER NOT NULL);`);
   }
   createAccount() {
@@ -18,6 +20,22 @@ export class Ledger {
   }
   authenticate(token) {
     return typeof token === 'string' ? this.db.prepare('SELECT id FROM accounts WHERE token_hash=?').get(hash(token))?.id : undefined;
+  }
+  identity(email) {return this.db.prepare('SELECT * FROM identities WHERE email=?').get(email);}
+  registerIdentity(email,salt,digest) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      if(this.identity(email)){this.db.exec('ROLLBACK');return null;}
+      const {id}=this.createAccount();
+      this.db.prepare('INSERT INTO identities VALUES (?,?,?,?)').run(email,id,salt,digest);
+      this.db.exec('COMMIT');return id;
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  allowAuth(address,now=Date.now()) {
+    this.db.prepare('DELETE FROM auth_limits WHERE expires<=?').run(now);
+    const key=hash(address);
+    this.db.prepare('INSERT INTO auth_limits VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1').run(key,now+900000);
+    return this.db.prepare('SELECT count FROM auth_limits WHERE key=?').get(key).count<=20;
   }
   createSession(account) {
     const token=randomBytes(32).toString('hex');

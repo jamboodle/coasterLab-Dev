@@ -10,11 +10,13 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
   exports and the definition of one billable export before enforcing credits.
 - Establish a source/build workflow before modifying release assets.
 - [x] Add a persistent SQLite credit ledger and development bearer-token authentication.
-- [ ] Replace development tokens with customer sign-in and session lifecycle.
+- [x] Add opt-in customer email/password registration, sign-in, throttling and session lifecycle.
+- [ ] Add email verification, password recovery/change and account deletion before public launch.
 - [x] Implement Stripe test checkout adapter and signed, idempotent payment webhooks; mocked integration tests pass.
 - [ ] Validate real Stripe sandbox checkout and webhook delivery with secure credentials.
 - [x] Connect test checkout and server account balance to an opt-in development panel using expiring, revocable HttpOnly sessions.
-- [ ] Replace the development login panel with customer identity and validate real sandbox checkout.
+- [x] Add customer sign-in beside the optional development account flow.
+- [ ] Validate real sandbox checkout and webhook delivery.
 - Show the balance and cost before export. Keep canceled/failed payments and failed
   exports from consuming credits; support webhook retries and duplicate callbacks.
 - Decide how to enforce paid exports while retaining local image processing. The

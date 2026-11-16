@@ -24,8 +24,8 @@ the pricing page's development account panel, start the app with
 provisioned account token in the panel; the server exchanges it for a one-day
 HttpOnly, SameSite=Strict session cookie (Secure on HTTPS). Tokens are cleared
 from the form and never saved to browser storage. Logout revokes that session
-in SQLite, and login rotates an existing session. Customer signup, identity
-verification, recovery, token revocation, and rate limiting remain unimplemented. Do not expose this API publicly yet.
+in SQLite, and login rotates an existing session. Customer sign-up is available separately as an opt-in preview below. Identity
+verification, recovery, and development token revocation remain unimplemented. Do not expose this API publicly yet.
 
 Authenticated requests use `Authorization: Bearer <development token>`:
 
@@ -52,8 +52,8 @@ with Stripe's sandbox and delivery tooling before considering payments validated
 
 ## Remaining work before payments or paid exports
 
-Customer identity, secure hosted routing/TLS, rate limiting, operator account
-controls, checkout retry UX, refunds/disputes, credit terms, actual export
+Verified customer identity, secure hosted routing/TLS, broader abuse controls,
+operator account controls, refunds/disputes, credit terms, actual export
 fulfillment and usage enforcement are not implemented. The public client still
 contains export functionality. This API neither gates nor charges existing
 exports. No credit spend endpoint is provided until successful export fulfillment
@@ -71,3 +71,30 @@ The development panel is shown only when `/api/config` explicitly enables it.
 Checkout stays disabled without configured test keys. Returning from Stripe
 never adds credits; the panel reads the server balance and provides a refresh
 button for delayed webhook delivery. The existing credit simulator is independent.
+
+## Customer account preview
+
+Start `ENABLE_CUSTOMER_ACCOUNTS=1 npm start` to expose registration and sign-in
+on the pricing page. It is disabled by default. No email service is required
+for this preview, and email addresses are not verified. Passwords must contain
+12–128 characters; salted scrypt hashes are stored in the existing SQLite DB.
+Registration creates an empty credit account. Sign-in uses the existing one-day
+HttpOnly session and rotates the current session; logout revokes it. The customer
+flow does not expose or require development bearer tokens.
+
+POST /api/register and POST /api/login accept JSON email/password fields. Email
+is trimmed and lowercased. Both require the configured exact Origin, even when
+an Authorization header is present. A persistent limit allows 20 attempts per
+15 minutes per socket IP; only the IP hash is stored. Proxy headers are not
+trusted. Hosted deployments must configure their trusted proxy and review the
+limit for shared IPs. Password hashing is limited to four concurrent requests
+per running API handler. No passwords or session values are logged.
+
+`node scripts/verify-accounts.mjs` exercises registration, sign-in, invalid
+passwords, session persistence and logout through a real browser on desktop
+and mobile with an isolated in-memory DB. Backend tests cover normalization,
+password hashes, duplicate registration, session rotation and throttling.
+
+Before public account launch: implement email verification, password recovery
+and change, account deletion, broader abuse controls, and hosted TLS/routing.
+Customer account support here does not enable live purchases or paid exports.
