@@ -17,12 +17,11 @@ export function pathContours(d,scale,tolerance=.0075){
 export function signedArea(p){let area=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];area+=a[0]*b[1]-b[0]*a[1];}return area/2;}
 export function binarySTL(manifold,label='CoasterLab STL; units mm'){
  if(manifold.status()!=='NoError')throw Error('The 3D geometry could not be made watertight.');
- const mesh=manifold.getMesh(),{triVerts,vertProperties,numProp}=mesh,triangles=triVerts.length/3;
+ let mesh=manifold.getMesh(),precisionCleanup=0;if(mesh.triVerts.length/3>3000000)throw Error('STL is too complex. Reduce tracing detail.');try{validateExportMesh(mesh);}catch(e){if(!/collapsed|zero area/.test(e.message))throw e;const repaired=weldExportMesh(mesh);validateExportMesh(repaired.mesh);mesh=repaired.mesh;precisionCleanup=repaired.removed;}const {triVerts,vertProperties,numProp}=mesh,triangles=triVerts.length/3;
  if(triangles===0)throw Error('This part has no printable geometry.');if(triangles>3000000)throw Error('STL is too complex. Reduce tracing detail.');
- validateExportMesh(mesh);
  const buffer=new ArrayBuffer(84+triangles*50),view=new DataView(buffer),bytes=new Uint8Array(buffer);bytes.set(new TextEncoder().encode(label).slice(0,80));view.setUint32(80,triangles,true);let offset=84;
  for(let i=0;i<triVerts.length;i+=3){const points=[0,1,2].map(k=>{const v=triVerts[i+k]*numProp;return [vertProperties[v],vertProperties[v+1],vertProperties[v+2]];});const [a,b,c]=points,u=b.map((v,k)=>v-a[k]),v=c.map((n,k)=>n-a[k]);let normal=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]],len=Math.hypot(...normal)||1;normal=normal.map(n=>n/len);for(const n of [...normal,...a,...b,...c]){view.setFloat32(offset,n,true);offset+=4;}view.setUint16(offset,0,true);offset+=2;}
- return {buffer,triangles};
+ return {buffer,triangles,precisionCleanup};
 }
 
 // Validate the float32 coordinates that STL actually stores, not only WASM topology.
@@ -33,3 +32,8 @@ export function validateExportMesh(mesh){
  for(let k=0;k<3;k++){const x=w[k],y=w[(k+1)%3],key=x<y?x+','+y:y+','+x;const edge=edges.get(key)||{count:0,direction:0};edge.count++;edge.direction+=x<y?1:-1;edges.set(key,edge);}}
  for(const edge of edges.values())if(edge.count!==2||edge.direction!==0)throw Error('The model has a non-manifold edge at export precision. Try smoother tracing or fewer colors.');
 }
+
+// Float32 welding can collapse an edge of an otherwise valid WASM mesh.
+// Remove only the resulting zero-area faces and opposite coincident pairs,
+// then require the full oriented watertight-edge validation again.
+export function weldExportMesh(mesh){const {triVerts,vertProperties,numProp}=mesh,vertices=[],ids=new Map(),remap=[];for(let i=0;i<vertProperties.length;i+=numProp){const p=[Math.fround(vertProperties[i]),Math.fround(vertProperties[i+1]),Math.fround(vertProperties[i+2])],key=p.join(',');if(!ids.has(key)){ids.set(key,vertices.length/3);vertices.push(...p);}remap.push(ids.get(key));}const faces=new Map();let removed=0;for(let i=0;i<triVerts.length;i+=3){const t=[remap[triVerts[i]],remap[triVerts[i+1]],remap[triVerts[i+2]]];if(new Set(t).size<3){removed++;continue;}const key=t.slice().sort((a,b)=>a-b).join(','),other=faces.get(key);if(other){const j=other.indexOf(t[0]);if(other[(j+1)%3]===t[2]){faces.delete(key);removed+=2;continue;}throw Error('The export contains overlapping duplicate faces.');}faces.set(key,t);}return {mesh:{numProp:3,vertProperties:new Float32Array(vertices),triVerts:new Uint32Array([...faces.values()].flat())},removed};}

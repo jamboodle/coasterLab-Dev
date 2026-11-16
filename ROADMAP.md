@@ -42,7 +42,7 @@ third-party images customers upload. Confirm rights for any sold design packs.
 
 ## Repository migration
 
-- [x] Copy current website application and preserve assets and license files.
+- [x] Import owner-supplied r27 complete project; preserve original dist layout, assets, historical releases and license files.
 - [x] Document local startup and monetization priorities.
 - [ ] Create private `jamboodle/coasterlab` on GitHub and push the standalone history.
 - [ ] Attach the development repository to the cloud environment.

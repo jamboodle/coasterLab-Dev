@@ -1,0 +1,18 @@
+{
+  "build": "coasterlab-r27",
+  "scripts": {
+    "palette.js": "palette.bd19747ec46e.js",
+    "alpha.js": "alpha.a3a87cbb7623.js",
+    "edge.js": "edge.2fa015b53a47.js",
+    "mono.js": "mono.a20efc23ac4a.js",
+    "edge-artifacts.js": "edge-artifacts.f23987ebdf16.js",
+    "stl-geometry.js": "stl-geometry.33a24be249c4.js",
+    "filament-palette.js": "filament-palette.f9e95eb63a55.js",
+    "three-mf.js": "three-mf.cda51b6b840c.js",
+    "worker.js": "worker.550171533df0.js",
+    "stl-worker.js": "stl-worker.e33c53fdcaa0.js",
+    "app.js": "app.00261119acca.js",
+    "stl.js": "stl.be30d8150cb8.js",
+    "batch-3mf.js": "batch-3mf.bbf46f49e637.js"
+  }
+}

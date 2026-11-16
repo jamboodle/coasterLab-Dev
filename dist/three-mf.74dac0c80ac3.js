@@ -1,0 +1,15 @@
+// Core 3MF assembly: one build item, with independent named mesh components.
+// Model-only export: do not include partial slicer project configurations.
+function make3MF(result){
+ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+ const hex=fill=>{const rgb=(fill.match(/[\d.]+/g)||[]).slice(0,3).map(Number);return rgb.length===3?'#'+rgb.map(n=>Math.round(n).toString(16).padStart(2,'0')).join('').toUpperCase():/^#[\da-f]{6}$/i.test(fill)?fill:'#808080';};
+ const parts=[{name:'Base '+result.baseMM+' mm',fill:'#D0D0D0',buffer:result.base.buffer},...result.parts.map(p=>({name:'Color '+String(p.index).padStart(2,'0')+' '+hex(p.fill),fill:hex(p.fill),buffer:p.buffer}))];
+ const materials=parts.map(p=>'<base name="'+esc(p.name)+'" displaycolor="'+p.fill+'FF"/>').join('');
+ const objects=parts.map((part,index)=>{const view=new DataView(part.buffer),count=view.getUint32(80,true),vertices=[],triangles=[],map=new Map();for(let i=0;i<count;i++){const ids=[];for(let k=0;k<3;k++){const offset=84+i*50+12+k*12,point=[view.getFloat32(offset,true),view.getFloat32(offset+4,true),view.getFloat32(offset+8,true)],key=point.join(',');if(!map.has(key)){map.set(key,vertices.length);vertices.push('<vertex x="'+point[0]+'" y="'+point[1]+'" z="'+point[2]+'"/>');}ids.push(map.get(key));}triangles.push('<triangle v1="'+ids[0]+'" v2="'+ids[1]+'" v3="'+ids[2]+'"/>');}return '<object id="'+(index+2)+'" name="'+esc(part.name)+'" type="model" pid="1000" pindex="'+index+'"><mesh><vertices>'+vertices.join('')+'</vertices><triangles>'+triangles.join('')+'</triangles></mesh></object>';}).join('');
+ const components=parts.map((p,i)=>'<component objectid="'+(i+2)+'"/>').join('');
+ const model='<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><metadata name="Title">CoasterLab layered image</metadata><metadata name="Application">CoasterLab</metadata><resources><basematerials id="1000">'+materials+'</basematerials>'+objects+'<object id="1" name="Layered image" type="model"><components>'+components+'</components></object></resources><build><item objectid="1"/></build></model>';
+ const files={'[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>',
+ '_rels/.rels':'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
+ '3D/3dmodel.model':model};
+ return fflate.zipSync(Object.fromEntries(Object.entries(files).map(([k,v])=>[k,fflate.strToU8(v)])),{level:6});
+}

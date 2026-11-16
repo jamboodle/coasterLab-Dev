@@ -1,6 +1,6 @@
 import Module from './vendor/manifold.js';
-import {pathContours,signedArea,binarySTL} from './stl-geometry.js?v=edge-2';
-onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,perimeterFill,perimeterRimPx,viewWidth,widthMM,baseMM,topMM}})=>{
+import {pathContours,signedArea,binarySTL} from './stl-geometry.b4347e0cda55.js';
+onmessage=async({data:{paths,edgeRemovedD,perimeterD,perimeterMaskD,perimeterFill,perimeterRimPx,viewWidth,widthMM,baseMM,topMM}})=>{
  const owned=[];const keep=x=>{owned.push(x);return x;};const warnings=[];
  try{
  for(const n of [widthMM,baseMM,topMM])if(!Number.isFinite(n)||n<=0)throw Error('Width and layer thicknesses must be greater than zero.');
@@ -11,10 +11,7 @@ onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,pe
  const byColor=new Map();for(const p of rawSections){if(byColor.has(p.fill))byColor.set(p.fill,keep(byColor.get(p.fill).add(p.shape)));else byColor.set(p.fill,p.shape);}
  if(sharedPerimeter&&perimeterFill&&perimeterRimPx>0&&rawSections.length){const originalUnion=keep(CrossSection.union(rawSections.map(p=>p.shape)));const inset=keep(sharedPerimeter.offset(-perimeterRimPx*widthMM/viewWidth,'Round',2,24));let ring=keep(sharedPerimeter.subtract(inset));if(perimeterMaskD)ring=keep(ring.intersect(keep(new CrossSection(pathContours(perimeterMaskD,widthMM/viewWidth),'NonZero'))));let patch=keep(ring.subtract(originalUnion));const holes=originalUnion.toPolygons().filter(p=>signedArea(p)<0).map(p=>p.slice().reverse());if(holes.length)patch=keep(patch.subtract(keep(new CrossSection(holes,'Positive'))));if(!patch.isEmpty())byColor.set(perimeterFill,byColor.has(perimeterFill)?keep(byColor.get(perimeterFill).add(patch)):patch);}
  if(sharedPerimeter&&edgeRemovedD&&perimeterFill){let patch=keep(new CrossSection(pathContours(edgeRemovedD,widthMM/viewWidth),'NonZero'));patch=keep(patch.offset(.25*widthMM/viewWidth,'Round',2,16));patch=keep(patch.intersect(sharedPerimeter));if(perimeterMaskD)patch=keep(patch.intersect(keep(new CrossSection(pathContours(perimeterMaskD,widthMM/viewWidth),'NonZero'))));byColor.set(perimeterFill,byColor.has(perimeterFill)?keep(byColor.get(perimeterFill).add(patch)):patch);}
- // A visible final seal, unlike the missing-area underlay above, owns the rim.
- // Subtract it from every other color so long/connected slivers cannot win by paint order.
- if(sharedPerimeter&&rimSealPx>0&&perimeterFill){const inner=keep(sharedPerimeter.offset(-rimSealPx*widthMM/viewWidth,'Round',2,24));let seal=keep(sharedPerimeter.subtract(inner));if(perimeterMaskD)seal=keep(seal.intersect(keep(new CrossSection(pathContours(perimeterMaskD,widthMM/viewWidth),'NonZero'))));for(const [fill,shape]of byColor)if(fill!==perimeterFill)byColor.set(fill,keep(shape.subtract(seal)));byColor.set(perimeterFill,byColor.has(perimeterFill)?keep(byColor.get(perimeterFill).add(seal)):seal);}
- const sections=[...byColor].filter(([,shape])=>!shape.isEmpty()).map(([fill,shape])=>({fill,shape}));
+ const sections=[...byColor].map(([fill,shape])=>({fill,shape}));
  if(!sections.length)throw Error('No filled paths to convert.');
  const footprint=keep(CrossSection.union(sections.map(p=>p.shape))),bounds=footprint.bounds();const factor=widthMM/(bounds.max[0]-bounds.min[0]);if(!Number.isFinite(factor))throw Error('The image outline is empty.');
  const normalise=shape=>keep(keep(shape.translate([-bounds.min[0],-bounds.min[1]])).scale(factor));
@@ -35,7 +32,7 @@ onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,pe
  for(const tolerance of [.005,0,.01,.02]){try{const topShape=prepare(normalise(footprint),tolerance);const top=keep(keep(topShape.extrude(topMM)).translate([0,0,baseMM]));const solid=keep(Manifold.union([base.solid,top]));combined=binarySTL(clean(solid,tolerance));combinedSolid=solid;if(tolerance>.005)warnings.push('Merged STL required '+tolerance+' mm cleanup.');break;}catch(e){combinedError=e.message||String(e);}}
  if(!combined)warnings.push('Merged STL unavailable: '+combinedError+'. Validated multipart 3MF and STL parts remain available.');
  const b=base.solid.boundingBox();const dimensions={min:[...b.min],max:[b.max[0],b.max[1],baseMM+topMM]};
- const output={baseFill:perimeterFill||layers[0]?.fill,combined,base:{buffer:base.buffer,triangles:base.triangles},parts:layers.map(({fill,index,buffer,triangles})=>({fill,index,buffer,triangles})),dimensions,baseMM,topMM,widthMM,volume:combinedSolid?combinedSolid.volume():null,warnings};
+ const output={combined,base:{buffer:base.buffer,triangles:base.triangles},parts:layers.map(({fill,index,buffer,triangles})=>({fill,index,buffer,triangles})),dimensions,baseMM,topMM,widthMM,volume:combinedSolid?combinedSolid.volume():null,warnings};
  const transfer=[output.base.buffer,...output.parts.map(p=>p.buffer)];if(combined)transfer.push(combined.buffer);postMessage(output,transfer);
  }catch(e){postMessage({error:e.message||String(e)});}finally{for(const object of owned.reverse())try{object.delete();}catch{}}
 };
