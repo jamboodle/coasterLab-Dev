@@ -5,7 +5,8 @@
 Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 
 - Keep image upload, tracing, and preview free and local in the browser.
-- Prototype a pricing flow with a $5 pack of 10 exports; decide the number of free
+- [x] Prototype a pricing flow with a $5 pack of 10 exports and an in-memory simulator.
+- [ ] Decide the number of free
   exports and the definition of one billable export before enforcing credits.
 - Establish a source/build workflow before modifying release assets.
 - Add authenticated accounts and a server-side credit ledger. Browser storage is

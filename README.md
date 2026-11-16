@@ -39,3 +39,16 @@ files are retained; this import does not assign a new license to the application
 See [ROADMAP.md](ROADMAP.md). The first selected priority is export credits and the
 pricing flow. Payments, accounts, credit accounting, and export enforcement are not
 implemented in this baseline. No production deployment is configured here.
+
+## Pricing prototype
+
+`dist/pricing/` contains a proposed $5 USD / 10-credit pricing page and an
+in-memory credit simulator, linked from the current maker navigation. It is
+explicitly a development preview: no purchase, authentication, persistent
+balance, credit enforcement or real export is performed by the simulator.
+Existing maker exports remain free. Historical release pages and downloadable
+release archives are unchanged.
+
+Run `node scripts/verify-pricing.cjs` with the documented server running to
+check the flow at four viewport sizes. Styles and scripts for this standalone
+page use direct references; no release asset regeneration is needed for it.
