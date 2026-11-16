@@ -12,7 +12,8 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - [x] Add a persistent SQLite credit ledger and development bearer-token authentication.
 - [x] Add opt-in customer email/password registration, sign-in, throttling and session lifecycle.
 - [x] Add current-password-verified password changes, sign out everywhere and account credit activity.
-- [ ] Add email verification, forgotten-password recovery and account deletion before public launch.
+- [x] Add single-use email verification and forgotten-password recovery with a local-only test inbox.
+- [ ] Configure and validate real email delivery; add account deletion before public launch.
 - [x] Implement Stripe test checkout adapter and signed, idempotent payment webhooks; mocked integration tests pass.
 - [ ] Validate real Stripe sandbox checkout and webhook delivery with secure credentials.
 - [x] Connect test checkout and server account balance to an opt-in development panel using expiring, revocable HttpOnly sessions.
@@ -58,3 +59,9 @@ third-party images customers upload. Confirm rights for any sold design packs.
 Git remote: https://github.com/jamboodle/coasterLab-Dev.git (main).
 Use this repository as the development source. The Sites-managed repository and
 the website deployment copy are separate and do not synchronize automatically.
+
+## Ready for local review
+
+Run `npm run dev` and follow TESTING.md. The automated browser suite is now
+self-contained. Payment sandbox credentials and real email hosting are not
+required to test the local account and recovery journeys.

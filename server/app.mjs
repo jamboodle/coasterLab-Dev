@@ -8,8 +8,13 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, fetchImpl=fetch}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, mailer=null, developmentInbox=false, fetchImpl=fetch}) {
   const paymentsEnabled=secretKey?.startsWith('sk_test_') && Boolean(webhookSecret);
+  const emailEnabled=customerAccounts && typeof mailer?.send==='function';
+  const sendChallenge=async(account,purpose)=>{
+    const identity=ledger.identityForAccount(account);const token=ledger.issueChallenge(account,purpose);
+    await mailer.send({to:identity.email,subject:purpose==='verify'?'Verify your CoasterLab email':'Reset your CoasterLab password',url:origin+'/account/#'+purpose+'='+token});
+  };
   let activePasswordRequests=0;
   return async (req,res) => {
     const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
@@ -30,8 +35,40 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       const session=req.headers.cookie?.match(/(?:^|;\s*)cl_session=([a-f0-9]{64})(?:;|$)/)?.[1];
       const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
-      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test'});
+      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox});
       if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
+      if(req.method==='GET' && path==='/api/dev/inbox') {
+        const local=['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+        if(req.headers.host!==new URL(origin).host || (req.headers.origin && req.headers.origin!==origin) || !developmentInbox || !local || !['127.0.0.1','localhost','[::1]'].includes(new URL(origin).hostname) || typeof mailer?.list!=='function')return send(404,{error:'Not found'});
+        return send(200,{messages:mailer.list()});
+      }
+      if(req.method==='POST' && ['/api/recovery','/api/reset-password','/api/verify-email'].includes(path)) {
+        if(!emailEnabled)return send(503,{error:'Email recovery and verification are not configured'});
+        if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+        if(!ledger.allowAuth('recovery:'+req.socket.remoteAddress))return send(429,{error:'Too many attempts. Try again in 15 minutes.'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>4096)return send(413,{error:'Payload too large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
+        if(path==='/api/recovery') {
+          const email=typeof body?.email==='string'?body.email.trim().toLowerCase():'';
+          if(email.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return send(400,{error:'Enter a valid email address.'});
+          const identity=ledger.identity(email);
+          if(ledger.allowAuth('recovery-email:'+email) && identity){try{await sendChallenge(identity.account,'reset');}catch{}}
+          return send(200,{message:'If an account exists, a password reset link has been sent.'});
+        }
+        if(path==='/api/verify-email') {
+          if(!ledger.verifyEmail(body?.token))return send(400,{error:'This verification link is invalid or expired. Request a new link.'});
+          return send(200,{ok:true});
+        }
+        if(typeof body?.password!=='string' || body.password.length<12 || body.password.length>128)return send(400,{error:'Use a password of 12 to 128 characters.'});
+        if(!ledger.challenge(body?.token,'reset'))return send(400,{error:'This reset link is invalid or expired. Request a new link.'});
+        if(activePasswordRequests>=4)return send(503,{error:'Account service is busy. Try again.'});
+        activePasswordRequests++;
+        try{
+          const next=await passwordHash(body.password);
+          if(!ledger.resetPassword(body.token,next.salt,next.digest))return send(400,{error:'This reset link is invalid or expired. Request a new link.'});
+          cookie('',0);return send(200,{ok:true});
+        }finally{activePasswordRequests--;}
+      }
       if(req.method==='POST' && ['/api/register','/api/login'].includes(path)) {
         if(!customerAccounts)return send(404,{error:'Account sign-in is not enabled'});
         if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
@@ -56,7 +93,9 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
             id=identity.account;
           }
           ledger.revokeSession(session);cookie(ledger.createSession(id),86400);
-          return send(path==='/api/register'?201:200,{ok:true});
+          let verificationSent=false;
+          if(path==='/api/register' && emailEnabled){try{await sendChallenge(id,'verify');verificationSent=true;}catch{}}
+          return send(path==='/api/register'?201:200,{ok:true,verificationSent});
         }finally{activePasswordRequests--;}
       }
       if (req.method==='POST' && path==='/api/session') {
@@ -75,7 +114,16 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       if (!account) return send(401,{error:'Authentication required'});
       if (req.method==='GET' && path==='/api/account') {
         const identity=ledger.identityForAccount(account);
-        return send(200,{credits:ledger.balance(account),email:identity?.email || null,passwordAccount:Boolean(identity),activity:ledger.activity(account)});
+        return send(200,{credits:ledger.balance(account),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),activity:ledger.activity(account)});
+      }
+      if(req.method==='POST' && path==='/api/send-verification') {
+        if(!emailEnabled)return send(503,{error:'Email verification is not configured'});
+        if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+        if(!ledger.allowAuth('verification:'+account))return send(429,{error:'Too many attempts. Try again later.'});
+        const identity=ledger.identityForAccount(account);
+        if(!identity)return send(400,{error:'A customer email account is required'});
+        if(!identity.verified_at)await sendChallenge(account,'verify');
+        return send(200,{ok:true});
       }
       if(req.method==='POST' && path==='/api/logout-all') {
         if(!ledger.identityForAccount(account))return send(403,{error:'Use Disconnect for development-token accounts.'});

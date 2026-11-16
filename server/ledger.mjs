@@ -10,12 +10,14 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), delta INTEGER NOT NULL, kind TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS identities(email TEXT PRIMARY KEY, account TEXT UNIQUE NOT NULL REFERENCES accounts(id), salt TEXT NOT NULL, digest TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS challenges(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), purpose TEXT NOT NULL, expires INTEGER NOT NULL, credential_digest TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), expires INTEGER NOT NULL);`);
     const columns=new Set(this.db.prepare('PRAGMA table_info(orders)').all().map(row=>row.name));
     if(!columns.has('request_key'))this.db.exec('ALTER TABLE orders ADD COLUMN request_key TEXT');
     if(!columns.has('created_at'))this.db.exec('ALTER TABLE orders ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key)');
+    if(!this.db.prepare('PRAGMA table_info(identities)').all().some(row=>row.name==='verified_at'))this.db.exec('ALTER TABLE identities ADD COLUMN verified_at INTEGER');
   }
   createAccount() {
     const id = randomBytes(16).toString('hex'), token = randomBytes(32).toString('hex');
@@ -31,7 +33,7 @@ export class Ledger {
     try {
       if(this.identity(email)){this.db.exec('ROLLBACK');return null;}
       const {id}=this.createAccount();
-      this.db.prepare('INSERT INTO identities VALUES (?,?,?,?)').run(email,id,salt,digest);
+      this.db.prepare('INSERT INTO identities(email,account,salt,digest) VALUES (?,?,?,?)').run(email,id,salt,digest);
       this.db.exec('COMMIT');return id;
     }catch(error){this.db.exec('ROLLBACK');throw error;}
   }
@@ -61,7 +63,41 @@ export class Ledger {
     try{
       const result=this.db.prepare('UPDATE identities SET salt=?,digest=? WHERE account=? AND digest=?').run(salt,digest,account,expectedDigest);
       if(!result.changes){this.db.exec('ROLLBACK');return false;}
-      this.revokeAllSessions(account);this.db.exec('COMMIT');return true;
+      this.revokeAllSessions(account);this.db.prepare('DELETE FROM challenges WHERE account=?').run(account);this.db.exec('COMMIT');return true;
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  issueChallenge(account,purpose,now=Date.now()) {
+    if(!['verify','reset'].includes(purpose))throw Error('Invalid challenge purpose');
+    const identity=this.identityForAccount(account);if(!identity)return null;
+    const token=randomBytes(32).toString('hex');
+    this.db.prepare('DELETE FROM challenges WHERE expires<=? OR (account=? AND purpose=?)').run(now,account,purpose);
+    this.db.prepare('INSERT INTO challenges VALUES (?,?,?,?,?)').run(hash(token),account,purpose,now+(purpose==='reset'?1800000:86400000),identity.digest);
+    return token;
+  }
+  challenge(token,purpose,now=Date.now()) {
+    if(typeof token!=='string' || !/^[a-f0-9]{64}$/.test(token))return null;
+    return this.db.prepare('SELECT * FROM challenges WHERE hash=? AND purpose=? AND expires>?').get(hash(token),purpose,now) || null;
+  }
+  verifyEmail(token) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      const challenge=this.challenge(token,'verify');
+      if(!challenge){this.db.exec('ROLLBACK');return false;}
+      this.db.prepare('UPDATE identities SET verified_at=COALESCE(verified_at,?) WHERE account=?').run(Date.now(),challenge.account);
+      this.db.prepare('DELETE FROM challenges WHERE hash=?').run(challenge.hash);
+      this.db.exec('COMMIT');return true;
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  resetPassword(token,salt,digest) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      const challenge=this.challenge(token,'reset');
+      if(!challenge){this.db.exec('ROLLBACK');return false;}
+      const result=this.db.prepare('UPDATE identities SET salt=?,digest=? WHERE account=? AND digest=?').run(salt,digest,challenge.account,challenge.credential_digest);
+      if(!result.changes){this.db.exec('ROLLBACK');return false;}
+      this.revokeAllSessions(challenge.account);
+      this.db.prepare('DELETE FROM challenges WHERE account=?').run(challenge.account);
+      this.db.exec('COMMIT');return true;
     }catch(error){this.db.exec('ROLLBACK');throw error;}
   }
   activity(account) {

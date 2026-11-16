@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {createServer} from 'node:http';
+import {fileURLToPath} from 'node:url';
+import {Ledger} from '../server/ledger.mjs';
+import {handler} from '../server/app.mjs';
+import {withStatic} from '../server/static.mjs';
+import {DevelopmentMailbox} from '../server/mailbox.mjs';
+const {chromium}=createRequire(import.meta.url)('playwright');
+const ledger=new Ledger(':memory:'),mailer=new DevelopmentMailbox();let origin;
+const api=(req,res)=>handler({ledger,origin,customerAccounts:true,mailer,developmentInbox:true})(req,res);
+const server=createServer(withStatic(api,fileURLToPath(new URL('../dist/',import.meta.url))));
+await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
+let browser;
+try{
+ browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
+ for(const width of [1440,390]){
+  const context=await browser.newContext({viewport:{width,height:900}}),page=await context.newPage();
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(origin+'/pricing/');await page.locator('#customer-login').waitFor({state:'visible'});
+  await page.locator('#customer-email').fill(`recovery-${width}@example.com`);await page.locator('#customer-password').fill('first-test-password');
+  await page.locator('#customer-register').click();await page.locator('#connected-account').waitFor({state:'visible'});
+  await page.getByRole('link',{name:'Open local test inbox'}).click();
+  const verification=page.getByRole('link',{name:'Open email verification link'}).first();await verification.waitFor();
+  const verificationURL=await verification.getAttribute('href');await verification.click();
+  assert.equal(await page.evaluate(()=>location.hash),'');
+  await page.locator('#verify-email').click();await page.waitForFunction(()=>document.getElementById('help-status').textContent.startsWith('Email verified.'));
+  await page.goto(origin+'/pricing/');await page.locator('#connected-account').waitFor({state:'visible'});
+  assert.equal(await page.locator('#email-verification-status').textContent(),'Email verified.');
+  await page.locator('#disconnect-account').click();await page.locator('#customer-login').waitFor({state:'visible'});
+  await page.getByRole('link',{name:'Forgot your password?'}).click();
+  await page.locator('#recovery-email').fill(`recovery-${width}@example.com`);await page.locator('#recovery-form button').click();
+  await page.waitForFunction(()=>document.getElementById('help-status').textContent.startsWith('If an account exists'));
+  await page.getByRole('link',{name:'Open local test inbox'}).click();
+  const reset=page.getByRole('link',{name:'Open password reset link'}).first();await reset.waitFor();const resetURL=await reset.getAttribute('href');await reset.click();
+  assert.equal(await page.evaluate(()=>location.hash),'');
+  await page.locator('#reset-password').fill('replacement-test-password');await page.locator('#reset-form button').click();
+  await page.waitForFunction(()=>document.getElementById('help-status').textContent.startsWith('Password reset.'));
+  await page.goto(resetURL);await page.locator('#reset-password').fill('another-test-password');await page.locator('#reset-form button').click();
+  await page.waitForFunction(()=>document.getElementById('help-status').textContent.startsWith('This reset link is invalid'));
+  await page.goto(origin+'/pricing/');await page.locator('#customer-login').waitFor({state:'visible'});
+  await page.locator('#customer-email').fill(`recovery-${width}@example.com`);await page.locator('#customer-password').fill('replacement-test-password');await page.locator('#customer-signin').click();
+  await page.locator('#connected-account').waitFor({state:'visible'});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  assert.deepEqual(errors,[]);await context.close();
+  console.log(`PASS ${width}px verification and recovery: local inbox, single-use verification/reset, clean URL, and recovered sign-in`);
+ }
+}finally{await browser?.close();await new Promise(r=>server.close(r));ledger.close();}

@@ -8,6 +8,13 @@ the owner-supplied r27 complete project ZIP, identified as Sites commit
 in local Git history. The inaccessible Sites commit has not been independently verified.
 The original website checkout and its deployed copy are preserved.
 
+## Try the current preview
+
+Run `npm run dev` from the repository root with Node 24 or newer. This starts the
+maker, account pages, pricing demo and local verification/recovery inbox on one
+server. See [TESTING.md](TESTING.md) for the manual checklist. No real email is
+sent and checkout is disabled in this mode.
+
 ## Develop
 
 Use this existing checkout; no additional worktree is needed.
@@ -38,7 +45,7 @@ files are retained; this import does not assign a new license to the application
 
 See [ROADMAP.md](ROADMAP.md). The first selected priority is export credits and the
 pricing flow. The opt-in backend now provides accounts, test checkout and credit accounting.
-Real payment verification, account recovery and paid export enforcement are pending. No production deployment is configured here.
+Real payment verification, real email delivery and paid export enforcement are pending. No production deployment is configured here.
 
 ## Pricing prototype
 
@@ -70,14 +77,17 @@ browser test. Real Stripe sandbox verification is pending.
 Customer registration and sign-in are available as an opt-in preview via
 `ENABLE_CUSTOMER_ACCOUNTS=1 npm start`. The pricing page then uses email/password
 accounts and the persistent credit balance. Run `node scripts/verify-accounts.mjs`
-for the self-contained browser test. Email verification and recovery are pending;
+for the self-contained browser test. Real email delivery is pending;
 this preview is not a public account launch.
 
 Signed-in customer accounts can change their password and sign out every session.
 The account panel also shows the latest 50 ledger entries. Password changes
-require the current password and preserve the credit balance; password recovery
-and email verification still require further development.
+require the current password and preserve the credit balance; real email delivery still requires configuration and validation.
 
 Checkout requests reuse an account-scoped attempt after network errors or reloads.
 The return page checks for webhook confirmation and refreshes confirmed credits.
 Provider calls remain test-only and the automated checkout tests use a mock.
+
+Verification and forgotten-password recovery now have single-use, expiring links
+and a local test inbox. A real email provider is not configured. The automated
+browser suite starts and stops its own isolated servers via `npm run test:browser`.

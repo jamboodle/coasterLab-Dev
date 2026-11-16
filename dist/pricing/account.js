@@ -2,7 +2,7 @@
 (async()=>{
   const el=id=>document.getElementById(id);
   const status=message=>{el('account-status').textContent=message;};
-  let configured=false,customerAccounts=false,developmentLogin=false;
+  let configured=false,customerAccounts=false,developmentLogin=false,emailEnabled=false;
   let checkoutAttempt,pollTimer,pollGeneration=0;
   function stopPolling(){clearTimeout(pollTimer);pollGeneration++;}
   const attemptStorage='coasterlab.checkoutAttempt';
@@ -27,6 +27,8 @@
       el('account-security').hidden=!data.passwordAccount;
       el('signout-everywhere').hidden=!data.passwordAccount;
       el('account-email').textContent=data.email || '';
+      el('email-verification-status').textContent=data.passwordAccount?(data.emailVerified?'Email verified.':'Your email has not been verified yet.'):'';
+      el('send-verification').hidden=!data.passwordAccount || data.emailVerified || !emailEnabled;
       const history=el('account-activity');history.replaceChildren();
       for(const entry of data.activity){const item=document.createElement('li');item.textContent=(entry.delta>0?'+':'')+entry.delta+' credits · '+(entry.kind==='purchase'?'Test purchase':entry.kind);history.append(item);}
       if(!data.activity.length){const item=document.createElement('li');item.textContent='No credit activity yet.';history.append(item);}
@@ -39,7 +41,8 @@
     const config=await request('/api/config');
     customerAccounts=config.customerAccounts===true;developmentLogin=config.developmentLogin===true;
     if(!developmentLogin && !customerAccounts)return;
-    configured=config.paymentsEnabled===true;
+    configured=config.paymentsEnabled===true;emailEnabled=config.emailEnabled===true;
+    el('recovery-link').hidden=!customerAccounts || !emailEnabled;el('test-inbox-link').hidden=!config.developmentInbox;
     el('test-account').hidden=false;
     el('account-login').hidden=!developmentLogin;el('customer-login').hidden=!customerAccounts;
     const connected=await refresh();
@@ -93,6 +96,10 @@
   el('refresh-balance').addEventListener('click',async()=>{if(await refresh())status('Balance refreshed from the server.');});
   el('disconnect-account').addEventListener('click',async()=>{
     try{await request('/api/logout',{method:'POST'});clearAttempt();disconnected();status('Disconnected.');}catch(error){status(error.message);}
+  });
+  el('send-verification').addEventListener('click',async()=>{
+    el('send-verification').disabled=true;
+    try{await request('/api/send-verification',{method:'POST'});status('Verification link sent. Check your inbox.');}catch(error){status(error.message);}finally{el('send-verification').disabled=false;}
   });
   el('password-change').addEventListener('submit',async event=>{
     event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;
