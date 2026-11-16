@@ -33,13 +33,24 @@ cd /workspace/coasterlab
 SITE_URL=http://127.0.0.1:3002 node scripts/smoke.cjs
 ```
 
-## Imported assets
+## Maker source and generated assets
 
-`dist/index.html` loads fingerprinted JavaScript files listed in `dist/asset-manifest.json`.
-Those scripts also reference fingerprinted workers and modules. Unhashed files and historical hashed assets coexist in the export. Do not assume editing an unhashed
-file changes the running app. Preserve this working baseline until a source and
-asset generation workflow is established and tested. The `dist/downloads/` release archives are imported artifacts; they are not automatically rebuilt. Existing vendor and font license
-files are retained; this import does not assign a new license to the application.
+Edit `src/maker/` for the maker JavaScript and run `npm run build`. The build
+resolves script/worker dependencies, creates content-hashed assets, and updates
+`dist/index.html`, the packing worker and asset manifest. `npm run build:check`
+verifies that committed assets match source. Historical release pages/assets
+and downloadable archives are retained; they are not rebuilt or deployed by
+this command. The current maker remains based on r27. Existing vendor/font
+licenses are retained.
+
+`dist/export-packing.js` provides the worker bridge and touch-device default.
+The current HTML includes a visible output selector: touch devices choose 3MF
+only to avoid generating a merged STL and parts archive unnecessarily. The full
+output mode is still selectable. Both modes preserve the 3MF geometry and colors.
+3MF XML/ZIP packaging and the single-model STL-parts archive run in a worker;
+this improves UI responsiveness without moving artwork to a server. The
+existing three-minute geometry limit remains in place. Complex artwork can
+still exceed a phone's memory or processing budget.
 
 ## Next development
 

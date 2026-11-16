@@ -9,6 +9,8 @@
     "start": "node server/index.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node scripts/verify-browser.mjs",
-    "dev": "node scripts/dev.mjs"
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build-maker.mjs",
+    "build:check": "node scripts/build-maker.mjs --check"
   }
 }

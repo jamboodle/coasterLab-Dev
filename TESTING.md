@@ -59,3 +59,18 @@ isolated, so automated checks do not create real accounts, purchases or email.
 The suite also uploads a generated test image, runs the tracing and WebAssembly
 geometry workers, downloads a 3MF, and checks that its archive contains a triangle
 mesh. This verifies export generation, not slicer compatibility or print quality.
+
+## Mobile 3D generation
+
+On a touch device, the maker's 3D downloads selector starts at **3MF only**.
+Generate a coaster and download its 3MF. To get STL downloads, select all formats
+and rebuild. This preserves model detail and color layers; it skips optional
+merged STL generation and parts ZIP creation when 3MF is all you need. Progress
+messages identify the base, color layers and archive-packing stages. Keep the
+tab open: background execution and memory limits still vary by phone.
+
+The browser suite checks a touch-device viewport with 4× CPU throttling, validates
+the downloaded archive, and compares its model XML exactly with full-output mode.
+This is not proof of performance on actual phones or all artwork. Re-test an
+image that previously timed out to judge the practical improvement. These GitHub
+changes need updating on the server before they affect dev.jamboodle.com.

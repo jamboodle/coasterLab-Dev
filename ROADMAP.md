@@ -8,7 +8,7 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - [x] Prototype a pricing flow with a $5 pack of 10 exports and an in-memory simulator.
 - [ ] Decide the number of free
   exports and the definition of one billable export before enforcing credits.
-- Establish a source/build workflow before modifying release assets.
+- [x] Establish editable maker sources and deterministic hashed script/worker generation.
 - [x] Add a persistent SQLite credit ledger and development bearer-token authentication.
 - [x] Add opt-in customer email/password registration, sign-in, throttling and session lifecycle.
 - [x] Add current-password-verified password changes, sign out everywhere and account credit activity.
@@ -54,7 +54,7 @@ third-party images customers upload. Confirm rights for any sold design packs.
 - [x] Document local startup and monetization priorities.
 - [x] Push standalone r27 history to `jamboodle/coasterLab-Dev` on GitHub.
 - [ ] Attach the development repository to the cloud environment.
-- [ ] Establish asset regeneration and automated CI before paid feature development.
+- [x] Establish asset regeneration and CI source/build checks.
 
 Git remote: https://github.com/jamboodle/coasterLab-Dev.git (main).
 Use this repository as the development source. The Sites-managed repository and
@@ -65,3 +65,12 @@ the website deployment copy are separate and do not synchronize automatically.
 Run `npm run dev` and follow TESTING.md. The automated browser suite is now
 self-contained. Payment sandbox credentials and real email hosting are not
 required to test the local account and recovery journeys.
+
+## Mobile processing
+
+- [x] Offer a visible 3MF-only output mode, defaulted for coarse-pointer devices.
+- [x] Skip optional merged STL and parts ZIP work in that mode without reducing 3MF detail.
+- [x] Pack 3MF and single-model parts archives in a worker and report geometry stages.
+- [x] Compare geometry/colors across modes with CPU-throttled browser tests.
+- [ ] Validate a representative failing image on the owner's actual phone.
+- [ ] Finish Webuzo routing and deploy this development update; GitHub pushes alone do not update the server.

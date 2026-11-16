@@ -10,9 +10,10 @@
     "filament-palette.js": "filament-palette.f9e95eb63a55.js",
     "three-mf.js": "three-mf.cda51b6b840c.js",
     "worker.js": "worker.550171533df0.js",
-    "stl-worker.js": "stl-worker.e33c53fdcaa0.js",
-    "app.js": "app.00261119acca.js",
-    "stl.js": "stl.be30d8150cb8.js",
-    "batch-3mf.js": "batch-3mf.bbf46f49e637.js"
+    "stl-worker.js": "stl-worker.48715ff0fe7f.js",
+    "app.js": "app.f5ffcea97e29.js",
+    "stl.js": "stl.e0c6dc381c48.js",
+    "batch-3mf.js": "batch-3mf.920629b82f65.js",
+    "export-codec.js": "export-codec.8bef0f923ccb.js"
   }
 }
