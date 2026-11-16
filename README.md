@@ -77,3 +77,7 @@ Signed-in customer accounts can change their password and sign out every session
 The account panel also shows the latest 50 ledger entries. Password changes
 require the current password and preserve the credit balance; password recovery
 and email verification still require further development.
+
+Checkout requests reuse an account-scoped attempt after network errors or reloads.
+The return page checks for webhook confirmation and refreshes confirmed credits.
+Provider calls remain test-only and the automated checkout tests use a mock.

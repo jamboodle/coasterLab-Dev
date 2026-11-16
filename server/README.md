@@ -121,3 +121,28 @@ offered for development-token-only accounts because revoking their only login
 method would make them inaccessible; these accounts retain Disconnect instead.
 Password recovery is still unavailable, so this feature requires knowing the
 current password and is not a forgotten-password reset.
+
+## Checkout retries and confirmation
+
+The browser sends a random `Idempotency-Key` for each purchase attempt. Its key
+is retained in sessionStorage across reloads and checkout failures; no password
+or authentication token is stored there. Disconnect and confirmed purchases
+clear it. Retrying uses the same account-scoped order and Stripe idempotency key,
+including after a server restart. Concurrent retries cannot create extra orders.
+Callers that omit the header still get a new attempt for backward compatibility;
+API integrations must reuse a key to receive retry guarantees.
+
+Orders now have additive request_key and created_at columns, migrated on startup
+without deleting existing balances or purchase mappings. New Stripe sessions
+expire one hour after attempt creation. Expired attempts and already-confirmed
+attempts return 409 with checkout_expired or checkout_complete, respectively;
+no new provider request is issued. The browser clears that key and asks the user
+to refresh/retry rather than silently starting a second purchase.
+
+GET /api/checkout-status?order=<reference> reports pending, confirmed, or expired
+for an order owned by the authenticated account. Another account receives 404.
+Checkout returns carry only the opaque order reference. The frontend checks for
+confirmation with bounded sequential polling and then refreshes the ledger
+balance. A browser redirect and query parameters never grant credits. A pending
+state means no verified credit grant has been recorded; it is not proof that a
+card was charged. A canceled return retains the attempt so it can be resumed.

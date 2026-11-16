@@ -1,4 +1,4 @@
-import {createHmac, timingSafeEqual} from 'node:crypto';
+import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto';
 import {credentials,passwordHash,passwordMatches} from './passwords.mjs';
 export function verifyWebhook(body, signature, secret, now=Date.now()) {
   if (!secret || typeof signature !== 'string') return false;
@@ -100,17 +100,29 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         }finally{activePasswordRequests--;}
       }
       if (req.method==='GET' && path==='/api/balance') return send(200,{credits:ledger.balance(account)});
+      if(req.method==='GET' && path==='/api/checkout-status') {
+        const id=new URL(req.url,'http://localhost').searchParams.get('order');
+        if(!id || !/^[a-f0-9]{32}$/.test(id))return send(400,{error:'Invalid checkout reference'});
+        const state=ledger.orderStatus(account,id);
+        return state ? send(200,{status:state}) : send(404,{error:'Checkout not found'});
+      }
       if (req.method==='POST' && path==='/api/checkout') {
         if (!paymentsEnabled) return send(503,{error:'Test payments are not configured'});
         if (req.headers.origin && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
-        const order=ledger.createOrder(account);
-        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':'usd','line_items[0][price_data][unit_amount]':'500','line_items[0][price_data][product_data][name]':'CoasterLab — 10 export credits (test)','line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned',cancel_url:origin+'/pricing/?checkout=canceled','metadata[order_id]':order});
+        const key=req.headers['idempotency-key'] || randomUUID();
+        if(typeof key!=='string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(key))return send(400,{error:'Invalid checkout request key'});
+        const attempt=ledger.checkoutOrder(account,key);
+        const state=ledger.orderStatus(account,attempt.id);
+        if(state==='confirmed')return send(409,{error:'This checkout is already confirmed. Refresh your balance.',code:'checkout_complete'});
+        if(state==='expired')return send(409,{error:'Checkout attempt expired. Try again to start a new checkout.',code:'checkout_expired'});
+        const order=attempt.id;
+        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':'usd','line_items[0][price_data][unit_amount]':'500','line_items[0][price_data][product_data][name]':'CoasterLab — 10 export credits (test)','line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order,cancel_url:origin+'/pricing/?checkout=canceled&order='+order,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order});
         const response=await fetchImpl('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+secretKey,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':order},body:form,signal:AbortSignal.timeout(15000)});
         if (!response.ok) return send(502,{error:'Checkout provider unavailable'});
         const session=await response.json();
         if (typeof session.id!=='string' || typeof session.url!=='string' || !session.url.startsWith('https://checkout.stripe.com/')) return send(502,{error:'Invalid checkout response'});
         ledger.attachSession(order,session.id);
-        return send(200,{url:session.url});
+        return send(200,{url:session.url,order});
       }
       return send(404,{error:'Not found'});
     } catch {if (!res.headersSent)send(500,{error:'Request failed; retry later'});else res.end();}

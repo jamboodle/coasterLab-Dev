@@ -12,6 +12,10 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS identities(email TEXT PRIMARY KEY, account TEXT UNIQUE NOT NULL REFERENCES accounts(id), salt TEXT NOT NULL, digest TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), expires INTEGER NOT NULL);`);
+    const columns=new Set(this.db.prepare('PRAGMA table_info(orders)').all().map(row=>row.name));
+    if(!columns.has('request_key'))this.db.exec('ALTER TABLE orders ADD COLUMN request_key TEXT');
+    if(!columns.has('created_at'))this.db.exec('ALTER TABLE orders ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
+    this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key)');
   }
   createAccount() {
     const id = randomBytes(16).toString('hex'), token = randomBytes(32).toString('hex');
@@ -66,12 +70,25 @@ export class Ledger {
   balance(account) {
     return this.db.prepare('SELECT COALESCE(SUM(delta),0) AS balance FROM entries WHERE account=?').get(account).balance;
   }
+  checkoutOrder(account,key,now=Date.now()) {
+    this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at) VALUES (?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now);
+    return this.db.prepare('SELECT * FROM orders WHERE account=? AND request_key=?').get(account,key);
+  }
+  orderStatus(account,id,now=Date.now()) {
+    const order=this.db.prepare('SELECT * FROM orders WHERE id=? AND account=?').get(id,account);
+    if(!order)return null;
+    if(order.session && this.db.prepare('SELECT 1 FROM entries WHERE id=? AND account=?').get('purchase:'+order.session,account))return 'confirmed';
+    return now>=order.created_at+3600000?'expired':'pending';
+  }
   createOrder(account) {
     const id=randomBytes(16).toString('hex');
-    this.db.prepare('INSERT INTO orders(id,account) VALUES (?,?)').run(id,account);
+    this.db.prepare('INSERT INTO orders(id,account,created_at) VALUES (?,?,?)').run(id,account,Date.now());
     return id;
   }
-  attachSession(id,session) { this.db.prepare('UPDATE orders SET session=? WHERE id=? AND session IS NULL').run(session,id); }
+  attachSession(id,session) {
+    const result=this.db.prepare('UPDATE orders SET session=? WHERE id=? AND (session IS NULL OR session=?)').run(session,id,session);
+    if(result.changes!==1)throw new Error('Checkout session mismatch');
+  }
   creditPayment(event) {
     const s=event.data?.object;
     if (!['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)) return false;

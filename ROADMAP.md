@@ -17,6 +17,7 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - [ ] Validate real Stripe sandbox checkout and webhook delivery with secure credentials.
 - [x] Connect test checkout and server account balance to an opt-in development panel using expiring, revocable HttpOnly sessions.
 - [x] Add customer sign-in beside the optional development account flow.
+- [x] Add persistent checkout retry keys, account-scoped confirmation status and delayed webhook UI.
 - [ ] Validate real sandbox checkout and webhook delivery.
 - Show the balance and cost before export. Keep canceled/failed payments and failed
   exports from consuming credits; support webhook retries and duplicate callbacks.
