@@ -2,10 +2,12 @@
   "name": "coasterlab-dev",
   "private": true,
   "version": "0.1.0",
-  "engines": {"node": ">=24"},
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "start": "node server/index.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node scripts/smoke.cjs && node scripts/verify-pricing.cjs"
+    "test:browser": "node scripts/smoke.cjs && node scripts/verify-pricing.cjs && node scripts/verify-checkout.mjs"
   }
 }

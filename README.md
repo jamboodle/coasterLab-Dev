@@ -60,3 +60,9 @@ credit balances, server-priced Stripe test checkout, and signed idempotent
 payment webhooks. Run `npm test` and `npm start`; see [server setup](server/README.md).
 The pricing simulator remains separate. No live payment, customer sign-in, or
 paid export enforcement is enabled. CI runs the backend tests on pushes and PRs.
+
+For integrated account/checkout testing, use `ENABLE_DEV_LOGIN=1 npm start` and
+the same-origin server on port 3003. Its pricing page includes an opt-in
+development account panel; the static-only server on port 3002 keeps that panel
+hidden. Run `node scripts/verify-checkout.mjs` for a self-contained mocked-provider
+browser test. Customer sign-in and real Stripe sandbox verification are pending.

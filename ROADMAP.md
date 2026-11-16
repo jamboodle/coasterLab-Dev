@@ -13,7 +13,8 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - [ ] Replace development tokens with customer sign-in and session lifecycle.
 - [x] Implement Stripe test checkout adapter and signed, idempotent payment webhooks; mocked integration tests pass.
 - [ ] Validate real Stripe sandbox checkout and webhook delivery with secure credentials.
-- [ ] Connect checkout and account balance to the frontend.
+- [x] Connect test checkout and server account balance to an opt-in development panel using expiring, revocable HttpOnly sessions.
+- [ ] Replace the development login panel with customer identity and validate real sandbox checkout.
 - Show the balance and cost before export. Keep canceled/failed payments and failed
   exports from consuming credits; support webhook retries and duplicate callbacks.
 - Decide how to enforce paid exports while retaining local image processing. The

@@ -8,7 +8,8 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL);
       CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), session TEXT UNIQUE);
       CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), delta INTEGER NOT NULL, kind TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);`);
+      CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
+      CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), expires INTEGER NOT NULL);`);
   }
   createAccount() {
     const id = randomBytes(16).toString('hex'), token = randomBytes(32).toString('hex');
@@ -18,6 +19,16 @@ export class Ledger {
   authenticate(token) {
     return typeof token === 'string' ? this.db.prepare('SELECT id FROM accounts WHERE token_hash=?').get(hash(token))?.id : undefined;
   }
+  createSession(account) {
+    const token=randomBytes(32).toString('hex');
+    this.db.prepare('DELETE FROM sessions WHERE expires<=?').run(Date.now());
+    this.db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token),account,Date.now()+86400000);
+    return token;
+  }
+  sessionAccount(token) {
+    return token ? this.db.prepare('SELECT account FROM sessions WHERE hash=? AND expires>?').get(hash(token),Date.now())?.account : undefined;
+  }
+  revokeSession(token) { if(token)this.db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token)); }
   balance(account) {
     return this.db.prepare('SELECT COALESCE(SUM(delta),0) AS balance FROM entries WHERE account=?').get(account).balance;
   }

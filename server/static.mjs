@@ -1,0 +1,24 @@
+import {readFile,realpath,stat} from 'node:fs/promises';
+import {resolve,extname,sep} from 'node:path';
+const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.wasm':'application/wasm','.woff2':'font/woff2','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.zip':'application/zip'};
+export function withStatic(api, root) {
+  root=resolve(root);
+  return async(req,res)=>{
+    const pathname=new URL(req.url,'http://localhost').pathname;
+    if(pathname.startsWith('/api/') || pathname==='/health')return api(req,res);
+    if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
+    try{
+      let path=resolve(root,'.'+decodeURIComponent(pathname));
+      if(path!==root && !path.startsWith(root+sep))throw Error();
+      if((await stat(path)).isDirectory()){
+        if(!pathname.endsWith('/')){res.writeHead(301,{Location:pathname+'/'});return res.end();}
+        path=resolve(path,'index.html');
+      }
+      path=await realpath(path);
+      if(!path.startsWith(root+sep))throw Error();
+      const data=await readFile(path);
+      res.writeHead(200,{'Content-Type':types[extname(path)] || 'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});
+      res.end(req.method==='HEAD'?undefined:data);
+    }catch{res.writeHead(404);res.end('Not found');}
+  };
+}

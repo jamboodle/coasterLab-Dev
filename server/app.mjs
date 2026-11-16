@@ -7,7 +7,7 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, fetchImpl=fetch}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, fetchImpl=fetch}) {
   const paymentsEnabled=secretKey?.startsWith('sk_test_') && Boolean(webhookSecret);
   return async (req,res) => {
     const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
@@ -25,7 +25,24 @@ export function handler({ledger, secretKey, webhookSecret, origin, fetchImpl=fet
         ledger.creditPayment(event);
         return send(200,{received:true});
       }
-      const account=ledger.authenticate(req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1]);
+      const session=req.headers.cookie?.match(/(?:^|;\s*)cl_session=([a-f0-9]{64})(?:;|$)/)?.[1];
+      const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+      const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
+      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,paymentsEnabled:Boolean(paymentsEnabled),mode:'test'});
+      if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
+      if (req.method==='POST' && path==='/api/session') {
+        if(!developmentLogin)return send(404,{error:'Development login disabled'});
+        let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>2048)return send(413,{error:'Payload too large'});}
+        let token;try{token=JSON.parse(body).token;}catch{return send(400,{error:'Invalid request'});}
+        const id=typeof token==='string' && /^[a-f0-9]{64}$/.test(token) ? ledger.authenticate(token) : undefined;
+        if(!id)return send(401,{error:'Invalid development token'});
+        ledger.revokeSession(session);
+        cookie(ledger.createSession(id),86400);return send(200,{ok:true});
+      }
+      if(req.method==='POST' && path==='/api/logout') {
+        ledger.revokeSession(session);cookie('',0);return send(200,{ok:true});
+      }
+      const account=ledger.authenticate(bearer) || ledger.sessionAccount(session);
       if (!account) return send(401,{error:'Authentication required'});
       if (req.method==='GET' && path==='/api/balance') return send(200,{credits:ledger.balance(account)});
       if (req.method==='POST' && path==='/api/checkout') {

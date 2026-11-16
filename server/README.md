@@ -3,8 +3,10 @@
 Requires Node 24 (built-in SQLite); no third-party runtime packages are needed.
 From the repository root, run `npm test`, then `npm start`. The API listens on
 127.0.0.1:3003. `GET /health` reports readiness and whether test payments are
-configured. The static app still runs separately on port 3002. No CORS access or
-frontend checkout connection is enabled yet.
+configured. The same server serves only the `dist/` static directory, keeping API
+and frontend on the same origin at http://127.0.0.1:3003. The separate Python
+server remains useful for static-only work, but cannot serve the account API.
+Set APP_ORIGIN to match the server's browser origin if you change the port.
 
 The persistent database defaults to `.data/credits.sqlite` (ignored by Git).
 Use a durable volume and backups before hosted use. Set DATABASE_PATH to override.
@@ -16,9 +18,14 @@ it outside any public document root. Do not serve the repository root as a websi
 `node server/index.mjs --create-account` provisions a development account and
 returns its ID and bearer token once. Run it locally and keep the token private;
 never paste tokens in issues, chat, URLs, or commit them. Only a hash is stored.
-Tokens are a development integration mechanism, not customer sign-in. Public
-signup, session management, revocation, recovery and identity verification remain
-unimplemented. Do not expose this API publicly yet.
+Tokens are a development integration mechanism, not customer sign-in. To show
+the pricing page's development account panel, start the app with
+`ENABLE_DEV_LOGIN=1 npm start`. This opt-in is disabled by default. Enter the
+provisioned account token in the panel; the server exchanges it for a one-day
+HttpOnly, SameSite=Strict session cookie (Secure on HTTPS). Tokens are cleared
+from the form and never saved to browser storage. Logout revokes that session
+in SQLite, and login rotates an existing session. Customer signup, identity
+verification, recovery, token revocation, and rate limiting remain unimplemented. Do not expose this API publicly yet.
 
 Authenticated requests use `Authorization: Bearer <development token>`:
 
@@ -41,7 +48,7 @@ webhook timestamp/signature verification with a five-minute tolerance.
 
 Tests use a mocked Stripe endpoint and locally signed fixtures. No real Stripe
 account, provider delivery, purchase, or external checkout was exercised. Test
-with Stripe's sandbox and delivery tooling before connecting the frontend.
+with Stripe's sandbox and delivery tooling before considering payments validated.
 
 ## Remaining work before payments or paid exports
 
@@ -51,3 +58,16 @@ fulfillment and usage enforcement are not implemented. The public client still
 contains export functionality. This API neither gates nor charges existing
 exports. No credit spend endpoint is provided until successful export fulfillment
 can be authenticated; a browser callback is not proof that a paid export occurred.
+
+## Frontend integration checks
+
+Run `node scripts/verify-checkout.mjs` to launch an ephemeral same-origin server
+with an in-memory database and a mocked payment provider. It exercises login,
+cookies, server balances, failed-checkout retry, checkout redirect, canceled return,
+webhook confirmation and logout with a real browser. It needs the same provided
+Playwright/Chromium as the existing browser tests. No real secrets are required.
+
+The development panel is shown only when `/api/config` explicitly enables it.
+Checkout stays disabled without configured test keys. Returning from Stripe
+never adds credits; the panel reads the server balance and provides a refresh
+button for delayed webhook delivery. The existing credit simulator is independent.
