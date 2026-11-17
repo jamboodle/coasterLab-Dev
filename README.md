@@ -107,3 +107,9 @@ An optional 3MF credit-accounting trial now previews costs, records one debit pe
 exact file/account and supports free retries. It is disabled by default and is
 not a production paywall. See TESTING.md before enabling it. Real money, secure
 export fulfillment and refund rules remain outside this test flow.
+
+## Server updates
+
+Use the one-time setup in [DEPLOYMENT.md](DEPLOYMENT.md) to install
+`coasterlab-update` on the Webuzo server. Future updates then use that command
+instead of uploading ZIPs. It preserves runtime data and service configuration.

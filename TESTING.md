@@ -107,3 +107,10 @@ of fulfillment or enforceable paid access. Do not use the trial as a production
 paywall or with real customer funds. Live billing and server-authorized delivery
 need a separate implementation. The hosted development service stays unaffected
 until updated and explicitly configured with this feature flag.
+
+## Updating the hosted preview
+
+The repeatable server updater is documented in DEPLOYMENT.md. One-time read-only
+GitHub access and installation are required; it is not installed by a GitHub push.
+After that, `coasterlab-update` fetches, tests and installs new code, restarts the
+service and checks the local and public endpoints. No repeated ZIP downloads.
