@@ -74,3 +74,36 @@ the downloaded archive, and compares its model XML exactly with full-output mode
 This is not proof of performance on actual phones or all artwork. Re-test an
 image that previously timed out to judge the practical improvement. These GitHub
 changes need updating on the server before they affect dev.jamboodle.com.
+
+## Optional 3MF credit-accounting trial
+
+This is disabled by default and does not enable real charges. Use
+`ENABLE_EXPORT_CREDIT_TRIAL=1 npm run dev` to try it locally. Create a customer
+account, then in a second terminal from the same checkout/DB run:
+
+```sh
+ENABLE_EXPORT_CREDIT_TRIAL=1 node server/index.mjs --grant-test-credits test@example.com 10
+```
+
+Replace the example email with the test account you created. This operator-only
+command grants test credits; there is no public grant endpoint. Generate a 3MF,
+choose Download, and check the cost/balance dialog. Cancel before confirming to
+spend nothing. Confirm records the debit; **Download ready file** then starts
+the browser download with a fresh click for mobile browser compatibility.
+Repeated clicks on that ready file and retries of identical bytes do not debit
+again. Try insufficient balance and check the account's test export history.
+A rebuilt file may have different bytes and count as a new export.
+
+The browser tests simulate a lost debit response, then retry and verify exactly
+one ledger debit. Empty/missing ready files and failed builds do not initiate
+a debit. A browser download interruption after confirmation is handled through
+free retries of the ready file, not a claim that the server can verify local
+file saving. Keep the file/page available for that retry.
+
+This prototype covers direct .3mf downloads. SVG, STL, individual-model ZIP and
+legacy/release paths remain unchanged. The browser holds the generator and
+reports its file fingerprint and coaster count; these are not trusted proof
+of fulfillment or enforceable paid access. Do not use the trial as a production
+paywall or with real customer funds. Live billing and server-authorized delivery
+need a separate implementation. The hosted development service stays unaffected
+until updated and explicitly configured with this feature flag.

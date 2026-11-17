@@ -30,7 +30,7 @@
       el('email-verification-status').textContent=data.passwordAccount?(data.emailVerified?'Email verified.':'Your email has not been verified yet.'):'';
       el('send-verification').hidden=!data.passwordAccount || data.emailVerified || !emailEnabled;
       const history=el('account-activity');history.replaceChildren();
-      for(const entry of data.activity){const item=document.createElement('li');item.textContent=(entry.delta>0?'+':'')+entry.delta+' credits · '+(entry.kind==='purchase'?'Test purchase':entry.kind);history.append(item);}
+      for(const entry of data.activity){const item=document.createElement('li');item.textContent=(entry.delta>0?'+':'')+entry.delta+' credits · '+({purchase:'Test purchase',export_trial:'Test export',test_grant:'Test credits'}[entry.kind] || entry.kind);history.append(item);}
       if(!data.activity.length){const item=document.createElement('li');item.textContent='No credit activity yet.';history.append(item);}
       el('account-login').hidden=true;el('customer-login').hidden=true;el('connected-account').hidden=false;
       el('test-checkout').disabled=!configured;

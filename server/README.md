@@ -182,3 +182,28 @@ address bar when read by the account page. Pages set no-referrer and API respons
 use no-store. Both email routes and local mailbox are unavailable without their
 explicit configuration. Real mailbox delivery and verification of deliverability
 remain pending; verification logic alone does not launch public accounts.
+
+## Export credit-accounting trial (not payment enforcement)
+
+ENABLE_EXPORT_CREDIT_TRIAL=1 enables authenticated POST /api/export-quote and
+POST /api/export-debit. Both require exact Origin and a SHA-256 file fingerprint
+plus an integer coaster count from 1 to 10. Body size is limited to 2 KiB.
+Quotes do not modify credit state. Debits use BEGIN IMMEDIATE so competing
+requests cannot overspend. The account/fingerprint key identifies a previously
+recorded export and returns zero additional cost on retry, including after a
+process restart. Reusing that fingerprint with a different count is rejected.
+New accounts do not receive an implicit free allowance.
+
+An export_trials table and negative export_trial ledger entries persist test
+usage. The --grant-test-credits CLI requires the same explicit flag, an existing
+customer email and an amount from 1 to 1000. It writes test_grant entries. There
+is no remotely callable grant route. Start the API with its own flag as well;
+setting it only on the CLI does not enable the browser trial.
+
+The server receives no artifact/image bytes and cannot validate the claimed
+file/count or prove browser download success. The user confirms after local
+file generation and then gets a separate download button that can be retried
+without more API calls. A paid-looking client gate alone is not an enforceable
+paywall: other formats and legacy routes are still free and client code can be
+bypassed. This intentionally tests accounting only, never real-money delivery.
+See TESTING.md for setup and the remaining limitations.

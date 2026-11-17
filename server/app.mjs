@@ -8,7 +8,7 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, mailer=null, developmentInbox=false, fetchImpl=fetch}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, mailer=null, developmentInbox=false, fetchImpl=fetch}) {
   const paymentsEnabled=secretKey?.startsWith('sk_test_') && Boolean(webhookSecret);
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
@@ -35,7 +35,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       const session=req.headers.cookie?.match(/(?:^|;\s*)cl_session=([a-f0-9]{64})(?:;|$)/)?.[1];
       const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
-      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox});
+      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox,exportCreditTrial});
       if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
       if(req.method==='GET' && path==='/api/dev/inbox') {
         const local=['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
@@ -112,6 +112,16 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       }
       const account=ledger.authenticate(bearer) || ledger.sessionAccount(session);
       if (!account) return send(401,{error:'Authentication required'});
+      if(req.method==='POST' && ['/api/export-quote','/api/export-debit'].includes(path)) {
+        if(!exportCreditTrial)return send(404,{error:'Export credit trial is disabled'});
+        if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Payload too large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
+        if(!body || typeof body.fingerprint!=='string' || !/^[a-f0-9]{64}$/.test(body.fingerprint) || !Number.isInteger(body.count) || body.count<1 || body.count>10)return send(400,{error:'Invalid export reference or coaster count'});
+        const result=path==='/api/export-quote'?ledger.exportQuote(account,body.fingerprint,body.count):ledger.debitExport(account,body.fingerprint,body.count);
+        if(result.error)return send(result.status,{error:result.error});
+        return send(200,result);
+      }
       if (req.method==='GET' && path==='/api/account') {
         const identity=ledger.identityForAccount(account);
         return send(200,{credits:ledger.balance(account),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),activity:ledger.activity(account)});

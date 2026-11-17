@@ -8,6 +8,7 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL);
       CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), session TEXT UNIQUE);
       CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), delta INTEGER NOT NULL, kind TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS export_trials(account TEXT NOT NULL REFERENCES accounts(id), fingerprint TEXT NOT NULL, cost INTEGER NOT NULL CHECK(cost BETWEEN 1 AND 10), PRIMARY KEY(account,fingerprint));
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS identities(email TEXT PRIMARY KEY, account TEXT UNIQUE NOT NULL REFERENCES accounts(id), salt TEXT NOT NULL, digest TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS challenges(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), purpose TEXT NOT NULL, expires INTEGER NOT NULL, credential_digest TEXT NOT NULL);
@@ -105,6 +106,29 @@ export class Ledger {
   }
   balance(account) {
     return this.db.prepare('SELECT COALESCE(SUM(delta),0) AS balance FROM entries WHERE account=?').get(account).balance;
+  }
+  exportQuote(account,fingerprint,count) {
+    const existing=this.db.prepare('SELECT cost FROM export_trials WHERE account=? AND fingerprint=?').get(account,fingerprint);
+    if(existing && existing.cost!==count)return {error:'Export count does not match the original request',status:409};
+    const cost=existing?0:count,balance=this.balance(account);
+    return {cost,balance,remaining:balance-cost,retry:Boolean(existing)};
+  }
+  debitExport(account,fingerprint,count) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      const quote=this.exportQuote(account,fingerprint,count);
+      if(quote.error){this.db.exec('ROLLBACK');return quote;}
+      if(quote.remaining<0){this.db.exec('ROLLBACK');return {error:'Not enough test credits',status:402};}
+      if(!quote.retry){
+        this.db.prepare('INSERT INTO export_trials VALUES (?,?,?)').run(account,fingerprint,count);
+        this.db.prepare("INSERT INTO entries VALUES (?,?,?,'export_trial')").run('export:'+account+':'+fingerprint,account,-count);
+      }
+      this.db.exec('COMMIT');return quote;
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  grantTestCredits(account,count) {
+    if(!Number.isInteger(count)||count<1||count>1000)throw Error('Use 1 to 1000 test credits');
+    this.db.prepare("INSERT INTO entries VALUES (?,?,?,'test_grant')").run('grant:'+randomBytes(16).toString('hex'),account,count);
   }
   checkoutOrder(account,key,now=Date.now()) {
     this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at) VALUES (?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now);

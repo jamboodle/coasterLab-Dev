@@ -20,8 +20,8 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - [x] Add customer sign-in beside the optional development account flow.
 - [x] Add persistent checkout retry keys, account-scoped confirmation status and delayed webhook UI.
 - [ ] Validate real sandbox checkout and webhook delivery.
-- Show the balance and cost before export. Keep canceled/failed payments and failed
-  exports from consuming credits; support webhook retries and duplicate callbacks.
+- [x] Add an opt-in direct-3MF cost preview and transactional debit trial; cancel before confirmation uses no credits, and exact-file retries do not debit twice.
+- [ ] Implement server-authorized export fulfillment and failed-delivery/refund policy before live charging.
 - Decide how to enforce paid exports while retaining local image processing. The
   imported client already contains working export code; a client-side button lock
   alone cannot enforce payment. Describe privacy accurately if server processing

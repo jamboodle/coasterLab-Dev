@@ -102,3 +102,8 @@ Provider calls remain test-only and the automated checkout tests use a mock.
 Verification and forgotten-password recovery now have single-use, expiring links
 and a local test inbox. A real email provider is not configured. The automated
 browser suite starts and stops its own isolated servers via `npm run test:browser`.
+
+An optional 3MF credit-accounting trial now previews costs, records one debit per
+exact file/account and supports free retries. It is disabled by default and is
+not a production paywall. See TESTING.md before enabling it. Real money, secure
+export fulfillment and refund rules remain outside this test flow.
