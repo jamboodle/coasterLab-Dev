@@ -19,32 +19,53 @@
     if(!response.ok){const error=new Error(data.error || 'Request failed. Try again.');error.code=data.code;throw error;}
     return data;
   }
-  function disconnected(){stopPolling();el('connected-account').hidden=true;el('account-login').hidden=!developmentLogin;el('customer-login').hidden=!customerAccounts;el('account-balance').textContent='—';}
+  function setAuthMode(mode){
+    const register=mode==='register';
+    el('auth-signin').setAttribute('aria-pressed',String(!register));
+    el('auth-register').setAttribute('aria-pressed',String(register));
+    el('customer-signin').hidden=register;el('customer-register').hidden=!register;
+    el('registration-hint').hidden=!register;
+    el('customer-password').autocomplete=register?'new-password':'current-password';
+    el('customer-password').value='';
+  }
+  function checkoutState(signedIn){
+    el('test-checkout').disabled=!configured || !signedIn;
+    el('test-checkout').textContent=!configured?'Purchases unavailable':signedIn?'Open test checkout · $5 / 10 credits':'Sign in to use test checkout';
+    el('purchase-hint').textContent=!configured?'Purchases are not available yet. No live payments are collected.':'Test checkout only. No real money will be charged.';
+  }
+  function unavailable(){el('account-unavailable').textContent='Account services are unavailable in this preview. You can still use the maker.';checkoutState(false);}
+  setAuthMode('signin');
+  el('auth-signin').addEventListener('click',()=>setAuthMode('signin'));
+  el('auth-register').addEventListener('click',()=>setAuthMode('register'));
+  function disconnected(){stopPolling();setAuthMode('signin');checkoutState(false);el('account-description').textContent='Sign in to see your credits and manage your account.';el('connected-account').hidden=true;el('account-login').hidden=!developmentLogin;el('customer-login').hidden=!customerAccounts;el('account-balance').textContent='—';}
   async function refresh(){
     try{
       const data=await request('/api/account');
       el('account-balance').textContent=data.credits;
       el('account-security').hidden=!data.passwordAccount;
       el('signout-everywhere').hidden=!data.passwordAccount;
-      el('account-email').textContent=data.email || '';
+      el('account-email').textContent=data.email || 'Development test account';
+      el('account-description').textContent='Your balance and account settings, all in one place.';
       el('email-verification-status').textContent=data.passwordAccount?(data.emailVerified?'Email verified.':'Your email has not been verified yet.'):'';
       el('send-verification').hidden=!data.passwordAccount || data.emailVerified || !emailEnabled;
       const history=el('account-activity');history.replaceChildren();
       for(const entry of data.activity){const item=document.createElement('li');item.textContent=(entry.delta>0?'+':'')+entry.delta+' credits · '+({purchase:'Test purchase',export_trial:'Test export',test_grant:'Test credits'}[entry.kind] || entry.kind);history.append(item);}
       if(!data.activity.length){const item=document.createElement('li');item.textContent='No credit activity yet.';history.append(item);}
       el('account-login').hidden=true;el('customer-login').hidden=true;el('connected-account').hidden=false;
-      el('test-checkout').disabled=!configured;
+      checkoutState(true);
       return true;
     }catch(error){disconnected();status(error.message);return false;}
   }
   try{
     const config=await request('/api/config');
     customerAccounts=config.customerAccounts===true;developmentLogin=config.developmentLogin===true;
-    if(!developmentLogin && !customerAccounts)return;
+    if(!developmentLogin && !customerAccounts){unavailable();return;}
     configured=config.paymentsEnabled===true;emailEnabled=config.emailEnabled===true;
     el('recovery-link').hidden=!customerAccounts || !emailEnabled;el('test-inbox-link').hidden=!config.developmentInbox;
-    el('test-account').hidden=false;
-    el('account-login').hidden=!developmentLogin;el('customer-login').hidden=!customerAccounts;
+    el('account-unavailable').hidden=true;el('test-account').hidden=false;
+    checkoutState(false);
+    el('account-login').hidden=true;el('customer-login').hidden=true;
+    status('Loading your account…');
     const connected=await refresh();
     const result=new URLSearchParams(location.search).get('checkout');
     if(result==='returned'){
@@ -71,9 +92,9 @@
       }
     }
     else if(result==='canceled')status('Checkout canceled. No credits were added by returning to this page.');
-    else status(connected?'Test account connected.': 'Sign in or create an account to begin.');
-    if(!configured)status(el('account-status').textContent+' Stripe test payments are not configured.');
-  }catch{return;}
+    else status('');
+
+  }catch{unavailable();return;}
   el('customer-login').addEventListener('submit',async event=>{
     event.preventDefault();
     const buttons=[el('customer-signin'),el('customer-register')];buttons.forEach(button=>button.disabled=true);
@@ -90,12 +111,12 @@
     try{
       await request('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:el('account-token').value})});
       el('account-token').value='';
-      if(await refresh())status('Test account connected.'+(configured?'':' Stripe test payments are not configured.'));
+      if(await refresh())status('Test account connected.');
     }catch(error){el('account-token').value='';status(error.message);}finally{button.disabled=false;}
   });
   el('refresh-balance').addEventListener('click',async()=>{if(await refresh())status('Balance refreshed from the server.');});
   el('disconnect-account').addEventListener('click',async()=>{
-    try{await request('/api/logout',{method:'POST'});clearAttempt();disconnected();status('Disconnected.');}catch(error){status(error.message);}
+    try{await request('/api/logout',{method:'POST'});clearAttempt();disconnected();status(customerAccounts?'Signed out.':'Disconnected.');}catch(error){status(error.message);}
   });
   el('send-verification').addEventListener('click',async()=>{
     el('send-verification').disabled=true;

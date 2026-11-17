@@ -16,6 +16,9 @@ try{
   const page=await browser.newPage({viewport:{width,height:1000},hasTouch:width<768,isMobile:width<768});const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin);await page.waitForLoadState('networkidle');
   assert.equal(await page.locator('h1').count(),1);
+  assert.equal(await page.locator('#workflow, #guide').count(),0);
+  assert.equal(await page.locator('a[href="#workflow"], a[href="#guide"]').count(),0);
+  assert.equal(await page.locator('#holders').count(),1);
   for(const link of await page.locator('[data-maker-step]').all())assert.equal(await link.isVisible(),true);
   assert.equal(await page.locator('header').getByRole('link',{name:'Account & credits'}).isVisible(),true);
   assert.deepEqual(await page.locator('.maker-layout>.maker-step').evaluateAll(nodes=>nodes.map(node=>node.id)),['upload-artwork','customize-coaster','build-coaster','download-coaster']);

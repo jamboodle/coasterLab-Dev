@@ -1,8 +1,56 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pricing preview — CoasterLab</title><meta name="description" content="Explore proposed CoasterLab export credits and try the credit flow preview."><link rel="stylesheet" href="pricing.css"><script src="account.js" defer></script><script src="pricing.js" defer></script></head>
-<body><header><a class="brand" href="../">CoasterLab <span>✳</span></a><a href="../#maker">Back to the maker ↗</a></header>
-<main><p class="eyebrow">PRICING PREVIEW</p><h1>Your next idea.<br><em>Ready to print.</em></h1><p class="intro">A proposed way to pay for the exports you need, without a subscription.</p><p class="notice">This is a development preview. Purchases are unavailable, demo credits have no value, and the maker’s existing exports remain free.</p>
-<section class="plans" aria-label="Proposed pricing"><article><p class="eyebrow">MAKE SOMETHING</p><h2>Explore freely</h2><p class="price">$0</p><ul><li>Upload and trace your artwork</li><li>Adjust colors and coaster dimensions</li><li>Preview your design in the maker</li></ul><a class="button secondary" href="../#maker">Try the maker ↗</a></article><article class="featured"><p class="eyebrow">EXPORT WHEN YOU’RE READY</p><h2>Export pack</h2><p class="price">$5 <small>USD / 10 credits</small></p><ul><li>Proposed: one credit per coaster exported</li><li>A batch of three coasters uses three credits</li><li>No subscription required</li></ul><button id="open-preview" class="button">Preview the credit flow →</button><p class="hint">Proposed pricing. No checkout or payment collection.</p></article></section>
-<section class="explanation"><h2>Make first. Export when it’s right.</h2><p>The proposed plan keeps tracing and previews free. Before a paid export, you would see its credit cost and your remaining balance. Payment, refund, expiry, and repeat-download terms will be finalized before launch.</p></section>
-<dialog id="credit-preview" aria-labelledby="preview-title"><form method="dialog"><button class="close" aria-label="Close credit preview">×</button></form><p class="eyebrow">DEMO ONLY · NO PAYMENT</p><h2 id="preview-title">Try an export</h2><p>No files are generated here. These credits exist only while this page is open.</p><p class="balance"><strong id="balance">0</strong> demo credits</p><button id="add-credits" class="button secondary">Add a demo pack · 10 credits</button><label for="quantity">Coasters in this export</label><input id="quantity" type="number" min="1" max="10" step="1" value="1"><p id="cost">Cost: 1 demo credit</p><button id="export-preview" class="button">Simulate export</button><p id="credit-status" role="status" aria-live="polite">Add a demo pack to try the flow.</p><button id="reset-preview" class="reset">Reset demo</button></dialog>
-<section id="test-account" hidden aria-labelledby="account-heading"><p class="eyebrow">DEVELOPMENT TEST ACCOUNT</p><h2 id="account-heading">Your account and credits</h2><p>Sign in to check your balance and try test checkout. These test credits do not unlock paid exports.</p><form id="customer-login" hidden><label for="customer-email">Email</label><input id="customer-email" type="email" autocomplete="username" maxlength="254" required><label for="customer-password">Password</label><input id="customer-password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required><p class="hint">Use 12 to 128 characters. Email verification and recovery depend on the account services configured here.</p><button id="customer-signin" class="button secondary" type="submit">Sign in</button><button id="customer-register" class="button" type="submit">Create account</button></form><p id="recovery-link" hidden><a href="../account/">Forgot your password?</a></p><p id="test-inbox-link" hidden><a href="../dev/inbox/">Open local test inbox</a> · No real email is sent.</p><form id="account-login"><label for="account-token">Development account token</label><input id="account-token" type="password" autocomplete="off" required><button class="button secondary">Connect test account</button></form><div id="connected-account" hidden><p>Account balance: <strong id="account-balance">—</strong> test credits</p><button id="refresh-balance" class="button secondary">Refresh balance</button><button id="test-checkout" class="button" disabled>Open Stripe test checkout · $5 / 10 credits</button><button id="disconnect-account" class="reset">Disconnect</button><p id="email-verification-status"></p><button id="send-verification" class="button secondary" hidden>Send verification link</button><h3>Credit activity</h3><p class="hint">Your latest 50 credit entries. Test purchases have no cash value.</p><ul id="account-activity"></ul><details id="account-security" hidden><summary>Account security</summary><p id="account-email"></p><form id="password-change"><label for="current-password">Current password</label><input id="current-password" type="password" autocomplete="current-password" maxlength="128" required><label for="new-password">New password</label><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required><button class="button secondary">Change password</button></form><p class="hint">Changing your password signs out other sessions. This browser stays signed in.</p></details><button id="signout-everywhere" class="reset">Sign out everywhere</button></div><p id="account-status" role="status" aria-live="polite"></p></section><noscript><p>The credit flow preview needs JavaScript. You can still use the pricing information and return to the maker.</p></noscript></main><footer>CoasterLab · Pricing experiment · <a href="../">Return to the app</a></footer></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Account & credits — CoasterLab</title>
+<meta name="description" content="Sign in to CoasterLab, check your credit balance, and explore export credits.">
+<link rel="stylesheet" href="pricing.css"><script src="account.js" defer></script><script src="pricing.js" defer></script>
+</head>
+<body class="pricing-page">
+<header><a class="brand" href="../">CoasterLab <span>✳</span></a><a class="back-link" href="../#maker">← Back to the maker</a></header>
+<main>
+<div class="page-heading"><p class="eyebrow">COASTERLAB</p><h1>Account & credits</h1><p>Manage your account, check your balance, then get back to making.</p></div>
+<div class="account-layout">
+<section class="account-card" aria-labelledby="account-heading">
+<div class="card-heading"><h2 id="account-heading">Your account</h2><p id="account-description">Sign in to see your credits and manage your account.</p></div>
+<p id="account-unavailable" role="status">Loading account services…</p>
+<div id="test-account" hidden>
+<form id="customer-login" hidden>
+<div class="auth-switch" role="group" aria-label="Account access"><button type="button" id="auth-signin" aria-pressed="true">Sign in</button><button type="button" id="auth-register" aria-pressed="false">Create account</button></div>
+<label for="customer-email">Email</label><input id="customer-email" type="email" autocomplete="username" maxlength="254" required>
+<label for="customer-password">Password</label><input id="customer-password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required>
+<p id="registration-hint" class="hint" hidden>Use 12 to 128 characters for your password.</p>
+<button id="customer-signin" class="button full-width" type="submit">Sign in</button><button id="customer-register" class="button full-width" type="submit" hidden>Create account</button>
+</form>
+<p id="recovery-link" class="account-link" hidden><a href="../account/">Forgot your password?</a></p>
+<form id="account-login" class="development-access" hidden><label for="account-token">Development account token</label><input id="account-token" type="password" autocomplete="off" required><button class="button secondary">Connect test account</button></form>
+<div id="connected-account" hidden>
+<p id="account-email" class="account-identity"></p>
+<div class="credit-balance"><div><span class="balance-label">Available credits</span><strong id="account-balance">—</strong><span class="hint">Test credits · no cash value</span></div><button id="refresh-balance" class="text-button" type="button">Refresh</button></div>
+<a class="button full-width maker-action" href="../#maker">Make a coaster →</a>
+<div class="verification-row"><p id="email-verification-status"></p><button id="send-verification" class="text-button" hidden>Send verification link</button></div>
+<details id="activity-panel" class="account-details"><summary>Credit activity</summary><p class="hint">Your latest 50 entries.</p><ul id="account-activity" class="activity-list"></ul></details>
+<details id="account-security" class="account-details" hidden><summary>Password & security</summary>
+<form id="password-change"><label for="current-password">Current password</label><input id="current-password" type="password" autocomplete="current-password" maxlength="128" required><label for="new-password">New password</label><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" required><button class="button secondary">Change password</button></form>
+<p class="hint">Changing your password signs out other sessions. This browser stays signed in.</p><button id="signout-everywhere" class="text-button" hidden>Sign out everywhere</button></details>
+<button id="disconnect-account" class="text-button signout">Sign out</button>
+</div>
+<p id="account-status" class="account-status" role="status" aria-live="polite"></p>
+<p id="test-inbox-link" class="development-note" hidden><a href="../dev/inbox/">Open local test inbox</a> · No real email is sent.</p>
+</div>
+</section>
+<aside class="credits-sidebar" aria-labelledby="credits-heading">
+<section id="export-pack" class="credit-pack"><div class="pack-heading"><h2 id="credits-heading">Export credits</h2><span class="preview-badge">Preview</span></div><p class="pack-description">Make and preview your artwork freely. Use credits when you export a coaster.</p>
+<div class="pack-price"><strong>$5 <span>USD</span></strong><span>10 credits</span></div>
+<ul class="pack-features"><li>Proposed: 1 credit per coaster</li><li>No subscription</li></ul>
+<button id="test-checkout" class="button full-width" disabled>Purchases unavailable</button><p id="purchase-hint" class="hint">Purchases are not available yet. No live payments are collected.</p>
+</section>
+<details class="sidebar-details"><summary>How do credits work?</summary><p>One coaster would use one credit; a batch of three would use three. The maker shows the cost before you confirm an export.</p><p>Pricing, refund, expiry and repeat-download terms will be finalized before launch.</p><button id="open-preview" class="button secondary">Try the credit demo</button><p class="hint">The demo is separate from your account balance and generates no files.</p></details>
+<p class="preview-note">Development preview. Test credits have no cash value. Live billing remains off.</p>
+</aside>
+</div>
+<noscript><p>Account access needs JavaScript. You can still read the credit information and return to the maker.</p></noscript>
+<dialog id="credit-preview" aria-labelledby="preview-title"><form method="dialog"><button class="close" aria-label="Close credit preview">×</button></form><p class="eyebrow">DEMO ONLY · NO PAYMENT</p><h2 id="preview-title">Try an export</h2><p>No files are generated here. These credits exist only while this page is open.</p><p class="balance"><strong id="balance">0</strong> demo credits</p><button id="add-credits" class="button secondary">Add a demo pack · 10 credits</button><label for="quantity">Coasters in this export</label><input id="quantity" type="number" min="1" max="10" step="1" value="1"><p id="cost">Cost: 1 demo credit</p><button id="export-preview" class="button">Simulate export</button><p id="credit-status" role="status" aria-live="polite">Add a demo pack to try the flow.</p><button id="reset-preview" class="text-button">Reset demo</button></dialog>
+</main>
+<footer>CoasterLab · <a href="../#maker">Return to the maker</a></footer>
+</body></html>

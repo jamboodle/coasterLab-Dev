@@ -20,6 +20,8 @@ try{
   assert.equal(await page.locator('#account-login').isVisible(),false);
   await page.locator('#customer-email').fill(`maker-${width}@example.com`);
   await page.locator('#customer-password').fill('browser-test-password');
+  await page.locator('#auth-register').click();
+  await page.locator('#customer-password').fill('browser-test-password');
   await page.locator('#customer-register').click();await page.locator('#connected-account').waitFor({state:'visible'});
   assert.equal(await page.locator('#account-balance').textContent(),'0');
   assert.equal(await page.locator('#test-checkout').isDisabled(),true);

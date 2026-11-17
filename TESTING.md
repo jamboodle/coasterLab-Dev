@@ -132,3 +132,15 @@ existing export, mobile, account and credit tests.
 EMAIL.md documents enabling the existing mail service on the hosting server and
 checking actual verification/reset messages. Automated mail tests use only a
 local child-process sink; no test mail is sent to real addresses by the test suite.
+
+## Compact Account & credits page
+
+Confirm that the maker no longer contains the three-column Bring an image /
+Make it vector / Build your coaster section or the A few layers / Next stop:
+Bambu Studio section. The holder gallery and inline import help remain.
+On Account & credits, sign-in appears before pricing on mobile; use Create
+account to switch registration mode. After sign-in, check the balance and Make
+a coaster link, then expand Credit activity or Password & security as needed.
+The optional demo lives under How do credits work?, separate from real account
+credits. Existing email verification/recovery and test checkout remain available
+when configured, and purchases remain disabled when payment setup is off.

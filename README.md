@@ -121,3 +121,8 @@ The final credit-confirmed action is a green **Download Ready** button.
 Hosted verification and recovery can use Webuzo's local Exim/Sendmail-compatible
 mail service. See [EMAIL.md](EMAIL.md) for setup and real-delivery checks. It is
 disabled until configured; `npm run dev` still uses only the local test inbox.
+
+The maker's repeated workflow/printing marketing sections have been removed.
+Account & credits is now a compact account-first page: explicit sign-in/create
+account modes, a clear balance, a small credit-pack summary and expandable
+activity, security and demo information. Billing behavior is unchanged.

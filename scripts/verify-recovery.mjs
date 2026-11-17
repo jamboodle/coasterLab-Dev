@@ -19,6 +19,8 @@ try{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(origin+'/pricing/');await page.locator('#customer-login').waitFor({state:'visible'});
   await page.locator('#customer-email').fill(`recovery-${width}@example.com`);await page.locator('#customer-password').fill('first-test-password');
+  await page.locator('#auth-register').click();
+  await page.locator('#customer-password').fill('first-test-password');
   await page.locator('#customer-register').click();await page.locator('#connected-account').waitFor({state:'visible'});
   await page.getByRole('link',{name:'Open local test inbox'}).click();
   const verification=page.getByRole('link',{name:'Open email verification link'}).first();await verification.waitFor();
