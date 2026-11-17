@@ -20,6 +20,8 @@ class Updater:
     node = '/usr/local/apps/nodejs24/bin/node'
     service_name = 'coasterlab-dev-node'
     repository = 'git@github.com:jamboodle/coasterLab-Dev.git'
+    origin = 'https://dev.jamboodle.com'
+    port = 30001
 
     def as_user(self, args, cwd=None, capture=False):
         environment = dict(os.environ)
@@ -86,12 +88,12 @@ class Updater:
 
     def healthy(self):
         try:
-            for address in ['http://127.0.0.1:30001/health', 'https://dev.jamboodle.com/health']:
+            for address in [f'http://127.0.0.1:{self.port}/health', self.origin + '/health']:
                 with urllib.request.urlopen(address, timeout=5) as response:
                     data = json.load(response)
                     if response.status != 200 or not isinstance(data, dict) or data.get('ok') is not True:
                         return False
-            with urllib.request.urlopen('https://dev.jamboodle.com/', timeout=5) as response:
+            with urllib.request.urlopen(self.origin + '/', timeout=5) as response:
                 page = response.read(200000).decode('utf-8', errors='replace')
                 return response.status == 200 and '<main' in page and 'id="maker"' in page and 'id="files"' in page
         except (OSError, ValueError):
@@ -102,7 +104,7 @@ class Updater:
             if self.healthy():
                 return
             time.sleep(1)
-        raise RuntimeError('Health check failed. Inspect: journalctl -u coasterlab-dev-node -n 30 --no-pager')
+        raise RuntimeError(f'Health check failed. Inspect: journalctl -u {self.service_name} -n 30 --no-pager')
 
     def write_marker(self, revision):
         self.as_user(['python3', '-c',
