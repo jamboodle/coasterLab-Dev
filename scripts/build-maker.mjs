@@ -21,7 +21,7 @@ for(const name of names)build(name);
 let html=read('dist/index.html');
 for(const [name,old] of Object.entries(manifest.scripts))html=html.replaceAll(old,outputs.get(name).filename);
 const next={...manifest,scripts:Object.fromEntries(names.map(name=>[name,outputs.get(name).filename]))};
-const packingWorker=`const MAX_BATCH_IMAGES=10;\nimportScripts('vendor/fflate.js','${outputs.get('filament-palette.js').filename}','${outputs.get('export-codec.js').filename}');\nonmessage=({data})=>{try{const bytes=data.action==='project'?makeBatch3MF(data.items,data.template):data.action==='partsBatch'?makePartsBatch(data.items):partsArchive(data.item,data.result);postMessage({bytes},[bytes.buffer]);}catch(error){postMessage({error:error.message || 'File packing failed'});}};\n`;
+const packingWorker=`const MAX_BATCH_IMAGES=6;\nimportScripts('vendor/fflate.js','${outputs.get('filament-palette.js').filename}','${outputs.get('export-codec.js').filename}');\nonmessage=({data})=>{try{const bytes=data.action==='project'?makeBatch3MF(data.items,data.template):data.action==='partsBatch'?makePartsBatch(data.items):partsArchive(data.item,data.result);postMessage({bytes},[bytes.buffer]);}catch(error){postMessage({error:error.message || 'File packing failed'});}};\n`;
 const files=[...outputs.values()].map(({filename,code})=>['dist/'+filename,code]);
 files.push(['dist/export-packing-worker.js',packingWorker],['dist/index.html',html],['dist/asset-manifest.json',JSON.stringify(next,null,2)+'\n']);
 for(const [path,content] of files){

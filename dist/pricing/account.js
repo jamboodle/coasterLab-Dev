@@ -25,7 +25,7 @@
     el('auth-signin').setAttribute('aria-pressed',String(!register));
     el('auth-register').setAttribute('aria-pressed',String(register));
     el('customer-signin').hidden=register;el('customer-register').hidden=!register;
-    el('registration-hint').hidden=!register;
+    el('registration-hint').hidden=!register;el('registration-name').hidden=!register;
     el('customer-password').autocomplete=register?'new-password':'current-password';
     el('customer-password').value='';
   }
@@ -44,7 +44,7 @@
     try{
       const data=await request('/api/account');
       el('account-balance').textContent=data.credits;el('admin-link').hidden=!data.admin;
-      el('account-security').hidden=!data.passwordAccount;
+      el('account-security').hidden=!data.passwordAccount;el('profile-panel').hidden=!data.passwordAccount;el('profile-name').value=data.name || '';
       el('signout-everywhere').hidden=!data.passwordAccount;
       el('account-email').textContent=data.email || 'Development test account';
       el('account-description').textContent='Your balance and account settings, all in one place.';
@@ -108,7 +108,7 @@
     const register=event.submitter?.id==='customer-register';
     status(register?'Creating your account…':'Signing in…');
     try{
-      const accountResult=await request(register?'/api/register':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:el('customer-email').value,password:el('customer-password').value})});
+      const accountResult=await request(register?'/api/register':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:el('customer-email').value,password:el('customer-password').value,...(register?{name:el('customer-name').value}:{})})});
       el('customer-password').value='';
       if(await refresh())status(register?(emailEnabled?(accountResult.verificationSent?'Account created. Verification email sent.':'Account created. Email could not be sent; use Send verification link to try again.'):'Account created.'):`Signed in. You have ${accountResult.credits} credits.`);
     }catch(error){el('customer-password').value='';status(error.message);}finally{buttons.forEach(button=>button.disabled=false);}
@@ -129,6 +129,7 @@
     el('send-verification').disabled=true;
     try{await request('/api/send-verification',{method:'POST'});status('Verification link sent. Check your inbox.');}catch(error){status(error.message);}finally{el('send-verification').disabled=false;}
   });
+  el('profile-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;try{await request('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:el('profile-name').value})});status('Name saved.');}catch(error){status(error.message);}finally{button.disabled=false;}});
   el('password-change').addEventListener('submit',async event=>{
     event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;
     try{

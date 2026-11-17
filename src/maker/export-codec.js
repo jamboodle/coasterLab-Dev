@@ -1,7 +1,7 @@
 // Pure archive encoding shared by the main page and file-packing worker.
 const batchEsc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
 function makeBatch3MF(coasters,template){
- if(!template)throw Error('Choose a Bambu printer project template first.');if(!coasters.length)throw Error('Convert at least one coaster first.');if(coasters.length>MAX_BATCH_IMAGES)throw Error('CoasterPrint limits batches to 10 coasters per project. Use a smaller batch.');
+ if(!template)throw Error('Choose a Bambu printer project template first.');if(!coasters.length)throw Error('Convert at least one coaster first.');if(coasters.length>MAX_BATCH_IMAGES)throw Error('CoasterPrint limits batches to 6 coasters per project. Use a smaller batch.');
  const palette=[...new Set(coasters.flatMap(item=>{const result=item.stl;return [batchBaseColor(result),...result.parts.map(p=>batchColorHex(p.fill))];}))];
  const config=JSON.parse(JSON.stringify(template.config)),esc=batchEsc;assignProjectPalette(config,palette);for(const key of ['wipe_tower_x','wipe_tower_y'])if(Array.isArray(config[key])&&config[key].length)config[key]=Array(coasters.length).fill(config[key][0]);const objects=[],assemblies=[],build=[],modelConfigs=[],plates=[],allMaterials=[],materialIndices=new Map();let nextID=1;const columns=Math.ceil(Math.sqrt(coasters.length));const plateSummary=[];
  const transforms=[];

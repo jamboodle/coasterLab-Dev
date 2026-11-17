@@ -21,7 +21,9 @@ and https://coasterprint.com/admin/. Development admin access is not copied.
 
 ## Admin panel
 
-- Search users, view their balance and verification state, suspend or restore access.
+- Use the Users table to search names/emails and sort by name, joined date, last visited date, or balance (ascending or descending across the full result set). Choose 10, 25, or 50 rows per page and navigate with Previous/Next or the page selector. Manage opens a compact credit/suspension dialog. Users, Billing and Audit are separate tabs.
+- New registrations can supply a name; existing accounts can edit their name on the account page. Joined dates are recorded for new registrations. Old unrecorded names/dates display as Not provided / Not recorded. Last visited tracks authenticated app activity, with writes throttled to once a minute. No historical dates are invented.
+- View balances and verification state, suspend or restore access.
   Suspension revokes sessions and development tokens. The email identity remains
   reserved; a suspended user cannot register a replacement account with it.
 - Add or remove integer credits with a reason. Adjustments are transactional,
@@ -51,6 +53,8 @@ accounts are not retroactively granted credits. Email uniqueness is enforced aft
 trimming and lowercasing; registering the same address again cannot get another
 welcome grant. Distinct aliases are distinct email addresses; this is not an
 identity verification system or a guarantee against people using multiple emails.
+
+Guests and registered accounts with a zero credit balance can import/process one image at a time. Registered accounts with a positive balance can import/process up to six images at once, even if the balance is less than six. Batch access is refreshed on import, before processing, and when the page regains focus or a debit is recorded. An existing over-limit queue is retained but cannot be rebuilt until the user removes images or restores access. Processing does not debit credits. With billing on, each image in a 3MF batch costs one credit (six images = six credits), including a ZIP of individual 3MF files. These rules appear in the download block.
 
 The maker shows account balance and refreshes it when the tab regains focus or an
 export is recorded. Login responses also include the current balance.

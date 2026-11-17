@@ -23,7 +23,9 @@ export class Ledger {
     for(const [name,definition] of [['pack_id',"TEXT NOT NULL DEFAULT 'starter'"],['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"]]){
       if(!columns.has(name))this.db.exec(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
     }
-    this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key)');
+    this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key); CREATE INDEX IF NOT EXISTS entries_account ON entries(account)');
+    const identityColumns=new Set(this.db.prepare('PRAGMA table_info(identities)').all().map(row=>row.name));
+    for(const [name,type] of [['name',"TEXT NOT NULL DEFAULT ''"],['joined_at','INTEGER'],['last_visited_at','INTEGER']])if(!identityColumns.has(name))this.db.exec(`ALTER TABLE identities ADD COLUMN ${name} ${type}`);
     if(!this.db.prepare('PRAGMA table_info(identities)').all().some(row=>row.name==='verified_at'))this.db.exec('ALTER TABLE identities ADD COLUMN verified_at INTEGER');
   }
   createAccount() {
@@ -36,13 +38,13 @@ export class Ledger {
     return id && !this.control(id).suspended?id:undefined;
   }
   identity(email) {email=email.trim().toLowerCase();return this.db.prepare('SELECT * FROM identities WHERE email=?').get(email);}
-  registerIdentity(email,salt,digest) {
+  registerIdentity(email,salt,digest,name='') {
     email=email.trim().toLowerCase();
     this.db.exec('BEGIN IMMEDIATE');
     try {
       if(this.identity(email)){this.db.exec('ROLLBACK');return null;}
       const {id}=this.createAccount();
-      this.db.prepare('INSERT INTO identities(email,account,salt,digest) VALUES (?,?,?,?)').run(email,id,salt,digest);
+      this.db.prepare('INSERT INTO identities(email,account,salt,digest,name,joined_at,last_visited_at) VALUES (?,?,?,?,?,?,?)').run(email,id,salt,digest,name,Date.now(),Date.now());
       const welcome=this.settings().welcomeCredits;
       if(welcome>0)this.db.prepare("INSERT INTO entries VALUES (?,?,?,'welcome')").run('welcome:'+id,id,welcome);
       this.db.exec('COMMIT');return id;
@@ -54,7 +56,11 @@ export class Ledger {
     this.db.prepare('INSERT INTO auth_limits VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1').run(key,now+900000);
     return this.db.prepare('SELECT count FROM auth_limits WHERE key=?').get(key).count<=20;
   }
+  touchVisit(account,now=Date.now()){this.db.prepare('UPDATE identities SET last_visited_at=? WHERE account=? AND (last_visited_at IS NULL OR last_visited_at<?)').run(now,account,now-60000);}
+  updateName(account,name){this.db.prepare('UPDATE identities SET name=? WHERE account=?').run(name,account);}
+  makerAccess(account){const registered=Boolean(account && this.identityForAccount(account)),credits=account?this.balance(account):0;return {registered,credits,maxImages:registered&&credits>0?6:1};}
   createSession(account) {
+    this.touchVisit(account);
     const token=randomBytes(32).toString('hex');
     this.db.prepare('DELETE FROM sessions WHERE expires<=?').run(Date.now());
     this.db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token),account,Date.now()+86400000);
@@ -197,12 +203,16 @@ export class Ledger {
   audit(actor,action,target,detail,id=randomBytes(16).toString('hex')) {
     this.db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(id,actor,action,target,JSON.stringify(detail),Date.now());
   }
-  users(search='',offset=0) {
-    return this.db.prepare(`SELECT i.account,i.email,i.verified_at,COALESCE(c.admin,0) AS admin,COALESCE(c.suspended,0) AS suspended,
+  users(search='',offset=0,{sort='name',direction='asc',limit=25}={}) {
+    const sorts={name:"LOWER(COALESCE(NULLIF(i.name,''),i.email))",joined:'i.joined_at',lastVisited:'i.last_visited_at',credits:'credits'};
+    if(!Object.hasOwn(sorts,sort)||!['asc','desc'].includes(direction)||![10,25,50].includes(limit))throw Error('Invalid sort or page size.');
+    return this.db.prepare(`SELECT i.account,i.email,i.name,i.joined_at,i.last_visited_at,i.verified_at,COALESCE(c.admin,0) AS admin,COALESCE(c.suspended,0) AS suspended,
       COALESCE((SELECT SUM(delta) FROM entries WHERE account=i.account),0) AS credits
       FROM identities i LEFT JOIN account_controls c ON c.account=i.account
-      WHERE instr(i.email,?)>0 ORDER BY i.email LIMIT 50 OFFSET ?`).all(search.toLowerCase(),offset);
+      WHERE instr(LOWER(i.email||' '||i.name),?)>0
+      ORDER BY ${sorts[sort]} IS NULL ASC,${sorts[sort]} ${direction},i.email ASC LIMIT ? OFFSET ?`).all(search.trim().toLowerCase(),limit,offset);
   }
+  usersCount(search=''){return this.db.prepare("SELECT COUNT(*) AS count FROM identities WHERE instr(LOWER(email||' '||name),?)>0").get(search.trim().toLowerCase()).count;}
   adjustCredits(actor,target,delta,reason,key) {
     this.db.exec('BEGIN IMMEDIATE');
     try{

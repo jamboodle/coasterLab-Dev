@@ -22,8 +22,8 @@ try{
   await page.locator('#customer-password').fill('browser-test-password');
   await page.locator('#auth-register').click();
   await page.locator('#customer-password').fill('browser-test-password');
-  await page.locator('#customer-register').click();await page.locator('#connected-account').waitFor({state:'visible'});
-  assert.equal(await page.locator('#account-balance').textContent(),'15');
+  await page.locator('#customer-name').fill(`Maker ${width}`);await page.locator('#customer-register').click();await page.locator('#connected-account').waitFor({state:'visible'});
+  assert.equal(await page.locator('#account-balance').textContent(),'15');await page.locator('#profile-panel > summary').click();await page.locator('#profile-name').fill('Updated Maker');await page.locator('#profile-form button').click();await page.waitForFunction(()=>document.getElementById('account-status').textContent==='Name saved.');assert.equal(ledger.identity(`maker-${width}@example.com`).name,'Updated Maker');
   assert.equal(await page.locator('#test-checkout').isDisabled(),true);
   assert.equal(await page.locator('#customer-password').inputValue(),'');
   await page.reload();await page.locator('#connected-account').waitFor({state:'visible'});

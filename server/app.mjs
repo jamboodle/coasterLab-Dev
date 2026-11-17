@@ -42,6 +42,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       const session=req.headers.cookie?.match(/(?:^|;\s*)cl_session=([a-f0-9]{64})(?:;|$)/)?.[1];
       const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
+      if(req.method==='GET' && path==='/api/maker-access'){const id=ledger.authenticate(bearer) || ledger.sessionAccount(session);if(id)ledger.touchVisit(id);return send(200,ledger.makerAccess(id));}
       if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox,exportCreditTrial:chargeExports,exportLoginRequired:customerAccounts,...publicSettings(settings)});
       if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
       if(req.method==='GET' && path==='/api/dev/inbox') {
@@ -91,8 +92,9 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
           if(!input)return send(400,{error:'Enter a valid email and a password of 12 to 128 characters.'});
           let id;
           if(path==='/api/register') {
+            if(parsed.name!==undefined && (typeof parsed.name!=='string'||parsed.name.trim().length>80||/[\x00-\x1f\x7f]/.test(parsed.name)))return send(400,{error:'Use a name of up to 80 characters.'});
             const {salt,digest}=await passwordHash(input.password);
-            id=ledger.registerIdentity(input.email,salt,digest);
+            id=ledger.registerIdentity(input.email,salt,digest,parsed.name?.trim() || '');
             if(!id)return send(409,{error:'An account already exists for this email. Sign in instead.'});
           }else{
             const identity=ledger.identity(input.email);
@@ -120,13 +122,22 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       }
       const account=ledger.authenticate(bearer) || ledger.sessionAccount(session);
       if (!account) return send(401,{error:'Authentication required'});
+      ledger.touchVisit(account);
+      if(req.method==='POST' && path==='/api/profile'){
+        if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+        if(!ledger.identityForAccount(account))return send(403,{error:'A registered account is required.'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Payload too large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
+        if(typeof body?.name!=='string'||body.name.trim().length>80||/[\x00-\x1f\x7f]/.test(body.name))return send(400,{error:'Use a name of up to 80 characters.'});
+        ledger.updateName(account,body.name.trim());return send(200,{ok:true});
+      }
       if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret});
       if(req.method==='POST' && ['/api/export-quote','/api/export-debit'].includes(path)) {
         if(!customerAccounts && !chargeExports)return send(404,{error:'Account exports are disabled'});
         if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Payload too large'});}
         let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
-        if(!body || typeof body.fingerprint!=='string' || !/^[a-f0-9]{64}$/.test(body.fingerprint) || !Number.isInteger(body.count) || body.count<1 || body.count>10)return send(400,{error:'Invalid export reference or coaster count'});
+        if(!body || typeof body.fingerprint!=='string' || !/^[a-f0-9]{64}$/.test(body.fingerprint) || !Number.isInteger(body.count) || body.count<1 || body.count>6)return send(400,{error:'Invalid export reference or coaster count'});
         if(!chargeExports)return send(200,{cost:0,balance:ledger.balance(account),remaining:ledger.balance(account),retry:false,billingEnabled:false});
         const result=path==='/api/export-quote'?ledger.exportQuote(account,body.fingerprint,body.count):ledger.debitExport(account,body.fingerprint,body.count);
         if(result.error)return send(result.status,{error:result.error});
@@ -134,7 +145,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       }
       if (req.method==='GET' && path==='/api/account') {
         const identity=ledger.identityForAccount(account);
-        return send(200,{credits:ledger.balance(account),admin:Boolean(ledger.control(account).admin),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),activity:ledger.activity(account)});
+        return send(200,{name:identity?.name || '',joinedAt:identity?.joined_at || null,lastVisitedAt:identity?.last_visited_at || null,maxImages:ledger.makerAccess(account).maxImages,credits:ledger.balance(account),admin:Boolean(ledger.control(account).admin),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),activity:ledger.activity(account)});
       }
       if(req.method==='POST' && path==='/api/send-verification') {
         if(!emailEnabled)return send(503,{error:'Email verification is not configured'});

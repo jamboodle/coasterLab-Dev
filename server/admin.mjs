@@ -11,9 +11,9 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
  if(req.method==='POST' && req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
  if(req.method==='GET' && path==='/api/admin/users'){
   const params=new URL(req.url,'http://localhost').searchParams;
-  const offset=Number(params.get('offset') || 0),search=(params.get('search') || '').slice(0,254);
-  if(!Number.isSafeInteger(offset)||offset<0)return send(400,{error:'Invalid page.'});
-  return send(200,{users:ledger.users(search,offset)});
+  const offset=Number(params.get('offset') || 0),search=(params.get('search') || '').slice(0,254),limit=Number(params.get('limit') || 25),sort=params.get('sort') || 'name',direction=params.get('direction') || 'asc';
+  if(!Number.isSafeInteger(offset)||offset<0||![10,25,50].includes(limit)||!['name','joined','lastVisited','credits'].includes(sort)||!['asc','desc'].includes(direction))return send(400,{error:'Invalid page or sorting.'});
+  return send(200,{users:ledger.users(search,offset,{sort,direction,limit}),total:ledger.usersCount(search),offset,limit,sort,direction});
  }
  if(req.method==='GET' && path==='/api/admin/audit')return send(200,{entries:ledger.auditLog()});
  if(req.method==='GET' && path==='/api/admin/settings'){

@@ -35,7 +35,7 @@ try{
   await page.locator('#advanced-artwork > summary').click();
   const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');x.fillStyle='red';x.fillRect(0,0,64,64);return c.toDataURL().split(',')[1];});
   await page.locator('#files').setInputFiles({name:'layout-check.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
-  assert.equal(await page.locator('[data-maker-step="2"]').getAttribute('aria-current'),'step');
+  await page.waitForFunction(()=>document.querySelector('[data-maker-step="2"]').getAttribute('aria-current')==='step');
   await page.locator('#trace').click();await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:60000});
   assert.equal(await page.locator('[data-maker-step="4"]').getAttribute('aria-current'),'step');
   assert.equal(await page.locator('#go-download').isVisible(),true);
