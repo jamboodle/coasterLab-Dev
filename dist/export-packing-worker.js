@@ -1,3 +1,3 @@
 const MAX_BATCH_IMAGES=10;
-importScripts('vendor/fflate.js','filament-palette.f9e95eb63a55.js','export-codec.6ffd520113d1.js');
-onmessage=({data})=>{try{const bytes=data.action==='project'?makeBatch3MF(data.items,data.template):partsArchive(data.item,data.result);postMessage({bytes},[bytes.buffer]);}catch(error){postMessage({error:error.message || 'File packing failed'});}};
+importScripts('vendor/fflate.js','filament-palette.f9e95eb63a55.js','export-codec.0a58e48b6bea.js');
+onmessage=({data})=>{try{const bytes=data.action==='project'?makeBatch3MF(data.items,data.template):data.action==='partsBatch'?makePartsBatch(data.items):partsArchive(data.item,data.result);postMessage({bytes},[bytes.buffer]);}catch(error){postMessage({error:error.message || 'File packing failed'});}};

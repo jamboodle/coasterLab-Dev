@@ -62,18 +62,23 @@ mesh. This verifies export generation, not slicer compatibility or print quality
 
 ## Mobile 3D generation
 
-On a touch device, the maker's 3D downloads selector starts at **3MF only**.
-Generate a coaster and download its 3MF. To get STL downloads, select all formats
-and rebuild. This preserves model detail and color layers; it skips optional
-merged STL generation and parts ZIP creation when 3MF is all you need. Progress
-messages identify the base, color layers and archive-packing stages. Keep the
-tab open: background execution and memory limits still vary by phone.
+Build a coaster, then choose **Download free STL parts ZIP** beside the 3MF
+button. This must open a ZIP preparation dialog and a fresh download button,
+without asking for sign-in, spending credits, or rebuilding geometry. Unzip the
+result and import its base and all image-color STL files together as one object
+with multiple parts in Bambu Studio. Assign a filament to each part.
 
-The browser suite checks a touch-device viewport with 4× CPU throttling, validates
-the downloaded archive, and compares its model XML exactly with full-output mode.
-This is not proof of performance on actual phones or all artwork. Re-test an
-image that previously timed out to judge the practical improvement. These GitHub
-changes need updating on the server before they affect dev.jamboodle.com.
+Repeat through the **Switch to free STL** button in an insufficient-credit or
+anonymous 3MF dialog. The same ZIP dialog should open directly, with no output
+selector or rebuild step. For batches, check the separate coaster folders and
+START-HERE instructions. Merged STL should not be offered anywhere in the current
+maker. Legacy standalone archives are historical releases.
+
+The browser suite checks desktop and touch-device viewports with 4× CPU throttling,
+compares 3MF geometry between them, and verifies each archived STL byte-for-byte
+against its existing base/color part. It also checks batch folders and that free
+ZIP downloads start no additional geometry worker. Actual slicer import and print
+quality still need manual testing.
 
 ## Optional 3MF credit-accounting trial
 

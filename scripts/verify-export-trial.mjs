@@ -6,6 +6,7 @@ import {Ledger} from '../server/ledger.mjs';
 import {handler} from '../server/app.mjs';
 import {withStatic} from '../server/static.mjs';
 const {chromium}=createRequire(import.meta.url)('playwright');
+const {unzipSync}=createRequire(import.meta.url)('../dist/vendor/fflate.js');
 const ledger=new Ledger(':memory:');const account=ledger.createAccount();ledger.grantTestCredits(account.id,1);let origin;
 const server=createServer(withStatic((req,res)=>handler({ledger,origin,developmentLogin:true,exportCreditTrial:true})(req,res),fileURLToPath(new URL('../dist/',import.meta.url))));
 await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
@@ -46,6 +47,10 @@ try{
  await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:60000});await page.locator('#download3MF').click();
  await page.waitForFunction(()=>document.querySelector('[data-message]')?.textContent?.includes('Not enough credits'));
  assert.equal(await dialog.locator('[data-authorize]').isVisible(),false);
+ await dialog.locator('[data-stl]').click();await page.locator('[data-free-save]:not([disabled])').waitFor();
+ const freeDownload=page.waitForEvent('download');await page.locator('[data-free-save]').click();const freeFile=await freeDownload;
+ const chunks=[];for await(const chunk of await freeFile.createReadStream())chunks.push(chunk);
+ const freeParts=Object.keys(unzipSync(Buffer.concat(chunks)));assert.ok(freeParts.some(name=>name.startsWith('base-')&&name.endsWith('.stl')));assert.ok(freeParts.some(name=>name.startsWith('image-color-')&&name.endsWith('.stl')));assert.ok(freeParts.includes('IMPORT-INTO-BAMBU.txt'));
  assert.equal(ledger.balance(account.id),0);assert.deepEqual(errors,[]);
  console.log('PASS touch-device credit trial: valid generated 3MF, cost preview, cancel, lost response, retry without double debit, download and insufficient credits');
 }finally{await browser?.close();await new Promise(r=>server.close(r));ledger.close();}

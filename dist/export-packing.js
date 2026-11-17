@@ -16,4 +16,3 @@ function projectGeometry(item){
 }
 function packProject(items,template){return packInWorker('project',{items:items.map(projectGeometry),template});}
 function packParts(item,result){return packInWorker('parts',{item:{file:{name:item.file.name}},result:{base:result.base,parts:result.parts,dimensions:result.dimensions,baseMM:result.baseMM,topMM:result.topMM,widthMM:result.widthMM}});}
-if(matchMedia('(pointer: coarse)').matches)document.getElementById('exportFormats').value='3mf';

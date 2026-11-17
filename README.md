@@ -46,12 +46,12 @@ and downloadable archives are retained; they are not rebuilt or deployed by
 this command. The current maker remains based on r27. Existing vendor/font
 licenses are retained.
 
-`dist/export-packing.js` provides the worker bridge and touch-device default.
-The current HTML includes a visible output selector: touch devices choose 3MF
-only to avoid generating a merged STL and parts archive unnecessarily. The full
-output mode is still selectable. Both modes preserve the 3MF geometry and colors.
-3MF XML/ZIP packaging and the single-model STL-parts archive run in a worker;
-this improves UI responsiveness without moving artwork to a server. The
+`dist/export-packing.js` provides the worker bridge. The maker builds the base
+and individual color parts once for 3MF and free STL-parts downloads. Merged STL
+is no longer offered. The visible free ZIP button and the insufficient-credit
+fallback package existing parts in a worker without rebuilding geometry. A batch
+ZIP keeps each coaster in a separate folder with color metadata and import
+instructions. 3MF XML/ZIP packaging also runs in a worker; artwork stays local. The
 existing three-minute geometry limit remains in place. Complex artwork can
 still exceed a phone's memory or processing budget.
 

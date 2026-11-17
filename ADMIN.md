@@ -57,7 +57,7 @@ export is recorded. Login responses also include the current balance.
 All current maker 3MF routes, including individual-file ZIPs, use the account/credit
 confirmation. Free STL ZIPs contain no 3MF. Anonymous 3MF attempts prompt sign-in or
 registration. Insufficient-credit notices link to the free STL option and the
-credit purchase section. A freshly requested quote/debit checks current settings;
+credit purchase section. The free-STL action directly packages the existing base and color parts as a ZIP, with import instructions and no rebuild or sign-in step. Merged STL is not offered. A freshly requested quote/debit checks current settings;
 retries of the same bytes do not debit twice.
 
 Generation still runs locally in the browser. This change provides the supported

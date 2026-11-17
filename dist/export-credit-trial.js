@@ -11,6 +11,18 @@
   dialog.innerHTML='<form method="dialog"><button class="dialog-close" aria-label="Close export confirmation">×</button></form><p class="eyebrow">3MF DOWNLOAD</p><h2 id="export-credit-title">Your download</h2><p data-summary></p><p data-message role="status" aria-live="polite"></p><div class="dialog-actions"><button data-authorize hidden>Confirm credits</button><button class="download-ready" data-save hidden>Download Ready</button></div><p data-account hidden><a href="/pricing/" target="_blank" rel="noopener">Log in</a> or <a href="/pricing/?register=1" target="_blank" rel="noopener">Create an account · 15 free credits</a></p><button data-recheck hidden>I’m signed in · check again</button><p data-insufficient hidden>Change the download type to STL to download free, or <a href="/pricing/#export-pack" target="_blank" rel="noopener">purchase more credits</a>.</p><button data-stl hidden>Switch to free STL</button><details><summary>Credits & retries</summary><p>One credit per coaster when billing is on. STL is free. Retrying these exact file bytes does not deduct credits again. Keep this page open to retry.</p></details>';
   document.body.append(dialog);return dialog;
  }
+ window.freeSTLDownload=async(selected)=>{
+  const dialog=document.createElement('dialog');dialog.className='export-credit-dialog';dialog.setAttribute('aria-labelledby','free-stl-title');
+  dialog.innerHTML='<form method="dialog"><button class="dialog-close" aria-label="Close STL download">×</button></form><p class="eyebrow">FREE DOWNLOAD · NO CREDITS</p><h2 id="free-stl-title">STL parts ZIP</h2><p data-progress role="status">Preparing your base and separate color parts…</p><button class="download-ready" data-free-save disabled>Preparing ZIP…</button><h3>Open in Bambu Studio</h3><ol><li>Extract the downloaded ZIP.</li><li>Select the base STL and all image-color STL files together.</li><li>Import as <strong>one object with multiple parts</strong>.</li><li>Assign a filament to each part.</li></ol><p>For a batch, repeat these steps for each coaster folder. Do not import parts individually or auto-arrange them.</p>';
+  document.body.append(dialog);dialog.showModal();let file;
+  dialog.addEventListener('close',()=>{if(file)URL.revokeObjectURL(file.url);dialog.remove();},{once:true});
+  try{
+   file=await window.prepareFreeSTL(selected);if(!dialog.open){URL.revokeObjectURL(file.url);return;}
+   dialog.querySelector('[data-progress]').textContent='Your ZIP is ready. It includes the base, a separate STL for each color, and import instructions. No login or credits needed.';
+   const button=dialog.querySelector('[data-free-save]');button.disabled=false;button.textContent='Download STL parts ZIP';button.onclick=()=>save(file.url,file.name);button.focus();
+   const notice=document.getElementById('notice');if(notice)notice.textContent='Free STL parts ZIP is ready. Download it from the open dialog.';
+  }catch(error){if(dialog.open){dialog.querySelector('[data-progress]').textContent=error.message;dialog.querySelector('[data-free-save]').textContent='ZIP unavailable';}}
+ };
  window.creditTrialDownload=async(url,name,count)=>{
   if(preparing)return;preparing=true;
   let dialog,localUrl;
@@ -23,7 +35,7 @@
    let body,readyBlob;
    // Retain batch bytes while the user signs in; the maker may revoke its temporary URL.
    const source=await fetch(url);if(!source.ok)throw Error('The ready file is no longer available. Rebuild it first.');readyBlob=await source.blob();if(!readyBlob.size)throw Error('The generated file is empty. No credits were used.');
-   stl.onclick=()=>{dialog.close();const formats=document.getElementById('exportFormats');if(formats){formats.value='all';formats.dispatchEvent(new Event('input',{bubbles:true}));}const notice=document.getElementById('notice');if(notice)notice.textContent='STL is free. Rebuild with full download formats, then choose Merged STL.';for(let parent=formats?.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.open=true;document.getElementById('exportFormats')?.scrollIntoView({block:'center',behavior:'smooth'});};
+   stl.onclick=()=>{dialog.close();void window.freeSTLDownload();};
    async function check(){
     authorize.hidden=true;ready.hidden=true;account.hidden=true;recheck.hidden=true;insufficient.hidden=true;stl.hidden=true;message.textContent='Checking your account and balance…';
     try{
