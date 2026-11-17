@@ -1,3 +1,4 @@
+import {stripeKeyMode} from './payments.mjs';
 export async function jsonBody(req,limit=8192){
  let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>limit)throw Error('Request too large.');}
  const body=JSON.parse(raw);if(!body || typeof body!=='object' || Array.isArray(body))throw Error('Invalid request.');return body;
@@ -29,7 +30,7 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
    if('livePaymentsEnabled' in body&&typeof body.livePaymentsEnabled!=='boolean')throw Error('Live payments must be on or off.');
    const current=ledger.settings();
    if(((body.paymentMode==='live'&&current.paymentMode!=='live')||(body.livePaymentsEnabled===true&&!current.livePaymentsEnabled)||'liveSecretKey' in body||'liveWebhookSecret' in body)&&!payments.liveAllowed)throw Error('Live payments are locked. Enable them on the production server first.');
-   if('liveSecretKey' in body&&(typeof body.liveSecretKey!=='string'||!/^sk_live_[A-Za-z0-9_]{4,240}$/.test(body.liveSecretKey)))throw Error('Enter a Stripe live secret key beginning sk_live_.');
+   if('liveSecretKey' in body&&stripeKeyMode(body.liveSecretKey)!=='live')throw Error('Enter a Stripe live key beginning sk_live_ or rk_live_.');
    if('liveWebhookSecret' in body&&(typeof body.liveWebhookSecret!=='string'||!/^whsec_[A-Za-z0-9_]{4,240}$/.test(body.liveWebhookSecret)))throw Error('Enter a valid live webhook signing secret.');
    const next={...current,...body};
    if(('liveSecretKey' in body||'liveWebhookSecret' in body)&&next.livePaymentsEnabled)throw Error('Turn live payments off before replacing live credentials.');
@@ -45,7 +46,7 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
     }
    }
    if('currency' in body && body.currency!=='usd')throw Error('Only USD is currently supported.');
-   if('secretKey' in body && (typeof body.secretKey!=='string'||!/^sk_test_[A-Za-z0-9_]{4,240}$/.test(body.secretKey)))throw Error('Enter a Stripe sandbox secret key beginning sk_test_. Live keys belong in the separate live connection.');
+   if('secretKey' in body && stripeKeyMode(body.secretKey)!=='test')throw Error('Enter a Stripe sandbox key beginning sk_test_ or rk_test_. Live keys belong in the separate live connection.');
    if('webhookSecret' in body && (typeof body.webhookSecret!=='string'||!/^whsec_[A-Za-z0-9_]{4,240}$/.test(body.webhookSecret)))throw Error('Enter a valid webhook signing secret.');
    ledger.saveSettings(account,body);return send(200,{ok:true});
   }

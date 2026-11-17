@@ -12,7 +12,7 @@ async function fixture(run,{origin='https://coasterprint.com',allowed=true}={}){
  async function webhook(event,mode='live',secret=liveSecret){const body=JSON.stringify(event),timestamp=Math.floor(Date.now()/1000),signature=`t=${timestamp},v1=${createHmac('sha256',secret).update(timestamp+'.'+body).digest('hex')}`;const response=await fetch(base+'/api/webhooks/stripe'+(mode==='live'?'/live':''),{method:'POST',headers:{'stripe-signature':signature},body});return response.status;}
  try{await run({ledger,admin,runtime,calls,call,webhook,setBadMode:value=>{badMode=value;}});}finally{await new Promise(resolve=>server.close(resolve));ledger.close();}
 }
-async function configure(call){assert.equal((await call('/api/admin/settings',{secretKey:'sk_test_fixture',webhookSecret:testSecret,liveSecretKey:'sk_live_fixture',liveWebhookSecret:liveSecret})).status,200);}
+async function configure(call,liveKey='sk_live_fixture'){assert.equal((await call('/api/admin/settings',{secretKey:'sk_test_fixture',webhookSecret:testSecret,liveSecretKey:liveKey,liveWebhookSecret:liveSecret})).status,200);}
 function payment(order,id='evt_live'){return {id,type:'checkout.session.completed',livemode:true,data:{object:{id:order.session,livemode:true,payment_status:'paid',mode:'payment',amount_total:order.amount,currency:order.currency,metadata:{order_id:order.id}}}};}
 
 test('live payments default off, require production permission and cannot accept sandbox purchases on production',()=>fixture(async({call,calls})=>{
@@ -52,3 +52,13 @@ test('unrelated Stripe project events are ignored and an event racing checkout a
  await configure(call);const unrelated={id:'evt_other_app',type:'checkout.session.completed',livemode:true,data:{object:{id:'cs_other_project',livemode:true,payment_status:'paid',mode:'payment',amount_total:500,currency:'usd'}}};assert.equal(await webhook(unrelated),200);assert.equal(ledger.balance(admin),15);
  const order=ledger.checkoutOrder(admin,'attachment-race-reference',Date.now(),{id:'starter',amount:500,credits:10,currency:'usd'},'live'),event=payment({...order,session:'cs_racing_attach'},'evt_race');assert.equal(await webhook(event),500);assert.equal(ledger.balance(admin),15);ledger.attachSession(order.id,'cs_racing_attach');assert.equal(await webhook(event),200);assert.equal(ledger.balance(admin),25);
 }));
+
+
+test('restricted live keys retain production guards and are used for hosted checkout',()=>fixture(async({call,calls})=>{
+ await configure(call,'rk_live_fixture');assert.equal((await call('/api/admin/settings',{paymentMode:'live',livePaymentsEnabled:true,billingEnabled:true})).status,200);assert.equal((await call('/api/checkout',{pack:'starter',mode:'live'},'restricted-live-request-1234')).status,200);assert.equal(calls[0].headers.Authorization,'Bearer rk_live_fixture');assert.equal((await call('/api/admin/settings')).data.liveSecretKey,undefined);
+}));
+
+test('restricted sandbox keys work, while both restricted key modes reject the wrong settings field',()=>fixture(async({call,calls,setBadMode})=>{
+ assert.equal((await call('/api/admin/settings',{secretKey:'rk_live_wrong'})).status,400);assert.equal((await call('/api/admin/settings',{liveSecretKey:'rk_test_wrong'})).status,400);
+ assert.equal((await call('/api/admin/settings',{secretKey:'rk_test_fixture',webhookSecret:testSecret,billingEnabled:true})).status,200);setBadMode(true);assert.equal((await call('/api/checkout',{pack:'starter',mode:'test'},'restricted-test-request-1234')).status,200);assert.equal(calls[0].headers.Authorization,'Bearer rk_test_fixture');
+},{origin:'https://dev.jamboodle.com',allowed:false}));

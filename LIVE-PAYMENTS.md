@@ -17,7 +17,7 @@ Live checkout requires all of:
 - `NODE_ENV=production` and `ALLOW_LIVE_PAYMENTS=1` on the server.
 - `APP_ORIGIN=https://coasterprint.com` (exact HTTPS origin).
 - Development login and inbox disabled.
-- A production live key (`sk_live_…`) and live webhook signing secret (`whsec_…`).
+- A production live key (`sk_live_…` or restricted `rk_live_…`) and live webhook signing secret (`whsec_…`).
 - Admin checkout mode set to **Live**, **Enable live payments** checked, and
   **Charge credits for 3MF exports** enabled.
 
@@ -53,7 +53,7 @@ secret values are never returned or placed in the audit log.
    Preserve existing projects' webhooks.
 5. In production admin, leave **Enable live payments** off, enter the live key and
    signing secret in the separate **Stripe live connection** fields, and save.
-   Never paste secrets into chat, source files, or shell history.
+   Never paste secrets into chat, source files, or shell history. Restricted keys are supported; grant Write access to Checkout Sessions, Products and Prices for inline-price checkout, with all other permissions left at None. Existing keys for other sites should remain unchanged.
 6. Review production pack prices, welcome-credit amount and customer-facing terms.
    Refunds/disputes currently require Stripe dashboard handling and manual admin
    balance adjustments; automatic refund/dispute reversal and tax handling are not
