@@ -207,3 +207,12 @@ without more API calls. A paid-looking client gate alone is not an enforceable
 paywall: other formats and legacy routes are still free and client code can be
 bypassed. This intentionally tests accounting only, never real-money delivery.
 See TESTING.md for setup and the remaining limitations.
+
+## Real hosted email
+
+EMAIL_TRANSPORT=sendmail selects the existing local MTA. EMAIL_FROM and optional
+SENDMAIL_PATH configure its sender/executable. The development mailbox still
+takes precedence in local preview, so that mode never delivers real emails.
+See ../EMAIL.md for systemd configuration, delivery semantics and hosted checks.
+Successful submission is not proof of inbox delivery; transport error details
+and message bodies are not exposed to the browser or application logs.

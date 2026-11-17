@@ -126,3 +126,9 @@ background and white text. Keyboard users should be able to expand settings,
 reach the credit dialog, close it with Escape, and download normally.
 The browser suite covers the layout at 1440, 768, 390 and 320 px, along with the
 existing export, mobile, account and credit tests.
+
+## Hosted email delivery
+
+EMAIL.md documents enabling the existing mail service on the hosting server and
+checking actual verification/reset messages. Automated mail tests use only a
+local child-process sink; no test mail is sent to real addresses by the test suite.

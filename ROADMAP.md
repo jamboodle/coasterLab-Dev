@@ -13,7 +13,9 @@ Selected by the owner. Pricing below is a hypothesis to test, not a live offer.
 - [x] Add opt-in customer email/password registration, sign-in, throttling and session lifecycle.
 - [x] Add current-password-verified password changes, sign out everywhere and account credit activity.
 - [x] Add single-use email verification and forgotten-password recovery with a local-only test inbox.
-- [ ] Configure and validate real email delivery; add account deletion before public launch.
+- [x] Add hosted Exim/Sendmail-compatible account email transport and failure handling.
+- [ ] Enable and verify actual hosted email delivery, SPF/DKIM/DMARC and inbox receipt.
+- [ ] Add account deletion before public launch.
 - [x] Implement Stripe test checkout adapter and signed, idempotent payment webhooks; mocked integration tests pass.
 - [ ] Validate real Stripe sandbox checkout and webhook delivery with secure credentials.
 - [x] Connect test checkout and server account balance to an opt-in development panel using expiring, revocable HttpOnly sessions.

@@ -117,3 +117,7 @@ instead of uploading ZIPs. It preserves runtime data and service configuration.
 The maker follows a numbered upload → customize → build → download flow. Detailed
 settings, diagnostics and secondary formats are available in expandable sections.
 The final credit-confirmed action is a green **Download Ready** button.
+
+Hosted verification and recovery can use Webuzo's local Exim/Sendmail-compatible
+mail service. See [EMAIL.md](EMAIL.md) for setup and real-delivery checks. It is
+disabled until configured; `npm run dev` still uses only the local test inbox.

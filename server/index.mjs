@@ -4,7 +4,7 @@ import {Ledger} from './ledger.mjs';
 import {handler} from './app.mjs';
 import {withStatic} from './static.mjs';
 import {fileURLToPath} from 'node:url';
-import {DevelopmentMailbox} from './mailbox.mjs';
+import {configureMailer} from './mail-config.mjs';
 mkdirSync('.data',{recursive:true,mode:0o700});
 const ledger=new Ledger(process.env.DATABASE_PATH || '.data/credits.sqlite');
 if(process.argv.includes('--grant-test-credits')) {
@@ -21,10 +21,8 @@ if(process.argv.includes('--grant-test-credits')) {
   const origin=process.env.APP_ORIGIN || 'http://127.0.0.1:3003';
   const parsed=new URL(origin);
   if (!['http:','https:'].includes(parsed.protocol) || parsed.origin!==origin) throw Error('APP_ORIGIN must be an HTTP(S) origin with no trailing slash');
-  const developmentInbox=process.env.ENABLE_DEV_INBOX==='1';
-  if(developmentInbox && !['127.0.0.1','localhost','[::1]'].includes(parsed.hostname))throw Error('Development inbox requires a loopback APP_ORIGIN');
-  const mailer=developmentInbox?new DevelopmentMailbox():null;
-  const server=createServer(withStatic(handler({ledger,origin,exportCreditTrial:process.env.ENABLE_EXPORT_CREDIT_TRIAL==='1',mailer,developmentInbox,developmentLogin:process.env.ENABLE_DEV_LOGIN==='1',customerAccounts:process.env.ENABLE_CUSTOMER_ACCOUNTS==='1',secretKey:process.env.STRIPE_SECRET_KEY,webhookSecret:process.env.STRIPE_WEBHOOK_SECRET}),fileURLToPath(new URL('../dist/',import.meta.url))));
+  const {mailer,developmentInbox}=configureMailer(process.env,origin);
+  const server=createServer(withStatic(handler({ledger,origin,onMailFailure:()=>console.error('Account email submission failed; check the mail service.'),exportCreditTrial:process.env.ENABLE_EXPORT_CREDIT_TRIAL==='1',mailer,developmentInbox,developmentLogin:process.env.ENABLE_DEV_LOGIN==='1',customerAccounts:process.env.ENABLE_CUSTOMER_ACCOUNTS==='1',secretKey:process.env.STRIPE_SECRET_KEY,webhookSecret:process.env.STRIPE_WEBHOOK_SECRET}),fileURLToPath(new URL('../dist/',import.meta.url))));
   server.listen(Number(process.env.PORT || 3003),'127.0.0.1',()=>console.log('CoasterLab test credit API listening on loopback'));
   for (const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>server.close(()=>{ledger.close();process.exit(0);}));
 }

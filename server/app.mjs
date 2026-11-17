@@ -8,12 +8,13 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, mailer=null, developmentInbox=false, fetchImpl=fetch}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch}) {
   const paymentsEnabled=secretKey?.startsWith('sk_test_') && Boolean(webhookSecret);
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
     const identity=ledger.identityForAccount(account);const token=ledger.issueChallenge(account,purpose);
-    await mailer.send({to:identity.email,subject:purpose==='verify'?'Verify your CoasterLab email':'Reset your CoasterLab password',url:origin+'/account/#'+purpose+'='+token});
+    try{await mailer.send({to:identity.email,subject:purpose==='verify'?'Verify your CoasterLab email':'Reset your CoasterLab password',url:origin+'/account/#'+purpose+'='+token});}
+    catch{onMailFailure({purpose});throw Error('Email submission failed');}
   };
   let activePasswordRequests=0;
   return async (req,res) => {
@@ -132,7 +133,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if(!ledger.allowAuth('verification:'+account))return send(429,{error:'Too many attempts. Try again later.'});
         const identity=ledger.identityForAccount(account);
         if(!identity)return send(400,{error:'A customer email account is required'});
-        if(!identity.verified_at)await sendChallenge(account,'verify');
+        if(!identity.verified_at){try{await sendChallenge(account,'verify');}catch{return send(503,{error:'Email could not be sent right now. Please try again later.'});}}
         return send(200,{ok:true});
       }
       if(req.method==='POST' && path==='/api/logout-all') {

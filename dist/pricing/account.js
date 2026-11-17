@@ -80,9 +80,9 @@
     const register=event.submitter?.id==='customer-register';
     status(register?'Creating your account…':'Signing in…');
     try{
-      await request(register?'/api/register':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:el('customer-email').value,password:el('customer-password').value})});
+      const accountResult=await request(register?'/api/register':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:el('customer-email').value,password:el('customer-password').value})});
       el('customer-password').value='';
-      if(await refresh())status(register?'Account created.':'Signed in.');
+      if(await refresh())status(register?(emailEnabled?(accountResult.verificationSent?'Account created. Verification email sent.':'Account created. Email could not be sent; use Send verification link to try again.'):'Account created.'):'Signed in.');
     }catch(error){el('customer-password').value='';status(error.message);}finally{buttons.forEach(button=>button.disabled=false);}
   });
   el('account-login').addEventListener('submit',async event=>{
