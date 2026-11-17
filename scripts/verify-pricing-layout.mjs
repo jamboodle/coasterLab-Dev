@@ -16,7 +16,7 @@ try{
   const context=await browser.newContext({viewport:{width,height:900}}),page=await context.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(origin+'/pricing/');await page.locator('#customer-login').waitFor({state:'visible'});
-  assert.equal(await page.locator('#customer-signin').isVisible(),true);
+  assert.equal(await page.locator('#customer-signin').isVisible(),true);assert.equal(await page.locator('#pack-options input').count(),3);assert.match(await page.locator('#pack-options').textContent(),/50 credits.*\$10/);assert.match(await page.locator('#pack-options').textContent(),/100 credits.*\$15/);
   assert.equal(await page.locator('#customer-register').isVisible(),false);
   assert.equal(await page.locator('.sidebar-details').evaluate(el=>el.open),false);
   assert.equal(await page.locator('#test-checkout').isDisabled(),true);

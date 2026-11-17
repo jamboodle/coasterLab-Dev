@@ -20,7 +20,7 @@ export class Ledger {
     const columns=new Set(this.db.prepare('PRAGMA table_info(orders)').all().map(row=>row.name));
     if(!columns.has('request_key'))this.db.exec('ALTER TABLE orders ADD COLUMN request_key TEXT');
     if(!columns.has('created_at'))this.db.exec('ALTER TABLE orders ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
-    for(const [name,definition] of [['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"]]){
+    for(const [name,definition] of [['pack_id',"TEXT NOT NULL DEFAULT 'starter'"],['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"]]){
       if(!columns.has(name))this.db.exec(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
     }
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key)');
@@ -141,7 +141,7 @@ export class Ledger {
     this.db.prepare("INSERT INTO entries VALUES (?,?,?,'test_grant')").run('grant:'+randomBytes(16).toString('hex'),account,count);
   }
   checkoutOrder(account,key,now=Date.now(),pack={amount:500,credits:10,currency:'usd'}) {
-    this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at,amount,credits,currency) VALUES (?,?,?,?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now,pack.amount,pack.credits,pack.currency);
+    this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at,amount,credits,currency,pack_id) VALUES (?,?,?,?,?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now,pack.amount,pack.credits,pack.currency,pack.id || 'starter');
     return this.db.prepare('SELECT * FROM orders WHERE account=? AND request_key=?').get(account,key);
   }
   orderStatus(account,id,now=Date.now()) {
@@ -181,7 +181,7 @@ export class Ledger {
     this.revokeAllSessions(identity.account);return identity.account;
   }
   settings() {
-    const defaults={billingEnabled:false,amount:500,credits:10,currency:'usd',secretKey:'',webhookSecret:''};
+    const defaults={billingEnabled:false,amount:500,credits:10,currency:'usd',additionalPacks:[{id:'standard',amount:1000,credits:50},{id:'large',amount:1500,credits:100}],secretKey:'',webhookSecret:''};
     for(const row of this.db.prepare('SELECT key,value FROM settings').all())if(Object.hasOwn(defaults,row.key))defaults[row.key]=JSON.parse(row.value);
     return defaults;
   }

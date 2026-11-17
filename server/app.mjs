@@ -1,5 +1,5 @@
 import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto';
-import {adminRequest,publicSettings} from './admin.mjs';
+import {adminRequest,publicSettings,creditPacks} from './admin.mjs';
 import {credentials,passwordHash,passwordMatches} from './passwords.mjs';
 export function verifyWebhook(body, signature, secret, now=Date.now()) {
   if (!secret || typeof signature !== 'string') return false;
@@ -179,12 +179,18 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if (req.headers.origin && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
         const key=req.headers['idempotency-key'] || randomUUID();
         if(typeof key!=='string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(key))return send(400,{error:'Invalid checkout request key'});
-        const attempt=ledger.checkoutOrder(account,key,Date.now(),settings);
+        let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Payload too large'});}
+        let input={};if(raw){try{input=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}}
+        if(!input || typeof input!=='object' || Array.isArray(input))return send(400,{error:'Invalid request'});
+        const selected=creditPacks(settings).find(pack=>pack.id===(input.pack===undefined?'starter':input.pack));
+        if(!selected)return send(400,{error:'Choose a valid credit pack.'});
+        const attempt=ledger.checkoutOrder(account,key,Date.now(),selected);
+        if(attempt.pack_id!==selected.id)return send(409,{error:'This checkout reference belongs to another pack. Try again.',code:'checkout_pack_mismatch'});
         const state=ledger.orderStatus(account,attempt.id);
         if(state==='confirmed')return send(409,{error:'This checkout is already confirmed. Refresh your balance.',code:'checkout_complete'});
         if(state==='expired')return send(409,{error:'Checkout attempt expired. Try again to start a new checkout.',code:'checkout_expired'});
         const order=attempt.id;
-        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':attempt.currency,'line_items[0][price_data][unit_amount]':String(attempt.amount),'line_items[0][price_data][product_data][name]':`CoasterPrint — ${attempt.credits} export credits (test)`,'line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order,cancel_url:origin+'/pricing/?checkout=canceled&order='+order,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order});
+        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':attempt.currency,'line_items[0][price_data][unit_amount]':String(attempt.amount),'line_items[0][price_data][product_data][name]':`CoasterPrint — ${attempt.credits} export credits (test)`,'line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order+'&pack='+attempt.pack_id,cancel_url:origin+'/pricing/?checkout=canceled&order='+order+'&pack='+attempt.pack_id,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order});
         const response=await fetchImpl('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+activeSecret,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':order},body:form,signal:AbortSignal.timeout(15000)});
         if (!response.ok) return send(502,{error:'Checkout provider unavailable'});
         const session=await response.json();

@@ -28,7 +28,7 @@ and https://coasterprint.com/admin/. Development admin access is not copied.
   idempotent on retries, recorded in an audit log, and cannot overdraw a balance.
 - Turn billing off or on. Off means logged-in users export 3MF free; on means one
   credit per coaster, including each coaster in a batch. STL is always free.
-- Change the USD pack price and credit quantity without editing source code.
+- Edit all three USD credit packs without changing source code. Defaults are 10 credits for $5 (existing starter pack), 50 credits for $10, and 100 credits for $15. Existing starter-pack customizations are preserved. Customers select a pack on the account/pricing page. Each pack has an independent checkout retry reference; the server determines its amount and credits, and records both on the order.
 - Replace Stripe test secret and webhook keys without code or service restarts.
   Secret values are write-only from the panel and are not included in audit output.
   They are stored in the protected `.data/credits.sqlite` database, not encrypted

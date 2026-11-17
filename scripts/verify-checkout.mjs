@@ -9,7 +9,7 @@ import {withStatic} from '../server/static.mjs';
 const {chromium}=createRequire(import.meta.url)('playwright');
 const ledger=new Ledger(':memory:');ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('billingEnabled','true');const account=ledger.createAccount();
 const secret='fixture-webhook-secret';let origin;let failCheckout=true;const providerKeys=[];
-const api=(req,res)=>handler({ledger,origin,developmentLogin:true,secretKey:'sk_test_fixture',webhookSecret:secret,fetchImpl:async(_url,options)=>{providerKeys.push(options.headers['Idempotency-Key']);return failCheckout?new Response('',{status:503}):Response.json({id:'cs_test_browser',url:'https://checkout.stripe.com/c/pay/fixture'});}})(req,res);
+const api=(req,res)=>handler({ledger,origin,developmentLogin:true,secretKey:'sk_test_fixture',webhookSecret:secret,fetchImpl:async(_url,options)=>{providerKeys.push(options.headers['Idempotency-Key']);return failCheckout?new Response('',{status:503}):Response.json({id:options.body.get('line_items[0][price_data][unit_amount]')==='500'?'cs_test_browser':'cs_pack_'+options.headers['Idempotency-Key'],url:'https://checkout.stripe.com/c/pay/fixture'});}})(req,res);
 const server=createServer(withStatic(api,fileURLToPath(new URL('../dist/',import.meta.url))));
 await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
 let browser;
@@ -54,6 +54,13 @@ try{
  assert.equal(await page.evaluate(()=>sessionStorage.getItem('coasterprint.checkoutAttempt')),null);
  assert.match(await page.locator('#account-activity').textContent(),/\+10 credits · Credit purchase/);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ for(const [pack,amount,credits] of [['standard',1000,50],['large',1500,100]]){
+  await page.locator(`input[name="credit-pack"][value="${pack}"]`).check();
+  assert.match(await page.locator('#test-checkout').textContent(),new RegExp((amount/100).toFixed(2).replace('.','\\.')+' / '+credits+' credits'));
+  await page.locator('#test-checkout').click();await page.waitForURL('https://checkout.stripe.com/**');
+  const selected=ledger.db.prepare('SELECT * FROM orders WHERE pack_id=?').get(pack);assert.equal(selected.amount,amount);assert.equal(selected.credits,credits);
+  await page.goto(origin+'/pricing/?checkout=canceled&pack='+pack);await page.locator('#connected-account').waitFor({state:'visible'});assert.equal(await page.locator(`input[name="credit-pack"][value="${pack}"]`).isChecked(),true);
+ }
  await page.locator('#disconnect-account').click();await page.locator('#account-login').waitFor({state:'visible'});
  assert.equal((await page.request.get(origin+'/api/balance')).status(),401);
  assert.deepEqual(errors,[]);
