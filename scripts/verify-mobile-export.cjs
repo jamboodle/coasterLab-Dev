@@ -26,6 +26,7 @@ const {unzipSync}=require('../dist/vendor/fflate.js');
    assert.match(mesh,/<triangles>/);if(!mobile)baseline=mesh;else assert.equal(mesh,baseline,'3MF-only must preserve the exact model geometry and color assignments');
    assert.ok(workers.some(url=>url.endsWith('/export-packing-worker.js')),'3MF must be packed in a worker');
    if(mobile){
+    await page.locator('#advanced-model > summary').click();
     await page.locator('#exportFormats').selectOption('all');
     await page.locator('#buildSTL').click();await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:90000});
     assert.ok(await page.evaluate(()=>Boolean(items[0].stlUrl && items[0].partsUrl)),'Touch devices can opt back into STL formats');

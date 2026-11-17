@@ -88,7 +88,7 @@ ENABLE_EXPORT_CREDIT_TRIAL=1 node server/index.mjs --grant-test-credits test@exa
 Replace the example email with the test account you created. This operator-only
 command grants test credits; there is no public grant endpoint. Generate a 3MF,
 choose Download, and check the cost/balance dialog. Cancel before confirming to
-spend nothing. Confirm records the debit; **Download ready file** then starts
+spend nothing. Confirm records the debit; **Download Ready** then starts
 the browser download with a fresh click for mobile browser compatibility.
 Repeated clicks on that ready file and retries of identical bytes do not debit
 again. Try insufficient balance and check the account's test export history.
@@ -114,3 +114,15 @@ The repeatable server updater is documented in DEPLOYMENT.md. One-time read-only
 GitHub access and installation are required; it is not installed by a GitHub push.
 After that, `coasterlab-update` fetches, tests and installs new code, restarts the
 service and checks the local and public endpoints. No repeated ZIP downloads.
+
+## Guided maker layout
+
+The maker now presents four numbered steps: add artwork, customize, build, then
+download. Check that advanced artwork/model controls and secondary file formats
+are collapsed initially, and that the preview and progress indicator update
+after upload/build. After a successful build, follow Continue to download.
+The credit dialog's final button must read **Download Ready**, with a green
+background and white text. Keyboard users should be able to expand settings,
+reach the credit dialog, close it with Escape, and download normally.
+The browser suite covers the layout at 1440, 768, 390 and 320 px, along with the
+existing export, mobile, account and credit tests.

@@ -33,12 +33,16 @@ try{
  await dialog.locator('[data-authorize]').click();await page.waitForFunction(()=>!document.querySelector('[data-authorize]').disabled);
  assert.equal(ledger.balance(account.id),0);
  await dialog.locator('[data-authorize]').click();await dialog.locator('[data-save]').waitFor({state:'visible'});
+ assert.equal(await dialog.locator('[data-save]').textContent(),'Download Ready');
+ assert.ok(['rgb(21, 128, 61)','rgb(22, 101, 52)'].includes(await dialog.locator('[data-save]').evaluate(el=>getComputedStyle(el).backgroundColor)));
+ assert.equal(await dialog.locator('[data-save]').evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
+ await page.screenshot({path:'/tmp/coasterlab-download-ready.png'});
  const download=page.waitForEvent('download');await dialog.locator('[data-save]').click();assert.match((await download).suggestedFilename(),/\.3mf$/);
  const retry=page.waitForEvent('download');await dialog.locator('[data-save]').click();await retry;
  assert.equal(ledger.balance(account.id),0);assert.equal(ledger.activity(account.id).filter(entry=>entry.kind==='export_trial').length,1);
  await page.keyboard.press('Escape');await page.locator('#download3MF').click();
  await page.waitForFunction(()=>document.querySelector('[data-summary]').textContent.includes('Cost: 0'));
- await page.keyboard.press('Escape');await page.locator('#modelWidth').fill('101');await page.locator('#buildSTL').click();
+ await page.keyboard.press('Escape');await page.locator('#modelWidth').fill('101');await page.locator('#advanced-model > summary').click();await page.locator('#buildSTL').click();
  await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:60000});await page.locator('#download3MF').click();
  await page.waitForFunction(()=>document.querySelector('[data-message]').textContent.includes('Not enough test credits'));
  assert.equal(await dialog.locator('[data-authorize]').isDisabled(),true);

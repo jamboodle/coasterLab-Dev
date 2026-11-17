@@ -11,9 +11,8 @@
  const save=(url,name)=>{const link=document.createElement('a');link.href=url;link.download=name;link.click();};
  function panel(){
   const dialog=document.createElement('dialog');dialog.setAttribute('aria-labelledby','export-credit-title');
-  dialog.innerHTML='<form method="dialog"><button aria-label="Close export confirmation">Close</button></form><h2 id="export-credit-title">3MF credit trial</h2><p>Development test only. No money is charged. This trial covers direct 3MF downloads; other formats remain free.</p><p data-summary></p><p data-message role="status" aria-live="polite"></p><p><a href="pricing/" target="_blank" rel="noopener">Sign in or view your balance</a></p><button data-authorize>Confirm test credits</button> <button data-save hidden>Download ready file</button><p>Retries of these exact file bytes use the original debit. A regenerated file may count as a new export. If a download is interrupted, retry the ready file while this page remains open.</p>';
-  dialog.style.cssText='max-width:520px;width:calc(100% - 32px);max-height:90vh;overflow:auto;padding:24px;background:#171717;color:#faf6e9;border:2px solid #ffdc3b;';
-  for(const button of dialog.querySelectorAll('button'))button.style.cssText='padding:12px;margin:4px;font:inherit;cursor:pointer;';
+  dialog.className='export-credit-dialog';
+  dialog.innerHTML='<form method="dialog"><button class="dialog-close" aria-label="Close export confirmation">×</button></form><p class="eyebrow">TEST EXPORT</p><h2 id="export-credit-title">3MF credit trial</h2><p>Test credits only. No money will be charged.</p><p data-summary></p><p data-message role="status" aria-live="polite"></p><div class="dialog-actions"><button data-authorize>Confirm test credits</button><button class="download-ready" data-save hidden>Download Ready</button></div><p><a href="pricing/" target="_blank" rel="noopener">Account & credits (opens a new tab)</a></p><details><summary>About test credits & retries</summary><p>This trial covers direct 3MF downloads. Other formats remain free. Retrying these exact file bytes uses the original debit. A regenerated file may count as a new export. Keep this page open if you need to retry a download.</p></details>';
   document.body.append(dialog);return dialog;
  }
  async function api(path,body){
@@ -40,8 +39,8 @@
    const body={fingerprint,count};const quote=await api('/api/export-quote',body);
    if(!dialog.open)return;
    localUrl=URL.createObjectURL(blob);
-   summary.textContent=`${count} coaster${count===1?'':'s'} · Cost: ${quote.cost} test credits · Balance: ${quote.balance} · After export: ${quote.remaining}`;
-   if(quote.remaining<0){summary.textContent=`${count} coaster${count===1?'':'s'} · Cost: ${quote.cost} test credits · Balance: ${quote.balance}`;message.textContent='Not enough test credits. No credits were used.';return;}
+   summary.textContent=`${count} coaster${count===1?'':'s'} · Cost: ${quote.cost} test credit${quote.cost===1?'':'s'} · Balance: ${quote.balance} · After export: ${quote.remaining}`;
+   if(quote.remaining<0){summary.textContent=`${count} coaster${count===1?'':'s'} · Cost: ${quote.cost} test credit${quote.cost===1?'':'s'} · Balance: ${quote.balance}`;message.textContent='Not enough test credits. No credits were used.';return;}
    message.textContent=quote.retry?'This exact file was already recorded. Preparing it again will not deduct credits.':'The file is ready. Credits are recorded only after you confirm below.';
    authorize.textContent=quote.retry?'Prepare free retry':`Confirm · ${quote.cost} test credit${quote.cost===1?'':'s'}`;
    authorize.disabled=false;
@@ -49,7 +48,8 @@
     authorize.disabled=true;message.textContent='Recording export…';
     try{
      const debit=await api('/api/export-debit',body);
-     message.textContent=`${debit.cost} test credits used. Remaining balance: ${debit.remaining}. Download the ready file below.`;
+     summary.textContent=`${count} coaster${count===1?'':'s'} · Remaining balance: ${debit.remaining} test credits`;
+     message.textContent=debit.retry?'This export is already recorded. No additional credits were used. Your file is ready.':`${debit.cost} test credit${debit.cost===1?'':'s'} recorded. Your file is ready to download.`;
      authorize.hidden=true;ready.hidden=false;ready.focus();
     }catch(error){message.textContent=error.message;authorize.disabled=false;}
    });

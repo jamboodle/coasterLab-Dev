@@ -113,3 +113,7 @@ export fulfillment and refund rules remain outside this test flow.
 Use the one-time setup in [DEPLOYMENT.md](DEPLOYMENT.md) to install
 `coasterlab-update` on the Webuzo server. Future updates then use that command
 instead of uploading ZIPs. It preserves runtime data and service configuration.
+
+The maker follows a numbered upload → customize → build → download flow. Detailed
+settings, diagnostics and secondary formats are available in expandable sections.
+The final credit-confirmed action is a green **Download Ready** button.
