@@ -1,14 +1,19 @@
 # Hosted account email
 
-CoasterLab supports the existing Webuzo Exim/Sendmail-compatible local mail
+CoasterPrint supports the existing Webuzo Exim/Sendmail-compatible local mail
 service. It does not require an SMTP password or a new package dependency.
 The application submits verification/reset mail as the `jamboodle` service user;
 the mail server handles delivery, queue retries, domain signing and bounces.
 
+The sender name and email text are CoasterPrint. The new target address is
+noreply@coasterprint.com, but the existing development server keeps its configured
+sender until that domain/mailbox is ready. See BRANDING.md before changing the
+working address or APP_ORIGIN.
+
 ## Before enabling
 
 - Update the server with `coasterlab-update`.
-- In Webuzo, create or confirm `noreply@jamboodle.com` as a mailbox/alias so it can
+- In Webuzo, create or confirm `noreply@coasterprint.com` as a mailbox/alias so it can
   accept bounces. Keep any mailbox password private; the app does not need it.
 - Confirm a working Sendmail-compatible executable is accessible to `jamboodle`.
   The observed server has `/usr/sbin/sendmail` and a Webuzo Exim binary at
@@ -21,7 +26,7 @@ Use these non-secret values in a root-owned environment file outside the app:
 
 ```ini
 EMAIL_TRANSPORT=sendmail
-EMAIL_FROM=noreply@jamboodle.com
+EMAIL_FROM=noreply@coasterprint.com
 SENDMAIL_PATH=/usr/sbin/sendmail
 ```
 

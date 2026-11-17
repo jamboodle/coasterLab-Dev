@@ -11,12 +11,12 @@ const {chromium} = require('playwright');
     await page.waitForLoadState('networkidle');
     assert.match(await page.locator('.build-label').innerText(), /r27/);
     const manifest = await (await page.request.get(new URL('asset-manifest.json', page.url()).href)).json();
-    assert.equal(manifest.build, 'coasterlab-r27');
+    assert.equal(manifest.build, 'coasterprint-r27');
     await page.locator('#bw').click();
     assert.equal(await page.locator('#bw').getAttribute('aria-pressed'), 'true');
     await page.locator('#color').click();
     assert.equal(await page.locator('#color').getAttribute('aria-pressed'), 'true');
-    for (const path of ['asset-manifest.json','vendor/manifold.wasm','downloads/coasterlab-holder-pack.zip']) {
+    for (const path of ['asset-manifest.json','vendor/manifold.wasm','downloads/coasterprint-holder-pack.zip']) {
       const asset = await page.request.get(new URL(path, page.url()).href);
       assert.equal(asset.status(), 200, path);
       assert.ok((await asset.body()).length, path);

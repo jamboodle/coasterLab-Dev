@@ -76,3 +76,11 @@ required to test the local account and recovery journeys.
 - [x] Compare geometry/colors across modes with CPU-throttled browser tests.
 - [ ] Validate a representative failing image on the owner's actual phone.
 - [ ] Finish Webuzo routing and deploy this development update; GitHub pushes alone do not update the server.
+
+## CoasterPrint rebrand
+
+- [x] Update site, account email text, generated export branding and release bundles.
+- [x] Preserve old links/storage and make updater health checks brand-independent.
+- [ ] Refresh the installed updater and deploy the rebrand.
+- [ ] Configure coasterprint.com routing/HTTPS, noreply mailbox and sender authentication.
+- [ ] Switch APP_ORIGIN and EMAIL_FROM after those hosted prerequisites pass.

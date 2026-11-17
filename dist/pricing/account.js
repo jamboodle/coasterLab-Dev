@@ -5,12 +5,12 @@
   let configured=false,customerAccounts=false,developmentLogin=false,emailEnabled=false;
   let checkoutAttempt,pollTimer,pollGeneration=0;
   function stopPolling(){clearTimeout(pollTimer);pollGeneration++;}
-  const attemptStorage='coasterlab.checkoutAttempt';
-  function clearAttempt(){checkoutAttempt=undefined;try{sessionStorage.removeItem(attemptStorage);}catch{}}
+  const attemptStorage='coasterprint.checkoutAttempt';
+  function clearAttempt(){checkoutAttempt=undefined;try{sessionStorage.removeItem(attemptStorage);sessionStorage.removeItem('coasterlab.checkoutAttempt');}catch{}}
   function requestKey(){
-    if(!checkoutAttempt){try{checkoutAttempt=sessionStorage.getItem(attemptStorage);}catch{}}
+    if(!checkoutAttempt){try{checkoutAttempt=sessionStorage.getItem(attemptStorage) || sessionStorage.getItem('coasterlab.checkoutAttempt');}catch{}}
     if(!checkoutAttempt || !/^[a-zA-Z0-9_-]{16,100}$/.test(checkoutAttempt))checkoutAttempt=crypto.randomUUID();
-    try{sessionStorage.setItem(attemptStorage,checkoutAttempt);}catch{}
+    try{sessionStorage.setItem(attemptStorage,checkoutAttempt);sessionStorage.removeItem('coasterlab.checkoutAttempt');}catch{}
     return checkoutAttempt;
   }
   async function request(path,options={}) {

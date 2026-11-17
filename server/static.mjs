@@ -4,7 +4,10 @@ const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=
 export function withStatic(api, root) {
   root=resolve(root);
   return async(req,res)=>{
-    const pathname=new URL(req.url,'http://localhost').pathname;
+    const parsed=new URL(req.url,'http://localhost'),pathname=parsed.pathname;
+    if(/^\/(?:downloads\/)?coasterlab[-.a-z0-9]*\.(?:html|zip)$/i.test(pathname)){
+      res.writeHead(308,{Location:pathname.replace(/coasterlab/i,'coasterprint')+parsed.search});return res.end();
+    }
     if(pathname.startsWith('/api/') || pathname==='/health')return api(req,res);
     if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
     try{

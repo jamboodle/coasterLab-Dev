@@ -15,7 +15,7 @@ export function pathContours(d,scale,tolerance=.0075){
  finish();return contours;
 }
 export function signedArea(p){let area=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];area+=a[0]*b[1]-b[0]*a[1];}return area/2;}
-export function binarySTL(manifold,label='CoasterLab STL; units mm'){
+export function binarySTL(manifold,label='CoasterPrint STL; units mm'){
  if(manifold.status()!=='NoError')throw Error('The 3D geometry could not be made watertight.');
  const mesh=manifold.getMesh(),{triVerts,vertProperties,numProp}=mesh,triangles=triVerts.length/3;
  if(triangles===0)throw Error('This part has no printable geometry.');if(triangles>3000000)throw Error('STL is too complex. Reduce tracing detail.');

@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {Ledger} from '../server/ledger.mjs';
 import {handler} from '../server/app.mjs';
 test('export quotes do not spend; one debit survives retries and database restart',()=>{
- const folder=mkdtempSync(join(tmpdir(),'coasterlab-export-'));let ledger;
+ const folder=mkdtempSync(join(tmpdir(),'coasterprint-export-'));let ledger;
  try{
   ledger=new Ledger(join(folder,'ledger.sqlite'));const a=ledger.createAccount();ledger.grantTestCredits(a.id,3);
   assert.deepEqual(ledger.exportQuote(a.id,'a'.repeat(64),2),{cost:2,balance:3,remaining:1,retry:false});assert.equal(ledger.balance(a.id),3);

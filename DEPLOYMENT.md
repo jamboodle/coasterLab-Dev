@@ -14,7 +14,7 @@ The updater fetches `main` from this private GitHub repository, requires a clean
 fast-forward-only deployment checkout, stages the exact commit, and validates
 maker assets plus all backend tests before stopping the working service. It then
 merges code into the existing app, starts the service, and verifies both local
-and public health plus the public CoasterLab homepage. It records the installed
+and public health plus the public CoasterPrint homepage. It records the installed
 SHA in `.deployed-commit`. Repeating an already healthy revision does not restart
 it. A lock prevents concurrent update jobs.
 
@@ -104,6 +104,13 @@ Updating code does not enable test credits or live billing. To enable the option
 `systemctl edit coasterlab-dev-node`, then reload/restart the service. Real Stripe
 and public email settings remain separate. See TESTING.md before enabling this
 prototype; it is not production payment enforcement.
+
+## Branding migrations
+
+See BRANDING.md before the first CoasterPrint deployment. The previously installed
+root updater must be refreshed once because it expected the old homepage title.
+The new check is independent of branding. Installed paths and credentials remain
+unchanged.
 
 ## Verification limits
 

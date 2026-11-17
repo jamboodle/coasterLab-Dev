@@ -13,7 +13,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
     const identity=ledger.identityForAccount(account);const token=ledger.issueChallenge(account,purpose);
-    try{await mailer.send({to:identity.email,subject:purpose==='verify'?'Verify your CoasterLab email':'Reset your CoasterLab password',url:origin+'/account/#'+purpose+'='+token});}
+    try{await mailer.send({to:identity.email,subject:purpose==='verify'?'Verify your CoasterPrint email':'Reset your CoasterPrint password',url:origin+'/account/#'+purpose+'='+token});}
     catch{onMailFailure({purpose});throw Error('Email submission failed');}
   };
   let activePasswordRequests=0;
@@ -175,7 +175,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if(state==='confirmed')return send(409,{error:'This checkout is already confirmed. Refresh your balance.',code:'checkout_complete'});
         if(state==='expired')return send(409,{error:'Checkout attempt expired. Try again to start a new checkout.',code:'checkout_expired'});
         const order=attempt.id;
-        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':'usd','line_items[0][price_data][unit_amount]':'500','line_items[0][price_data][product_data][name]':'CoasterLab — 10 export credits (test)','line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order,cancel_url:origin+'/pricing/?checkout=canceled&order='+order,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order});
+        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':'usd','line_items[0][price_data][unit_amount]':'500','line_items[0][price_data][product_data][name]':'CoasterPrint — 10 export credits (test)','line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order,cancel_url:origin+'/pricing/?checkout=canceled&order='+order,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order});
         const response=await fetchImpl('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+secretKey,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':order},body:form,signal:AbortSignal.timeout(15000)});
         if (!response.ok) return send(502,{error:'Checkout provider unavailable'});
         const session=await response.json();

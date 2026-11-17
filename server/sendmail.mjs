@@ -17,18 +17,18 @@ export function accountMessage({from,to,subject,url,origin}){
  if(link.origin!==origin || link.protocol!=='https:' || link.pathname!=='/account/' || link.search || link.username || link.password || !/^#(?:verify|reset)=[a-f0-9]{64}$/.test(link.hash))throw Error('Invalid account email link');
  const reset=link.hash.startsWith('#reset=');
  const text=[
-  'CoasterLab', '',
-  reset?'A password reset was requested for your CoasterLab account.':'Welcome to CoasterLab. Please confirm your email address.', '',
+  'CoasterPrint', '',
+  reset?'A password reset was requested for your CoasterPrint account.':'Welcome to CoasterPrint. Please confirm your email address.', '',
   reset?'Choose a new password using this link:':'Verify your email using this link:',link.href,'',
   reset?'This link expires in 30 minutes and can be used once. Resetting your password signs out all sessions.':'This link expires in 24 hours and can be used once.', '',
   'If you did not request this, you can ignore this email.','',
-  'CoasterLab · '+origin,
+  'CoasterPrint · '+origin,
  ].join('\n');
  const encodedSubject='=?UTF-8?B?'+Buffer.from(subject).toString('base64')+'?=';
  if(encodedSubject.length>900)throw Error('Email subject is too long');
  const body=Buffer.from(text).toString('base64').match(/.{1,76}/g).join('\r\n');
  return [
-  'From: CoasterLab <'+from+'>','To: '+to,'Subject: '+encodedSubject,
+  'From: CoasterPrint <'+from+'>','To: '+to,'Subject: '+encodedSubject,
   'Date: '+new Date().toUTCString(),'Message-ID: <'+randomUUID()+'@'+from.split('@')[1]+'>',
   'MIME-Version: 1.0','Content-Type: text/plain; charset=UTF-8','Content-Transfer-Encoding: base64',
   'Auto-Submitted: auto-generated','X-Auto-Response-Suppress: All','',body,'',

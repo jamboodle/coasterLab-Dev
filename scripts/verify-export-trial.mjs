@@ -36,7 +36,7 @@ try{
  assert.equal(await dialog.locator('[data-save]').textContent(),'Download Ready');
  assert.ok(['rgb(21, 128, 61)','rgb(22, 101, 52)'].includes(await dialog.locator('[data-save]').evaluate(el=>getComputedStyle(el).backgroundColor)));
  assert.equal(await dialog.locator('[data-save]').evaluate(el=>getComputedStyle(el).color),'rgb(255, 255, 255)');
- await page.screenshot({path:'/tmp/coasterlab-download-ready.png'});
+ await page.screenshot({path:'/tmp/coasterprint-download-ready.png'});
  const download=page.waitForEvent('download');await dialog.locator('[data-save]').click();assert.match((await download).suggestedFilename(),/\.3mf$/);
  const retry=page.waitForEvent('download');await dialog.locator('[data-save]').click();await retry;
  assert.equal(ledger.balance(account.id),0);assert.equal(ledger.activity(account.id).filter(entry=>entry.kind==='export_trial').length,1);

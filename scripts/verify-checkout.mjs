@@ -51,7 +51,7 @@ try{
  const response=await fetch(origin+'/api/webhooks/stripe',{method:'POST',body,headers:{'stripe-signature':`t=${timestamp},v1=${signature}`}});assert.equal(response.status,200);
  await page.waitForFunction(()=>document.getElementById('account-status').textContent==='Payment confirmed. Your credits are ready.');
  assert.equal(await page.locator('#account-balance').textContent(),'10');
- assert.equal(await page.evaluate(()=>sessionStorage.getItem('coasterlab.checkoutAttempt')),null);
+ assert.equal(await page.evaluate(()=>sessionStorage.getItem('coasterprint.checkoutAttempt')),null);
  assert.match(await page.locator('#account-activity').textContent(),/\+10 credits · Test purchase/);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.locator('#disconnect-account').click();await page.locator('#account-login').waitFor({state:'visible'});

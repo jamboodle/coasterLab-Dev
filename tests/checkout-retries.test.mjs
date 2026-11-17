@@ -8,7 +8,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {Ledger} from '../server/ledger.mjs';
 import {handler} from '../server/app.mjs';
 test('checkout attempts survive restart, isolate accounts, expire, and migrate old databases',()=>{
- const dir=mkdtempSync(join(tmpdir(),'coasterlab-orders-'));const path=join(dir,'db.sqlite');let ledger;
+ const dir=mkdtempSync(join(tmpdir(),'coasterprint-orders-'));const path=join(dir,'db.sqlite');let ledger;
  try{
   const old=new DatabaseSync(path);old.exec('CREATE TABLE accounts(id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL); CREATE TABLE orders(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), session TEXT UNIQUE);');old.close();
   ledger=new Ledger(path);const a=ledger.createAccount(),b=ledger.createAccount();

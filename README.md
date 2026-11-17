@@ -1,8 +1,11 @@
-# CoasterLab
+# CoasterPrint
+
+Public domain: **coasterprint.com**. See [BRANDING.md](BRANDING.md) for the one-time
+updater refresh and the separate domain/mail configuration steps.
 
 Development repository: https://github.com/jamboodle/coasterLab-Dev (branch `main`).
 
-Standalone development copy of the CoasterLab browser application, imported from
+Standalone development copy of the CoasterPrint browser application, imported from
 the owner-supplied r27 complete project ZIP, identified as Sites commit
 `9c365be25cc14d218857750d743f1f40dbf2b69e`. The initial r25 import is retained
 in local Git history. The inaccessible Sites commit has not been independently verified.

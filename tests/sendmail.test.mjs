@@ -10,13 +10,13 @@ import {configureMailer} from '../server/mail-config.mjs';
 import {Ledger} from '../server/ledger.mjs';
 import {handler} from '../server/app.mjs';
 const origin='https://dev.example.com';
-const message={to:'maker@example.com',subject:'Verify your CoasterLab email',url:origin+'/account/#verify='+'a'.repeat(64)};
+const message={to:'maker@example.com',subject:'Verify your CoasterPrint email',url:origin+'/account/#verify='+'a'.repeat(64)};
 const from='noreply@example.com';
 
 test('account messages validate envelopes, prevent header injection, and encode usable links',()=>{
  const raw=accountMessage({...message,from,origin});
  const [headers,body]=raw.split('\r\n\r\n');
- assert.match(headers,/From: CoasterLab <noreply@example.com>/);
+ assert.match(headers,/From: CoasterPrint <noreply@example.com>/);
  assert.match(headers,/Content-Transfer-Encoding: base64/);
  const text=Buffer.from(body,'base64').toString('utf8');
  assert.ok(text.includes(message.url));assert.match(text,/24 hours/);
@@ -29,7 +29,7 @@ test('account messages validate envelopes, prevent header injection, and encode 
 });
 
 test('local submission passes arguments without a shell and sends MIME through stdin',async()=>{
- const directory=mkdtempSync(join(tmpdir(),'coasterlab-mail-'));
+ const directory=mkdtempSync(join(tmpdir(),'coasterprint-mail-'));
  try{
   const fixture=join(directory,'mail.cjs'),output=join(directory,'captured.json');
   writeFileSync(fixture,"const fs=require('node:fs');let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',x=>input+=x);process.stdin.on('end',()=>fs.writeFileSync(process.argv[2],JSON.stringify({args:process.argv.slice(3),input})));\n");

@@ -43,7 +43,7 @@ try{
   assert.equal(await page.locator('.image-files').evaluate(el=>el.open),false);
   assert.match(await page.locator('.status').textContent(),/Your coaster is ready/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  await page.locator('#maker').screenshot({path:`/tmp/coasterlab-layout-${width}.png`});
+  await page.locator('#maker').screenshot({path:`/tmp/coasterprint-layout-${width}.png`});
   assert.deepEqual(errors,[]);await page.close();console.log(`PASS ${width}px guided maker: ordered steps, current stage, accessible advanced controls, real export and uncluttered preview`);
  }
 }finally{await browser?.close();await new Promise(r=>server.close(r));ledger.close();}

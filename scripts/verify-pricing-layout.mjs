@@ -24,7 +24,7 @@ try{
   assert.ok(await page.locator('h1').evaluate(el=>parseFloat(getComputedStyle(el).fontSize)<=36));
   assert.ok((await page.locator('#customer-signin').boundingBox()).y<760,'Sign-in should be reachable without passing pricing cards');
   if(width<701){const a=await page.locator('.account-card').boundingBox(),b=await page.locator('.credits-sidebar').boundingBox();assert.ok(a.y<b.y);}
-  await page.screenshot({path:`/tmp/coasterlab-pricing-signedout-${width}.png`,fullPage:true});
+  await page.screenshot({path:`/tmp/coasterprint-pricing-signedout-${width}.png`,fullPage:true});
   await page.locator('#auth-register').click();
   assert.equal(await page.locator('#customer-password').getAttribute('autocomplete'),'new-password');
   assert.equal(await page.locator('#customer-signin').isVisible(),false);
@@ -34,7 +34,7 @@ try{
   assert.equal(await page.locator('#account-balance').textContent(),'0');
   assert.equal(await page.locator('#activity-panel').evaluate(el=>el.open),false);
   assert.equal(await page.locator('#account-security').evaluate(el=>el.open),false);
-  await page.screenshot({path:`/tmp/coasterlab-pricing-signedin-${width}.png`,fullPage:true});
+  await page.screenshot({path:`/tmp/coasterprint-pricing-signedin-${width}.png`,fullPage:true});
   await page.locator('#activity-panel > summary').click();assert.equal(await page.locator('#account-activity').isVisible(),true);
   await page.locator('#disconnect-account').click();await page.locator('#customer-login').waitFor({state:'visible'});
   assert.equal(await page.locator('#auth-signin').getAttribute('aria-pressed'),'true');

@@ -93,7 +93,7 @@ class Updater:
                         return False
             with urllib.request.urlopen('https://dev.jamboodle.com/', timeout=5) as response:
                 page = response.read(200000).decode('utf-8', errors='replace')
-                return response.status == 200 and '<title>CoasterLab' in page
+                return response.status == 200 and '<main' in page and 'id="maker"' in page and 'id="files"' in page
         except (OSError, ValueError):
             return False
 
@@ -145,7 +145,7 @@ def main():
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError('Another CoasterLab update is already running.') from None
+            raise RuntimeError('Another CoasterPrint update is already running.') from None
         updater.deploy()
 
 

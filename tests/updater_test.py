@@ -4,8 +4,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
+import io
 
-spec = importlib.util.spec_from_file_location('coasterlab_updater', Path(__file__).parents[1] / 'scripts/coasterlab-update.py')
+spec = importlib.util.spec_from_file_location('coasterprint_updater', Path(__file__).parents[1] / 'scripts/coasterlab-update.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -115,6 +117,17 @@ class UpdateTests(unittest.TestCase):
             updater.deploy()
         self.assertFalse((updater.app / '.deployed-commit').exists())
         self.assertIn('start', updater.events)
+
+    def test_health_is_independent_of_brand_and_rejects_default_page(self):
+        class Response(io.BytesIO):
+            status = 200
+        for title, app, expected in [('CoasterLab', True, True), ('CoasterPrint', True, True), ('Default Website Page', False, False)]:
+            page = '<title>' + title + '</title>' + ('<main id="maker"><input id="files"></main>' if app else '<p>Default</p>')
+            def response(address, **_kwargs):
+                return Response(b'{"ok":true}' if address.endswith('/health') else page.encode())
+            updater = module.Updater()
+            with patch.object(module.urllib.request, 'urlopen', side_effect=response):
+                self.assertEqual(updater.healthy(), expected)
 
     def test_same_healthy_revision_does_not_restart_service(self):
         updater = FixtureUpdater(self.root)

@@ -18,7 +18,7 @@ test('webhook signatures require matching raw bytes, valid timestamp, and secret
  assert.equal(verifyWebhook(Buffer.from(body),'t=bad,v1=bad',secret),false);
 });
 test('ledger persists and credits one purchase once across event types',()=>{
- const dir=mkdtempSync(join(tmpdir(),'coasterlab-ledger-'));let ledger;
+ const dir=mkdtempSync(join(tmpdir(),'coasterprint-ledger-'));let ledger;
  try {
   ledger=new Ledger(join(dir,'credits.sqlite'));const account=ledger.createAccount();
   const order=ledger.createOrder(account.id);ledger.attachSession(order,'cs_test_1');
