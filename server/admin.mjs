@@ -4,7 +4,7 @@ export async function jsonBody(req,limit=8192){
 }
 export function creditPacks(settings){return [{id:'starter',amount:settings.amount,credits:settings.credits},...settings.additionalPacks].map(pack=>({...pack,currency:settings.currency}));}
 export function publicSettings(settings){
- return {billingEnabled:settings.billingEnabled,amount:settings.amount,credits:settings.credits,currency:settings.currency,packs:creditPacks(settings)};
+ return {welcomeCredits:settings.welcomeCredits,billingEnabled:settings.billingEnabled,amount:settings.amount,credits:settings.credits,currency:settings.currency,packs:creditPacks(settings)};
 }
 export async function adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret}){
  if(!ledger.control(account).admin || !ledger.identityForAccount(account))return send(403,{error:'Administrator access required.'});
@@ -23,8 +23,9 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
  try{
   const body=await jsonBody(req);
   if(path==='/api/admin/settings'){
-   const allowed=['billingEnabled','amount','credits','currency','additionalPacks','secretKey','webhookSecret'];
+   const allowed=['welcomeCredits','billingEnabled','amount','credits','currency','additionalPacks','secretKey','webhookSecret'];
    if(Object.keys(body).some(key=>!allowed.includes(key)))throw Error('Unknown setting.');
+   if('welcomeCredits' in body && (!Number.isInteger(body.welcomeCredits)||body.welcomeCredits<0||body.welcomeCredits>100000))throw Error('New user credits must be a whole number from 0 to 100,000.');
    if('billingEnabled' in body && typeof body.billingEnabled!=='boolean')throw Error('Billing must be on or off.');
    if('amount' in body && (!Number.isInteger(body.amount)||body.amount<50||body.amount>100000))throw Error('Price must be between $0.50 and $1,000.');
    if('credits' in body && (!Number.isInteger(body.credits)||body.credits<1||body.credits>10000))throw Error('Pack must contain 1 to 10,000 credits.');

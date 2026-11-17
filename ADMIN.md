@@ -46,7 +46,7 @@ cutover; support for overlapping provider credentials is not implemented yet.
 
 ## Customer behavior
 
-New registrations receive exactly 15 welcome credits transactionally. Existing
+New registrations receive the configured welcome credits transactionally (default 15). Change **New user credits** in Admin → Users & credits; 0 disables the grant. The admin setting and customer signup descriptions update without code edits or restarts. Existing
 accounts are not retroactively granted credits. Email uniqueness is enforced after
 trimming and lowercasing; registering the same address again cannot get another
 welcome grant. Distinct aliases are distinct email addresses; this is not an

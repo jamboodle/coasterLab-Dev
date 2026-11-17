@@ -102,3 +102,16 @@ test('admin roles, settings and adjusted balances survive restart without anothe
   assert.equal(ledger.control(admin).admin,1);assert.equal(ledger.control(user).suspended,1);assert.equal(ledger.balance(user),24);assert.equal(ledger.settings().amount,850);assert.equal(ledger.settings().billingEnabled,true);assert.equal(ledger.activity(user).filter(row=>row.kind==='welcome').length,1);assert.equal(ledger.auditLog().length,3);
  }finally{ledger?.close();rmSync(directory,{recursive:true,force:true});}
 });
+
+test('admin welcome-credit setting applies to future registrations only, supports zero and rejects invalid values',()=>fixture(async({call,ledger,user})=>{
+ for(const welcomeCredits of [-1,1.5,100001,'20',null])assert.equal((await call('/api/admin/settings',{body:{welcomeCredits}})).status,400);
+ assert.equal((await call('/api/admin/settings',{body:{welcomeCredits:25}})).status,200);
+ assert.equal((await call('/api/config')).data.welcomeCredits,25);
+ const registration={email:'new@example.com',password:'new-account-fixture-password'};
+ const created=await call('/api/register',{body:registration,cookie:''});assert.equal(created.status,201);assert.equal(created.data.credits,25);assert.equal(ledger.balance(user),15);
+ await call('/api/admin/settings',{body:{welcomeCredits:0}});
+ assert.equal((await call('/api/register',{body:{...registration,email:' NEW@EXAMPLE.COM '},cookie:''})).status,409);
+ assert.equal(ledger.balance(ledger.identity('new@example.com').account),25);
+ const free=await call('/api/register',{body:{...registration,email:'zero@example.com'},cookie:''});assert.equal(free.status,201);assert.equal(free.data.credits,0);assert.deepEqual(ledger.activity(ledger.identity('zero@example.com').account),[]);
+ assert.equal((await call('/api/admin/settings')).data.welcomeCredits,0);
+}));

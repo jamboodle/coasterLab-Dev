@@ -43,7 +43,8 @@ export class Ledger {
       if(this.identity(email)){this.db.exec('ROLLBACK');return null;}
       const {id}=this.createAccount();
       this.db.prepare('INSERT INTO identities(email,account,salt,digest) VALUES (?,?,?,?)').run(email,id,salt,digest);
-      this.db.prepare("INSERT INTO entries VALUES (?,?,15,'welcome')").run('welcome:'+id,id);
+      const welcome=this.settings().welcomeCredits;
+      if(welcome>0)this.db.prepare("INSERT INTO entries VALUES (?,?,?,'welcome')").run('welcome:'+id,id,welcome);
       this.db.exec('COMMIT');return id;
     }catch(error){this.db.exec('ROLLBACK');throw error;}
   }
@@ -181,7 +182,7 @@ export class Ledger {
     this.revokeAllSessions(identity.account);return identity.account;
   }
   settings() {
-    const defaults={billingEnabled:false,amount:500,credits:10,currency:'usd',additionalPacks:[{id:'standard',amount:1000,credits:50},{id:'large',amount:1500,credits:100}],secretKey:'',webhookSecret:''};
+    const defaults={welcomeCredits:15,billingEnabled:false,amount:500,credits:10,currency:'usd',additionalPacks:[{id:'standard',amount:1000,credits:50},{id:'large',amount:1500,credits:100}],secretKey:'',webhookSecret:''};
     for(const row of this.db.prepare('SELECT key,value FROM settings').all())if(Object.hasOwn(defaults,row.key))defaults[row.key]=JSON.parse(row.value);
     return defaults;
   }

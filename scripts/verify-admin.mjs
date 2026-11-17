@@ -17,6 +17,9 @@ try{
  const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto(origin+'/admin/');await page.locator('#login').waitFor({state:'visible'});
  await page.locator('#login [name=email]').fill('admin@example.com');await page.locator('#login [name=password]').fill(password);await page.locator('#login button').click();await page.locator('#panel').waitFor({state:'visible'});
+ assert.equal(await page.locator('[name=welcomeCredits]').inputValue(),'15');
+ await page.locator('[name=welcomeCredits]').fill('25');await page.locator('#welcome-settings button').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='New user credits saved. Existing balances are unchanged.');assert.equal(ledger.settings().welcomeCredits,25);assert.equal(ledger.balance(user),15);
+ const guest=await context.newPage();await guest.goto(origin+'/pricing/');await guest.locator('#pack-options input').first().waitFor();assert.match(await guest.locator('#welcome-description').textContent(),/25 credits/);await guest.close();
  await page.locator('#search input').fill('customer@');await page.locator('#search button').click();await page.waitForFunction(()=>document.querySelectorAll('.user').length===1);
  const row=page.locator('.user');await row.locator('input[type=number]').fill('8');await row.locator('input:not([type=number])').fill('Support credit');await row.locator('form button').click();await page.waitForFunction(()=>document.getElementById('status').textContent.includes('23 credits'));assert.equal(ledger.balance(user),23);
  await row.getByRole('button',{name:'Suspend user',exact:true}).click();await row.getByRole('button',{name:'Restore user',exact:true}).waitFor();assert.equal(ledger.control(user).suspended,1);
