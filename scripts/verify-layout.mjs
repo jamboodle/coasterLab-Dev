@@ -21,7 +21,7 @@ try{
   assert.equal(await page.locator('#holders').count(),1);
   for(const link of await page.locator('[data-maker-step]').all())assert.equal(await link.isVisible(),true);
   assert.equal(await page.locator('header').getByRole('link',{name:'Account & credits'}).isVisible(),true);
-  assert.deepEqual(await page.locator('.maker-layout>.maker-step').evaluateAll(nodes=>nodes.map(node=>node.id)),['upload-artwork','customize-coaster','build-coaster','download-coaster']);
+  assert.deepEqual(await page.locator('.maker-layout .maker-step').evaluateAll(nodes=>nodes.map(node=>node.id)),['upload-artwork','customize-coaster','build-coaster','download-coaster']);
   assert.equal(await page.locator('#advanced-artwork').evaluate(el=>el.open),false);
   assert.equal(await page.locator('#advanced-model').evaluate(el=>el.open),false);
   assert.equal(await page.locator('#batchOptions').evaluate(el=>el.open),false);
@@ -29,7 +29,8 @@ try{
   assert.equal(await page.locator('#download3MF').isDisabled(),true);
   assert.equal(await page.locator('[data-maker-step="1"]').getAttribute('aria-current'),'step');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  if(width<768){const boxes=await page.locator('.maker-layout>.maker-step').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().top));assert.ok(boxes.every((top,index)=>!index||top>boxes[index-1]));}
+  if(width>760){const a=await page.locator('#upload-artwork').boundingBox(),b=await page.locator('#customize-coaster').boundingBox(),c=await page.locator('#build-coaster').boundingBox();assert.ok(Math.abs(a.width-b.width)<1);assert.ok(Math.abs(a.x-b.x)<1);assert.ok(Math.abs(a.y-c.y)<1);assert.ok(c.x>a.x);}
+  if(width<768){const boxes=await page.locator('.maker-layout .maker-step').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().top));assert.ok(boxes.every((top,index)=>!index||top>boxes[index-1]));}
   await page.locator('#advanced-artwork > summary').click();assert.equal(await page.locator('#detail').isVisible(),true);
   await page.locator('#advanced-artwork > summary').click();
   const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');x.fillStyle='red';x.fillRect(0,0,64,64);return c.toDataURL().split(',')[1];});
