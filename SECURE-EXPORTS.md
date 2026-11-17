@@ -87,3 +87,5 @@ release, cache expiry, free regeneration, restart persistence and retired assets
 Browser checks cover actual PNG→geometry→private 3MF, model geometry across desktop
 and mobile, lost confirmation responses, repeat downloads, six-coaster cost,
 individual ZIP cost and free local STL fallback.
+
+Export bridge, dialog and packing worker assets are content-addressed together. Packing messages include an explicit protocol version; mismatched cached workers show a reload message rather than interpreting the request as an STL-parts job. Editable sources are in `src/maker/`, and `npm run build` updates the full dependency graph and current HTML.

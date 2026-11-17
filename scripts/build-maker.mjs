@@ -21,9 +21,8 @@ for(const name of names)build(name);
 let html=read('dist/index.html');
 for(const [name,old] of Object.entries(manifest.scripts)){if(outputs.has(name))html=html.replaceAll(old,outputs.get(name).filename);else html=html.replaceAll('<script src="'+old+'"></script>','');}
 const next={...manifest,scripts:Object.fromEntries(names.map(name=>[name,outputs.get(name).filename]))};
-const packingWorker=`importScripts('vendor/fflate.js','${outputs.get('export-codec.js').filename}');\nonmessage=({data})=>{try{if(data.action==='upload'){postMessage({payload:prepareUpload(data.items,data.template,data.format)});return;}const bytes=data.action==='partsBatch'?makePartsBatch(data.items):partsArchive(data.item,data.result);postMessage({bytes},[bytes.buffer]);}catch(error){postMessage({error:error.message || 'File packing failed'});}};\n`;
 const files=[...outputs.values()].map(({filename,code})=>['dist/'+filename,code]);
-files.push(['dist/export-packing-worker.js',packingWorker],['dist/index.html',html],['dist/asset-manifest.json',JSON.stringify(next,null,2)+'\n']);
+files.push(['dist/index.html',html],['dist/asset-manifest.json',JSON.stringify(next,null,2)+'\n']);
 for(const [path,content] of files){
  if(process.argv.includes('--check')){
   if(!existsSync(root+path) || read(path)!==content)throw Error('Maker assets need rebuilding: '+path);

@@ -12,6 +12,9 @@
     "app.js": "app.eae56259e813.js",
     "stl.js": "stl.28e4bd7566ef.js",
     "batch-3mf.js": "batch-3mf.77d2b5d6fcaa.js",
-    "export-codec.js": "export-codec.ff8aa22c0237.js"
+    "export-codec.js": "export-codec.68d94e592daf.js",
+    "export-packing.js": "export-packing.633d8ab0ee95.js",
+    "export-credit-trial.js": "export-credit-trial.9037de0c484f.js",
+    "export-packing-worker.js": "export-packing-worker.3a5293c7a30b.js"
   }
 }

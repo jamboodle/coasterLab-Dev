@@ -5,7 +5,7 @@ const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=
 export function withStatic(api, root) {
   root=resolve(root);
   const current=new Set(Object.values(JSON.parse(readFileSync(resolve(root,'asset-manifest.json'),'utf8')).scripts));
-  for(const file of ['export-packing.js','export-packing-worker.js','export-credit-trial.js','maker-account.js'])current.add(file);
+  for(const file of ['maker-account.js'])current.add(file);
   return async(req,res)=>{
     const parsed=new URL(req.url,'http://localhost');let pathname;try{pathname=normalize(decodeURIComponent(parsed.pathname));}catch{res.writeHead(400);return res.end('Invalid path');}
     if(/^\/(?:downloads\/)?coasterlab[-.a-z0-9]*\.(?:html|zip)$/i.test(pathname)){

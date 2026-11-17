@@ -7,7 +7,8 @@ const {unzipSync}=require('../dist/vendor/fflate.js');
  try{
   for(const mobile of [false,true]){
    const context=await browser.newContext({viewport:{width:mobile?390:1280,height:900},hasTouch:mobile,isMobile:mobile});
-   const page=await context.newPage(),workers=[],errors=[];
+   const page=await context.newPage(),workers=[],errors=[];let legacyRequests=0;
+   for(const name of ['export-packing-worker.js','export-packing.js','export-credit-trial.js'])await page.route('**/'+name,route=>{legacyRequests++;return route.fulfill({contentType:'application/javascript',body:"onmessage=()=>postMessage({error: \"Cannot read properties of undefined (reading 'baseMM')\"});"});});
    page.on('worker',worker=>workers.push(worker.url()));page.on('pageerror',e=>errors.push(e.message));
    if(mobile){const cdp=await context.newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});}
    await page.goto(process.env.SITE_URL || 'http://127.0.0.1:3003');
@@ -24,7 +25,7 @@ const {unzipSync}=require('../dist/vendor/fflate.js');
    const chunks=[];for await(const chunk of await download.createReadStream())chunks.push(chunk);
    const archive=unzipSync(Buffer.concat(chunks)),mesh=Buffer.from(archive['3D/3dmodel.model']).toString('utf8');
    assert.match(mesh,/<triangles>/);if(!mobile)baseline=mesh;else assert.equal(mesh,baseline,'3MF-only must preserve the exact model geometry and color assignments');
-   assert.ok(workers.some(url=>url.endsWith('/export-packing-worker.js')),'Model upload must be serialized in a worker');
+   assert.ok(workers.some(url=>/\/export-packing-worker\.[a-f0-9]{12}\.js$/.test(url)),'Model upload must be serialized in a worker');
    await page.keyboard.press('Escape');await page.locator('dialog').waitFor({state:'detached'});
    const geometryWorkers=workers.filter(url=>url.includes('stl-worker')).length;
    assert.equal(await page.locator('#downloadSTL').isVisible(),true);
@@ -42,7 +43,7 @@ const {unzipSync}=require('../dist/vendor/fflate.js');
    pending=page.waitForEvent('download');await page.locator('[data-free-save]').click();free=await pending;bytes=[];for await(const chunk of await free.createReadStream())bytes.push(chunk);
    const batch=Object.keys(unzipSync(Buffer.concat(bytes)));assert.ok(batch.includes('START-HERE.txt'));assert.equal(batch.filter(name=>name.endsWith('/colors.json')).length,2);
    assert.equal(workers.filter(url=>url.includes('stl-worker')).length,geometryWorkers,'Free STL ZIP must reuse the existing geometry without rebuilding');
-   assert.deepEqual(errors,[]);await context.close();
+   assert.equal(legacyRequests,0,'Current exports must never load stale unversioned packing scripts');assert.deepEqual(errors,[]);await context.close();
    console.log(`PASS ${mobile?'touch device, 4× CPU throttle':'desktop'}: exact 3MF geometry, visible free ZIP, separate color STLs, batch folders and no geometry rebuild`);
   }
  }finally{await browser.close();}

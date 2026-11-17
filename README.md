@@ -46,7 +46,7 @@ and downloadable archives are retained; they are not rebuilt or deployed by
 this command. The current maker remains based on r27. Existing vendor/font
 licenses are retained.
 
-`dist/export-packing.js` provides the browser worker bridge. The maker builds the
+`src/maker/export-packing.js` provides the browser worker bridge. The maker builds the
 base and individual color parts locally. Free STL ZIPs package those parts locally;
 merged STL is no longer offered. For 3MF, a browser worker serializes the model
 parts and printer settings, then the server validates and assembles a private
