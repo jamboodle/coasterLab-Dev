@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {createServer} from 'node:http';
+import {fileURLToPath} from 'node:url';
+import {Ledger} from '../server/ledger.mjs';
+import {passwordHash} from '../server/passwords.mjs';
+import {handler} from '../server/app.mjs';
+import {withStatic} from '../server/static.mjs';
+const {chromium}=createRequire(import.meta.url)('playwright');
+const ledger=new Ledger(':memory:');const password='administrator-fixture-password';const {salt,digest}=await passwordHash(password);
+const admin=ledger.registerIdentity('admin@example.com',salt,digest),user=ledger.registerIdentity('customer@example.com',salt,digest);ledger.makeAdmin('admin@example.com');let origin;
+const server=createServer(withStatic((req,res)=>handler({ledger,origin,customerAccounts:true})(req,res),fileURLToPath(new URL('../dist/',import.meta.url))));
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));origin='http://127.0.0.1:'+server.address().port;
+let browser;
+try{
+ browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
+ const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto(origin+'/admin/');await page.locator('#login').waitFor({state:'visible'});
+ await page.locator('#login [name=email]').fill('admin@example.com');await page.locator('#login [name=password]').fill(password);await page.locator('#login button').click();await page.locator('#panel').waitFor({state:'visible'});
+ await page.locator('#search input').fill('customer@');await page.locator('#search button').click();await page.waitForFunction(()=>document.querySelectorAll('.user').length===1);
+ const row=page.locator('.user');await row.locator('input[type=number]').fill('8');await row.locator('input:not([type=number])').fill('Support credit');await row.locator('form button').click();await page.waitForFunction(()=>document.getElementById('status').textContent.includes('23 credits'));assert.equal(ledger.balance(user),23);
+ await row.getByRole('button',{name:'Suspend user',exact:true}).click();await row.getByRole('button',{name:'Restore user',exact:true}).waitFor();assert.equal(ledger.control(user).suspended,1);
+ await row.getByRole('button',{name:'Restore user',exact:true}).click();await row.getByRole('button',{name:'Suspend user',exact:true}).waitFor();
+ await page.locator('[name=billingEnabled]').check();await page.locator('[name=price]').fill('7.25');await page.locator('[name=credits]').fill('22');await page.locator('#settings button').click();await page.waitForFunction(()=>document.getElementById('status').textContent==='Billing settings saved.');assert.equal(ledger.settings().amount,725);assert.equal(ledger.settings().billingEnabled,true);
+ for(const width of [1440,768,390,320]){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Admin overflow at ${width}`);}
+ await page.screenshot({path:'/tmp/coasterprint-admin-mobile.png',fullPage:true});
+ await context.close();
+ const mobile=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true}),maker=await mobile.newPage();maker.on('pageerror',error=>errors.push(error.message));
+ await maker.goto(origin);
+ await maker.evaluate(()=>window.creditTrialDownload(URL.createObjectURL(new Blob(['ready-file'])),'test.3mf',1));
+ await maker.locator('[data-account]').waitFor({state:'visible'});assert.match(await maker.locator('[data-message]').textContent(),/Log in or create/);assert.equal(ledger.balance(user),23);
+ const response=await mobile.request.post(origin+'/api/login',{headers:{Origin:origin},data:{email:'customer@example.com',password}});assert.equal(response.status(),200);
+ await maker.locator('[data-recheck]').click();await maker.locator('[data-authorize]').waitFor({state:'visible'});await maker.locator('[data-authorize]').click();await maker.locator('[data-save]').waitFor({state:'visible'});assert.equal(ledger.balance(user),22);
+ await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});ledger.adjustCredits(admin,user,-22,'Empty balance fixture','test-empty-credit');
+ await maker.evaluate(()=>window.creditTrialDownload(URL.createObjectURL(new Blob(['new-ready-file'])),'new.3mf',1));await maker.locator('[data-insufficient]').waitFor({state:'visible'});assert.match(await maker.locator('[data-insufficient]').textContent(),/STL.*free.*purchase more credits/s);assert.equal(await maker.locator('[data-insufficient] a').getAttribute('href'),'/pricing/#export-pack');
+ await maker.locator('[data-stl]').click();assert.equal(await maker.locator('#exportFormats').inputValue(),'all');assert.match(await maker.locator('#notice').textContent(),/STL is free/);
+ ledger.saveSettings(admin,{billingEnabled:false});await maker.evaluate(()=>window.creditTrialDownload(URL.createObjectURL(new Blob(['free-ready-file'])),'free.3mf',1));await maker.locator('[data-authorize]').waitFor({state:'visible'});await maker.locator('[data-authorize]').click();await maker.locator('[data-save]').waitFor({state:'visible'});assert.equal(ledger.balance(user),0);
+ await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});await maker.reload();await maker.waitForFunction(()=>document.getElementById('maker-account').textContent.includes('0 credits'));
+ assert.deepEqual(errors,[]);await mobile.close();console.log('PASS admin responsive layout, credit adjustment, suspend/restore, dynamic billing/price, anonymous login prompt, insufficient-credit STL alternative, free billing mode, and maker balance');
+}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));ledger.close();}

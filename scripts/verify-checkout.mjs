@@ -7,7 +7,7 @@ import {Ledger} from '../server/ledger.mjs';
 import {handler} from '../server/app.mjs';
 import {withStatic} from '../server/static.mjs';
 const {chromium}=createRequire(import.meta.url)('playwright');
-const ledger=new Ledger(':memory:');const account=ledger.createAccount();
+const ledger=new Ledger(':memory:');ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('billingEnabled','true');const account=ledger.createAccount();
 const secret='fixture-webhook-secret';let origin;let failCheckout=true;const providerKeys=[];
 const api=(req,res)=>handler({ledger,origin,developmentLogin:true,secretKey:'sk_test_fixture',webhookSecret:secret,fetchImpl:async(_url,options)=>{providerKeys.push(options.headers['Idempotency-Key']);return failCheckout?new Response('',{status:503}):Response.json({id:'cs_test_browser',url:'https://checkout.stripe.com/c/pay/fixture'});}})(req,res);
 const server=createServer(withStatic(api,fileURLToPath(new URL('../dist/',import.meta.url))));
@@ -52,7 +52,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('account-status').textContent==='Payment confirmed. Your credits are ready.');
  assert.equal(await page.locator('#account-balance').textContent(),'10');
  assert.equal(await page.evaluate(()=>sessionStorage.getItem('coasterprint.checkoutAttempt')),null);
- assert.match(await page.locator('#account-activity').textContent(),/\+10 credits · Test purchase/);
+ assert.match(await page.locator('#account-activity').textContent(),/\+10 credits · Credit purchase/);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.locator('#disconnect-account').click();await page.locator('#account-login').waitFor({state:'visible'});
  assert.equal((await page.request.get(origin+'/api/balance')).status(),401);

@@ -20,12 +20,12 @@ try{
  await page.locator('#files').setInputFiles({name:'trial.png',mimeType:'image/png',buffer:Buffer.from(data,'base64')});
  await page.locator('#trace').click();await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:60000});
  assert.equal(ledger.balance(account.id),1);
- const dialog=page.getByRole('dialog',{name:'3MF credit trial'});
+ const dialog=page.getByRole('dialog',{name:'Your download'});
  await page.evaluate(()=>download(URL.createObjectURL(new Blob([])),'empty.3mf'));
- await page.waitForFunction(()=>document.querySelector('[data-message]').textContent.includes('generated file is empty'));
+ await page.waitForFunction(()=>document.querySelector('[data-message]')?.textContent?.includes('generated file is empty'));
  assert.equal(ledger.balance(account.id),1);await page.keyboard.press('Escape');
  await page.locator('#download3MF').click();await dialog.locator('[data-authorize]').waitFor();
- await page.waitForFunction(()=>document.querySelector('[data-summary]').textContent.includes('Cost: 1'));
+ await page.waitForFunction(()=>document.querySelector('[data-summary]')?.textContent?.includes('Cost: 1'));
  await page.keyboard.press('Escape');assert.equal(ledger.balance(account.id),1);
  await page.locator('#download3MF').click();
  let drop=true;
@@ -41,11 +41,11 @@ try{
  const retry=page.waitForEvent('download');await dialog.locator('[data-save]').click();await retry;
  assert.equal(ledger.balance(account.id),0);assert.equal(ledger.activity(account.id).filter(entry=>entry.kind==='export_trial').length,1);
  await page.keyboard.press('Escape');await page.locator('#download3MF').click();
- await page.waitForFunction(()=>document.querySelector('[data-summary]').textContent.includes('Cost: 0'));
+ await page.waitForFunction(()=>document.querySelector('[data-summary]')?.textContent?.includes('Cost: 0'));
  await page.keyboard.press('Escape');await page.locator('#modelWidth').fill('101');await page.locator('#advanced-model > summary').click();await page.locator('#buildSTL').click();
  await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:60000});await page.locator('#download3MF').click();
- await page.waitForFunction(()=>document.querySelector('[data-message]').textContent.includes('Not enough test credits'));
- assert.equal(await dialog.locator('[data-authorize]').isDisabled(),true);
+ await page.waitForFunction(()=>document.querySelector('[data-message]')?.textContent?.includes('Not enough credits'));
+ assert.equal(await dialog.locator('[data-authorize]').isVisible(),false);
  assert.equal(ledger.balance(account.id),0);assert.deepEqual(errors,[]);
  console.log('PASS touch-device credit trial: valid generated 3MF, cost preview, cancel, lost response, retry without double debit, download and insufficient credits');
 }finally{await browser?.close();await new Promise(r=>server.close(r));ledger.close();}

@@ -7,7 +7,11 @@ import {fileURLToPath} from 'node:url';
 import {configureMailer} from './mail-config.mjs';
 mkdirSync('.data',{recursive:true,mode:0o700});
 const ledger=new Ledger(process.env.DATABASE_PATH || '.data/credits.sqlite');
-if(process.argv.includes('--grant-test-credits')) {
+if(process.argv.includes('--make-admin')) {
+  const email=process.argv[process.argv.indexOf('--make-admin')+1];
+  if(!email)throw Error('Supply the registered administrator email.');
+  ledger.makeAdmin(email);console.log('Administrator access granted. Sign in again at /admin/.');ledger.close();
+} else if(process.argv.includes('--grant-test-credits')) {
   if(process.env.ENABLE_EXPORT_CREDIT_TRIAL!=='1')throw Error('Enable the export credit trial before granting test credits');
   const position=process.argv.indexOf('--grant-test-credits');
   const identity=ledger.identity((process.argv[position+1] || '').trim().toLowerCase());
@@ -22,7 +26,7 @@ if(process.argv.includes('--grant-test-credits')) {
   const parsed=new URL(origin);
   if (!['http:','https:'].includes(parsed.protocol) || parsed.origin!==origin) throw Error('APP_ORIGIN must be an HTTP(S) origin with no trailing slash');
   const {mailer,developmentInbox}=configureMailer(process.env,origin);
-  const server=createServer(withStatic(handler({ledger,origin,onMailFailure:()=>console.error('Account email submission failed; check the mail service.'),exportCreditTrial:process.env.ENABLE_EXPORT_CREDIT_TRIAL==='1',mailer,developmentInbox,developmentLogin:process.env.ENABLE_DEV_LOGIN==='1',customerAccounts:process.env.ENABLE_CUSTOMER_ACCOUNTS==='1',secretKey:process.env.STRIPE_SECRET_KEY,webhookSecret:process.env.STRIPE_WEBHOOK_SECRET}),fileURLToPath(new URL('../dist/',import.meta.url))));
+  const server=createServer(withStatic(handler({ledger,origin,onMailFailure:()=>console.error('Account email submission failed; check the mail service.'),mailer,developmentInbox,developmentLogin:process.env.ENABLE_DEV_LOGIN==='1',customerAccounts:process.env.ENABLE_CUSTOMER_ACCOUNTS==='1',secretKey:process.env.STRIPE_SECRET_KEY,webhookSecret:process.env.STRIPE_WEBHOOK_SECRET}),fileURLToPath(new URL('../dist/',import.meta.url))));
   server.listen(Number(process.env.PORT || 3003),'127.0.0.1',()=>console.log('CoasterPrint test credit API listening on loopback'));
   for (const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>server.close(()=>{ledger.close();process.exit(0);}));
 }

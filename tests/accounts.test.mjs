@@ -35,7 +35,7 @@ test('customer registration, sign-in, duplicate account, cookie rotation and ori
   const login=await post('/api/login',{...details,email:'customer@example.com'},{Cookie:cookie});assert.equal(login.status,200);
   const nextCookie=login.headers.get('set-cookie').split(';')[0];assert.notEqual(nextCookie,cookie);
   assert.equal((await fetch(origin+'/api/balance',{headers:{Cookie:cookie}})).status,401);
-  assert.equal((await (await fetch(origin+'/api/balance',{headers:{Cookie:nextCookie}})).json()).credits,0);
+  assert.equal((await (await fetch(origin+'/api/balance',{headers:{Cookie:nextCookie}})).json()).credits,15);
   assert.equal((await post('/api/logout',{}, {Cookie:nextCookie})).status,200);
   assert.equal((await fetch(origin+'/api/balance',{headers:{Cookie:nextCookie}})).status,401);
  }finally{await new Promise(r=>server.close(r));ledger.close();}

@@ -23,7 +23,7 @@ test('checkout attempts survive restart, isolate accounts, expire, and migrate o
  }finally{ledger?.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('checkout timeout retries and concurrent submissions reuse one provider key and one order',async()=>{
- const ledger=new Ledger(':memory:');const account=ledger.createAccount(),other=ledger.createAccount();let origin,calls=0;
+ const ledger=new Ledger(':memory:');ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('billingEnabled','true');const account=ledger.createAccount(),other=ledger.createAccount();let origin,calls=0;
  const providerKeys=[];
  const server=createServer((req,res)=>handler({ledger,origin,secretKey:'sk_test_fixture',webhookSecret:'fixture',fetchImpl:async(_url,options)=>{
   calls++;providerKeys.push(options.headers['Idempotency-Key']);

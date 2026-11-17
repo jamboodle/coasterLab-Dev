@@ -13,10 +13,16 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS identities(email TEXT PRIMARY KEY, account TEXT UNIQUE NOT NULL REFERENCES accounts(id), salt TEXT NOT NULL, digest TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS challenges(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), purpose TEXT NOT NULL, expires INTEGER NOT NULL, credential_digest TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS auth_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS account_controls(account TEXT PRIMARY KEY REFERENCES accounts(id), admin INTEGER NOT NULL DEFAULT 0, suspended INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS admin_audit(id TEXT PRIMARY KEY, actor TEXT NOT NULL REFERENCES accounts(id), action TEXT NOT NULL, target TEXT, detail TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), expires INTEGER NOT NULL);`);
     const columns=new Set(this.db.prepare('PRAGMA table_info(orders)').all().map(row=>row.name));
     if(!columns.has('request_key'))this.db.exec('ALTER TABLE orders ADD COLUMN request_key TEXT');
     if(!columns.has('created_at'))this.db.exec('ALTER TABLE orders ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
+    for(const [name,definition] of [['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"]]){
+      if(!columns.has(name))this.db.exec(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
+    }
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key)');
     if(!this.db.prepare('PRAGMA table_info(identities)').all().some(row=>row.name==='verified_at'))this.db.exec('ALTER TABLE identities ADD COLUMN verified_at INTEGER');
   }
@@ -26,15 +32,18 @@ export class Ledger {
     return {id,token};
   }
   authenticate(token) {
-    return typeof token === 'string' ? this.db.prepare('SELECT id FROM accounts WHERE token_hash=?').get(hash(token))?.id : undefined;
+    const id=typeof token==='string'?this.db.prepare('SELECT id FROM accounts WHERE token_hash=?').get(hash(token))?.id:undefined;
+    return id && !this.control(id).suspended?id:undefined;
   }
-  identity(email) {return this.db.prepare('SELECT * FROM identities WHERE email=?').get(email);}
+  identity(email) {email=email.trim().toLowerCase();return this.db.prepare('SELECT * FROM identities WHERE email=?').get(email);}
   registerIdentity(email,salt,digest) {
+    email=email.trim().toLowerCase();
     this.db.exec('BEGIN IMMEDIATE');
     try {
       if(this.identity(email)){this.db.exec('ROLLBACK');return null;}
       const {id}=this.createAccount();
       this.db.prepare('INSERT INTO identities(email,account,salt,digest) VALUES (?,?,?,?)').run(email,id,salt,digest);
+      this.db.prepare("INSERT INTO entries VALUES (?,?,15,'welcome')").run('welcome:'+id,id);
       this.db.exec('COMMIT');return id;
     }catch(error){this.db.exec('ROLLBACK');throw error;}
   }
@@ -51,7 +60,8 @@ export class Ledger {
     return token;
   }
   sessionAccount(token) {
-    return token ? this.db.prepare('SELECT account FROM sessions WHERE hash=? AND expires>?').get(hash(token),Date.now())?.account : undefined;
+    const id=token?this.db.prepare('SELECT account FROM sessions WHERE hash=? AND expires>?').get(hash(token),Date.now())?.account:undefined;
+    return id && !this.control(id).suspended?id:undefined;
   }
   revokeSession(token) { if(token)this.db.prepare('DELETE FROM sessions WHERE hash=?').run(hash(token)); }
   identityForAccount(account) {return this.db.prepare('SELECT * FROM identities WHERE account=?').get(account);}
@@ -118,7 +128,7 @@ export class Ledger {
     try{
       const quote=this.exportQuote(account,fingerprint,count);
       if(quote.error){this.db.exec('ROLLBACK');return quote;}
-      if(quote.remaining<0){this.db.exec('ROLLBACK');return {error:'Not enough test credits',status:402};}
+      if(quote.remaining<0){this.db.exec('ROLLBACK');return {error:'Not enough credits. Download STL free or purchase more credits.',status:402};}
       if(!quote.retry){
         this.db.prepare('INSERT INTO export_trials VALUES (?,?,?)').run(account,fingerprint,count);
         this.db.prepare("INSERT INTO entries VALUES (?,?,?,'export_trial')").run('export:'+account+':'+fingerprint,account,-count);
@@ -130,8 +140,8 @@ export class Ledger {
     if(!Number.isInteger(count)||count<1||count>1000)throw Error('Use 1 to 1000 test credits');
     this.db.prepare("INSERT INTO entries VALUES (?,?,?,'test_grant')").run('grant:'+randomBytes(16).toString('hex'),account,count);
   }
-  checkoutOrder(account,key,now=Date.now()) {
-    this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at) VALUES (?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now);
+  checkoutOrder(account,key,now=Date.now(),pack={amount:500,credits:10,currency:'usd'}) {
+    this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at,amount,credits,currency) VALUES (?,?,?,?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now,pack.amount,pack.credits,pack.currency);
     return this.db.prepare('SELECT * FROM orders WHERE account=? AND request_key=?').get(account,key);
   }
   orderStatus(account,id,now=Date.now()) {
@@ -152,16 +162,72 @@ export class Ledger {
   creditPayment(event) {
     const s=event.data?.object;
     if (!['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)) return false;
-    if (event.livemode !== false || s?.livemode !== false || s.payment_status !== 'paid' || s.mode !== 'payment' || s.amount_total !== 500 || s.currency !== 'usd') return false;
+    if (event.livemode !== false || s?.livemode !== false || s.payment_status !== 'paid' || s.mode !== 'payment') return false;
     const order=this.db.prepare('SELECT * FROM orders WHERE session=?').get(s.id);
     if (!order) throw new Error('Unknown checkout session');
+    if(s.amount_total!==order.amount || s.currency!==order.currency)return false;
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.prepare('INSERT OR IGNORE INTO events VALUES (?)').run(event.id);
-      const result=this.db.prepare("INSERT OR IGNORE INTO entries VALUES (?,?,10,'purchase')").run('purchase:'+s.id,order.account);
+      const result=this.db.prepare("INSERT OR IGNORE INTO entries VALUES (?,?,?,'purchase')").run('purchase:'+s.id,order.account,order.credits);
       this.db.exec('COMMIT');
       return result.changes === 1;
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
+  control(account) {return this.db.prepare('SELECT admin,suspended FROM account_controls WHERE account=?').get(account) || {admin:0,suspended:0};}
+  makeAdmin(email) {
+    const identity=this.identity(email);if(!identity)throw Error('Create this account first.');
+    this.db.prepare('INSERT INTO account_controls(account,admin) VALUES (?,1) ON CONFLICT(account) DO UPDATE SET admin=1,suspended=0').run(identity.account);
+    this.revokeAllSessions(identity.account);return identity.account;
+  }
+  settings() {
+    const defaults={billingEnabled:false,amount:500,credits:10,currency:'usd',secretKey:'',webhookSecret:''};
+    for(const row of this.db.prepare('SELECT key,value FROM settings').all())if(Object.hasOwn(defaults,row.key))defaults[row.key]=JSON.parse(row.value);
+    return defaults;
+  }
+  saveSettings(actor,values) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      for(const [key,value] of Object.entries(values))this.db.prepare('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,JSON.stringify(value));
+      this.audit(actor,'settings',null,{changed:Object.keys(values)});
+      this.db.exec('COMMIT');
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  audit(actor,action,target,detail,id=randomBytes(16).toString('hex')) {
+    this.db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(id,actor,action,target,JSON.stringify(detail),Date.now());
+  }
+  users(search='',offset=0) {
+    return this.db.prepare(`SELECT i.account,i.email,i.verified_at,COALESCE(c.admin,0) AS admin,COALESCE(c.suspended,0) AS suspended,
+      COALESCE((SELECT SUM(delta) FROM entries WHERE account=i.account),0) AS credits
+      FROM identities i LEFT JOIN account_controls c ON c.account=i.account
+      WHERE instr(i.email,?)>0 ORDER BY i.email LIMIT 50 OFFSET ?`).all(search.toLowerCase(),offset);
+  }
+  adjustCredits(actor,target,delta,reason,key) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      const prior=this.db.prepare('SELECT * FROM admin_audit WHERE id=?').get(key);
+      if(prior){
+        const detail=JSON.parse(prior.detail);
+        if(prior.actor!==actor || prior.target!==target || detail.delta!==delta || detail.reason!==reason)throw Error('Adjustment reference already used.');
+        this.db.exec('COMMIT');return this.balance(target);
+      }
+      if(!this.identityForAccount(target))throw Error('Account not found.');
+      if(this.balance(target)+delta<0)throw Error('Adjustment would make the balance negative.');
+      this.db.prepare("INSERT INTO entries VALUES (?,?,?,'admin_adjustment')").run('admin:'+key,target,delta);
+      this.audit(actor,'credits',target,{delta,reason},key);
+      this.db.exec('COMMIT');return this.balance(target);
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  suspend(actor,target,suspended) {
+    if(actor===target || this.control(target).admin)throw Error('Administrator accounts cannot be suspended here.');
+    if(!this.identityForAccount(target))throw Error('Account not found.');
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      this.db.prepare('INSERT INTO account_controls(account,suspended) VALUES (?,?) ON CONFLICT(account) DO UPDATE SET suspended=excluded.suspended').run(target,Number(suspended));
+      if(suspended)this.revokeAllSessions(target);
+      this.audit(actor,'suspension',target,{suspended});this.db.exec('COMMIT');
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  auditLog() {return this.db.prepare('SELECT a.actor,i.email AS actorEmail,a.action,a.target,t.email AS targetEmail,a.detail,a.created_at FROM admin_audit a LEFT JOIN identities i ON i.account=a.actor LEFT JOIN identities t ON t.account=a.target ORDER BY a.rowid DESC LIMIT 100').all();}
   close() {this.db.close();}
 }

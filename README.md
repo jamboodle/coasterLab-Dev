@@ -129,3 +129,5 @@ The maker's repeated workflow/printing marketing sections have been removed.
 Account & credits is now a compact account-first page: explicit sign-in/create
 account modes, a clear balance, a small credit-pack summary and expandable
 activity, security and demo information. Billing behavior is unchanged.
+
+Administration and welcome credits: see [ADMIN.md](ADMIN.md) for first-admin setup, billing controls and the supported download flow.

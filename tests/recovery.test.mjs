@@ -44,7 +44,7 @@ test('recovery HTTP flow does not disclose unknown accounts and preserves balanc
   assert.equal((await post('/api/reset-password',{token,password:'short'})).status,400);
   assert.equal((await post('/api/reset-password',{token,password:'replacement-password'})).status,200);
   assert.equal((await fetch(origin+'/api/account',{headers:{Cookie:cookie}})).status,401);
-  assert.equal(ledger.balance(id),10);
+  assert.equal(ledger.balance(id),25);
   assert.equal((await post('/api/reset-password',{token,password:'third-test-password'})).status,400);
   assert.equal((await post('/api/login',details)).status,401);
   assert.equal((await post('/api/login',{...details,password:'replacement-password'})).status,200);

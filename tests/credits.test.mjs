@@ -34,7 +34,7 @@ test('ledger persists and credits one purchase once across event types',()=>{
  } finally {ledger?.close();rmSync(dir,{recursive:true,force:true});}
 });
 test('unpaid, wrong-value, live, unknown and canceled purchases never add credits',()=>{
- const ledger=new Ledger(':memory:');try {
+ const ledger=new Ledger(':memory:');ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('billingEnabled','true');try {
   const a=ledger.createAccount();const order=ledger.createOrder(a.id);ledger.attachSession(order,'cs_test_1');
   for(const change of [{payment_status:'unpaid'},{amount_total:100},{currency:'eur'},{livemode:true}]) {
    const event=payment();Object.assign(event.data.object,change);assert.equal(ledger.creditPayment(event),false);
@@ -45,7 +45,7 @@ test('unpaid, wrong-value, live, unknown and canceled purchases never add credit
  }finally{ledger.close();}
 });
 test('HTTP checkout binds owner to signed payment and isolates balances',async()=>{
- const ledger=new Ledger(':memory:');const a=ledger.createAccount(),b=ledger.createAccount();
+ const ledger=new Ledger(':memory:');ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('billingEnabled','true');const a=ledger.createAccount(),b=ledger.createAccount();
  let providerCalls=0;
  const server=createServer(handler({ledger,origin:'http://localhost:3002',secretKey:'sk_test_example',webhookSecret:secret,fetchImpl:async(url,options)=>{
   providerCalls++;assert.equal(url,'https://api.stripe.com/v1/checkout/sessions');
@@ -72,7 +72,7 @@ test('HTTP checkout binds owner to signed payment and isolates balances',async()
 });
 test('checkout is disabled without configuration or with live Stripe keys',async()=>{
  for(const key of [undefined,'sk_live_example']) {
-  const ledger=new Ledger(':memory:');const a=ledger.createAccount();
+  const ledger=new Ledger(':memory:');ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('billingEnabled','true');const a=ledger.createAccount();
   const server=createServer(handler({ledger,origin:'http://localhost:3002',secretKey:key,webhookSecret:secret}));
   await new Promise(r=>server.listen(0,'127.0.0.1',r));
   try {const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/checkout',{method:'POST',headers:{Authorization:'Bearer '+a.token}});assert.equal(response.status,503);}

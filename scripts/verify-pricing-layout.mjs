@@ -31,7 +31,7 @@ try{
   await page.locator('#customer-email').fill(`layout-${width}@example.com`);await page.locator('#customer-password').fill('pricing-layout-password');
   await page.locator('#customer-register').click();await page.locator('#connected-account').waitFor({state:'visible'});
   assert.equal(await page.locator('#account-email').textContent(),`layout-${width}@example.com`);
-  assert.equal(await page.locator('#account-balance').textContent(),'0');
+  assert.equal(await page.locator('#account-balance').textContent(),'15');
   assert.equal(await page.locator('#activity-panel').evaluate(el=>el.open),false);
   assert.equal(await page.locator('#account-security').evaluate(el=>el.open),false);
   await page.screenshot({path:`/tmp/coasterprint-pricing-signedin-${width}.png`,fullPage:true});

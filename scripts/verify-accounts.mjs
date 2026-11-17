@@ -23,7 +23,7 @@ try{
   await page.locator('#auth-register').click();
   await page.locator('#customer-password').fill('browser-test-password');
   await page.locator('#customer-register').click();await page.locator('#connected-account').waitFor({state:'visible'});
-  assert.equal(await page.locator('#account-balance').textContent(),'0');
+  assert.equal(await page.locator('#account-balance').textContent(),'15');
   assert.equal(await page.locator('#test-checkout').isDisabled(),true);
   assert.equal(await page.locator('#customer-password').inputValue(),'');
   await page.reload();await page.locator('#connected-account').waitFor({state:'visible'});
@@ -35,7 +35,7 @@ try{
   await page.locator('#connected-account').waitFor({state:'visible'});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);
-  assert.equal(await page.locator('#account-activity').textContent(),'No credit activity yet.');
+  assert.match(await page.locator('#account-activity').textContent(),/\+15 credits · Welcome credits/);assert.match(await page.locator('#account-status').textContent(),/15 credits/);
   await page.locator('#account-security summary').click();
   await page.locator('#current-password').fill('browser-test-password');
   await page.locator('#new-password').fill('replacement-test-password');

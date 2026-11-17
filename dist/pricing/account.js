@@ -2,7 +2,7 @@
 (async()=>{
   const el=id=>document.getElementById(id);
   const status=message=>{el('account-status').textContent=message;};
-  let configured=false,customerAccounts=false,developmentLogin=false,emailEnabled=false;
+  let pack={amount:500,credits:10,currency:'usd'},configured=false,customerAccounts=false,developmentLogin=false,emailEnabled=false;
   let checkoutAttempt,pollTimer,pollGeneration=0;
   function stopPolling(){clearTimeout(pollTimer);pollGeneration++;}
   const attemptStorage='coasterprint.checkoutAttempt';
@@ -30,7 +30,7 @@
   }
   function checkoutState(signedIn){
     el('test-checkout').disabled=!configured || !signedIn;
-    el('test-checkout').textContent=!configured?'Purchases unavailable':signedIn?'Open test checkout · $5 / 10 credits':'Sign in to use test checkout';
+    el('test-checkout').textContent=!configured?'Purchases unavailable':signedIn?`Open test checkout · $${(pack.amount/100).toFixed(2)} / ${pack.credits} credits`:'Sign in to use test checkout';
     el('purchase-hint').textContent=!configured?'Purchases are not available yet. No live payments are collected.':'Test checkout only. No real money will be charged.';
   }
   function unavailable(){el('account-unavailable').textContent='Account services are unavailable in this preview. You can still use the maker.';checkoutState(false);}
@@ -41,7 +41,7 @@
   async function refresh(){
     try{
       const data=await request('/api/account');
-      el('account-balance').textContent=data.credits;
+      el('account-balance').textContent=data.credits;el('admin-link').hidden=!data.admin;
       el('account-security').hidden=!data.passwordAccount;
       el('signout-everywhere').hidden=!data.passwordAccount;
       el('account-email').textContent=data.email || 'Development test account';
@@ -49,7 +49,7 @@
       el('email-verification-status').textContent=data.passwordAccount?(data.emailVerified?'Email verified.':'Your email has not been verified yet.'):'';
       el('send-verification').hidden=!data.passwordAccount || data.emailVerified || !emailEnabled;
       const history=el('account-activity');history.replaceChildren();
-      for(const entry of data.activity){const item=document.createElement('li');item.textContent=(entry.delta>0?'+':'')+entry.delta+' credits · '+({purchase:'Test purchase',export_trial:'Test export',test_grant:'Test credits'}[entry.kind] || entry.kind);history.append(item);}
+      for(const entry of data.activity){const item=document.createElement('li');item.textContent=(entry.delta>0?'+':'')+entry.delta+' credits · '+({purchase:'Credit purchase',export_trial:'3MF export',test_grant:'Test credits',welcome:'Welcome credits',admin_adjustment:'Admin adjustment'}[entry.kind] || entry.kind);history.append(item);}
       if(!data.activity.length){const item=document.createElement('li');item.textContent='No credit activity yet.';history.append(item);}
       el('account-login').hidden=true;el('customer-login').hidden=true;el('connected-account').hidden=false;
       checkoutState(true);
@@ -60,6 +60,7 @@
     const config=await request('/api/config');
     customerAccounts=config.customerAccounts===true;developmentLogin=config.developmentLogin===true;
     if(!developmentLogin && !customerAccounts){unavailable();return;}
+    pack=config;el('pack-price').textContent=new Intl.NumberFormat('en-US',{style:'currency',currency:pack.currency || 'USD'}).format((pack.amount || 500)/100)+' USD';el('pack-credits').textContent=(pack.credits || 10)+' credits';
     configured=config.paymentsEnabled===true;emailEnabled=config.emailEnabled===true;
     el('recovery-link').hidden=!customerAccounts || !emailEnabled;el('test-inbox-link').hidden=!config.developmentInbox;
     el('account-unavailable').hidden=true;el('test-account').hidden=false;
@@ -92,7 +93,8 @@
       }
     }
     else if(result==='canceled')status('Checkout canceled. No credits were added by returning to this page.');
-    else status('');
+    else if(connected)status(`Signed in. You have ${el('account-balance').textContent} credits.`);else status('');
+    if(!connected && new URLSearchParams(location.search).get('register')==='1')setAuthMode('register');
 
   }catch{unavailable();return;}
   el('customer-login').addEventListener('submit',async event=>{
@@ -103,7 +105,7 @@
     try{
       const accountResult=await request(register?'/api/register':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:el('customer-email').value,password:el('customer-password').value})});
       el('customer-password').value='';
-      if(await refresh())status(register?(emailEnabled?(accountResult.verificationSent?'Account created. Verification email sent.':'Account created. Email could not be sent; use Send verification link to try again.'):'Account created.'):'Signed in.');
+      if(await refresh())status(register?(emailEnabled?(accountResult.verificationSent?'Account created. Verification email sent.':'Account created. Email could not be sent; use Send verification link to try again.'):'Account created.'):`Signed in. You have ${accountResult.credits} credits.`);
     }catch(error){el('customer-password').value='';status(error.message);}finally{buttons.forEach(button=>button.disabled=false);}
   });
   el('account-login').addEventListener('submit',async event=>{

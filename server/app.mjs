@@ -1,4 +1,5 @@
 import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto';
+import {adminRequest,publicSettings} from './admin.mjs';
 import {credentials,passwordHash,passwordMatches} from './passwords.mjs';
 export function verifyWebhook(body, signature, secret, now=Date.now()) {
   if (!secret || typeof signature !== 'string') return false;
@@ -9,7 +10,7 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
 export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch}) {
-  const paymentsEnabled=secretKey?.startsWith('sk_test_') && Boolean(webhookSecret);
+
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
     const identity=ledger.identityForAccount(account);const token=ledger.issueChallenge(account,purpose);
@@ -20,14 +21,19 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
   return async (req,res) => {
     const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));};
     try {
+      const settings=ledger.settings();
+      const activeSecret=settings.secretKey || secretKey,activeWebhook=settings.webhookSecret || webhookSecret;
+      const providerConfigured=activeSecret?.startsWith('sk_test_') && Boolean(activeWebhook);
+      const paymentsEnabled=settings.billingEnabled && providerConfigured;
+      const chargeExports=settings.billingEnabled || exportCreditTrial;
       const path=new URL(req.url,'http://localhost').pathname;
       if (req.method==='GET' && path==='/health') return send(200,{ok:true,paymentsEnabled:Boolean(paymentsEnabled),mode:'test'});
       if (req.method==='POST' && path==='/api/webhooks/stripe') {
-        if (!paymentsEnabled) return send(503,{error:'Test payments are not configured'});
+        if (!providerConfigured) return send(503,{error:'Test payments are not configured'});
         const chunks=[];let size=0;
         for await (const chunk of req) {size+=chunk.length;if(size>262144)return send(413,{error:'Payload too large'});chunks.push(chunk);}
         const body=Buffer.concat(chunks);
-        if (!verifyWebhook(body,req.headers['stripe-signature'],webhookSecret)) return send(400,{error:'Invalid webhook signature'});
+        if (!verifyWebhook(body,req.headers['stripe-signature'],activeWebhook)) return send(400,{error:'Invalid webhook signature'});
         let event;try {event=JSON.parse(body);} catch {return send(400,{error:'Invalid JSON'});}
         if (!event || typeof event.id!=='string' || !event.id || typeof event.type!=='string') return send(400,{error:'Invalid event'});
         ledger.creditPayment(event);
@@ -36,7 +42,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       const session=req.headers.cookie?.match(/(?:^|;\s*)cl_session=([a-f0-9]{64})(?:;|$)/)?.[1];
       const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
-      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox,exportCreditTrial});
+      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox,exportCreditTrial:chargeExports,exportLoginRequired:customerAccounts,...publicSettings(settings)});
       if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
       if(req.method==='GET' && path==='/api/dev/inbox') {
         const local=['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
@@ -93,10 +99,11 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
             if(!await passwordMatches(input.password,identity) || ledger.identity(input.email)?.digest!==identity?.digest)return send(401,{error:'Email or password is incorrect.'});
             id=identity.account;
           }
+          if(ledger.control(id).suspended)return send(403,{error:'This account is suspended. Contact support.'});
           ledger.revokeSession(session);cookie(ledger.createSession(id),86400);
           let verificationSent=false;
           if(path==='/api/register' && emailEnabled){try{await sendChallenge(id,'verify');verificationSent=true;}catch{}}
-          return send(path==='/api/register'?201:200,{ok:true,verificationSent});
+          return send(path==='/api/register'?201:200,{ok:true,verificationSent,credits:ledger.balance(id)});
         }finally{activePasswordRequests--;}
       }
       if (req.method==='POST' && path==='/api/session') {
@@ -113,19 +120,21 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       }
       const account=ledger.authenticate(bearer) || ledger.sessionAccount(session);
       if (!account) return send(401,{error:'Authentication required'});
+      if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret});
       if(req.method==='POST' && ['/api/export-quote','/api/export-debit'].includes(path)) {
-        if(!exportCreditTrial)return send(404,{error:'Export credit trial is disabled'});
+        if(!customerAccounts && !chargeExports)return send(404,{error:'Account exports are disabled'});
         if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Payload too large'});}
         let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
         if(!body || typeof body.fingerprint!=='string' || !/^[a-f0-9]{64}$/.test(body.fingerprint) || !Number.isInteger(body.count) || body.count<1 || body.count>10)return send(400,{error:'Invalid export reference or coaster count'});
+        if(!chargeExports)return send(200,{cost:0,balance:ledger.balance(account),remaining:ledger.balance(account),retry:false,billingEnabled:false});
         const result=path==='/api/export-quote'?ledger.exportQuote(account,body.fingerprint,body.count):ledger.debitExport(account,body.fingerprint,body.count);
         if(result.error)return send(result.status,{error:result.error});
         return send(200,result);
       }
       if (req.method==='GET' && path==='/api/account') {
         const identity=ledger.identityForAccount(account);
-        return send(200,{credits:ledger.balance(account),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),activity:ledger.activity(account)});
+        return send(200,{credits:ledger.balance(account),admin:Boolean(ledger.control(account).admin),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),activity:ledger.activity(account)});
       }
       if(req.method==='POST' && path==='/api/send-verification') {
         if(!emailEnabled)return send(503,{error:'Email verification is not configured'});
@@ -170,13 +179,13 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if (req.headers.origin && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
         const key=req.headers['idempotency-key'] || randomUUID();
         if(typeof key!=='string' || !/^[a-zA-Z0-9_-]{16,100}$/.test(key))return send(400,{error:'Invalid checkout request key'});
-        const attempt=ledger.checkoutOrder(account,key);
+        const attempt=ledger.checkoutOrder(account,key,Date.now(),settings);
         const state=ledger.orderStatus(account,attempt.id);
         if(state==='confirmed')return send(409,{error:'This checkout is already confirmed. Refresh your balance.',code:'checkout_complete'});
         if(state==='expired')return send(409,{error:'Checkout attempt expired. Try again to start a new checkout.',code:'checkout_expired'});
         const order=attempt.id;
-        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':'usd','line_items[0][price_data][unit_amount]':'500','line_items[0][price_data][product_data][name]':'CoasterPrint — 10 export credits (test)','line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order,cancel_url:origin+'/pricing/?checkout=canceled&order='+order,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order});
-        const response=await fetchImpl('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+secretKey,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':order},body:form,signal:AbortSignal.timeout(15000)});
+        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':attempt.currency,'line_items[0][price_data][unit_amount]':String(attempt.amount),'line_items[0][price_data][product_data][name]':`CoasterPrint — ${attempt.credits} export credits (test)`,'line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order,cancel_url:origin+'/pricing/?checkout=canceled&order='+order,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order});
+        const response=await fetchImpl('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+activeSecret,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':order},body:form,signal:AbortSignal.timeout(15000)});
         if (!response.ok) return send(502,{error:'Checkout provider unavailable'});
         const session=await response.json();
         if (typeof session.id!=='string' || typeof session.url!=='string' || !session.url.startsWith('https://checkout.stripe.com/')) return send(502,{error:'Invalid checkout response'});

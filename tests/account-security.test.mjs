@@ -26,7 +26,7 @@ test('password change requires current password, rotates sessions and preserves 
   assert.equal(await passwordMatches('original-password',ledger.identity('maker@example.com')),false);
   const cookie=response.headers.get('set-cookie').split(';')[0];
   const account=await (await fetch(origin+'/api/account',{headers:{Cookie:cookie}})).json();
-  assert.equal(account.credits,10);assert.equal(account.email,'maker@example.com');assert.equal(account.activity.length,1);
+  assert.equal(account.credits,25);assert.equal(account.email,'maker@example.com');assert.equal(account.activity.length,2);
   assert.equal(account.activity[0].delta,10);
   assert.equal((await fetch(origin+'/api/logout-all',{method:'POST',headers:{Origin:origin,Authorization:'Bearer '+otherAccount.token}})).status,403);
   assert.equal(ledger.authenticate(otherAccount.token),otherAccount.id);
