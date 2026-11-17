@@ -59,7 +59,7 @@ still exceed a phone's memory or processing budget.
 
 See [ROADMAP.md](ROADMAP.md). The first selected priority is export credits and the
 pricing flow. The opt-in backend now provides accounts, test checkout and credit accounting.
-Real payment verification, real email delivery and paid export enforcement are pending. No production deployment is configured here.
+Hosted verification/recovery emails and Stripe sandbox payments have been verified by the owner. Development and production deployments are separate. Production live activation is documented in [LIVE-PAYMENTS.md](LIVE-PAYMENTS.md).
 
 ## Pricing prototype
 
@@ -80,27 +80,27 @@ A Node 24 / SQLite test API now supports development account tokens, persistent
 credit balances, server-priced Stripe test checkout, and signed idempotent
 payment webhooks. Run `npm test` and `npm start`; see [server setup](server/README.md).
 The pricing simulator remains separate. Customer sign-in is an opt-in preview;
-live payments and paid export enforcement are disabled. CI runs the backend tests on pushes and PRs.
+live payments default off and hosted 3MF delivery is account-bound. CI runs the backend tests on pushes and PRs.
 
 For integrated account/checkout testing, use `ENABLE_DEV_LOGIN=1 npm start` and
 the same-origin server on port 3003. Its pricing page includes an opt-in
 development account panel; the static-only server on port 3002 keeps that panel
 hidden. Run `node scripts/verify-checkout.mjs` for a self-contained mocked-provider
-browser test. Real Stripe sandbox verification is pending.
+browser test. The owner has verified the hosted Stripe sandbox flow.
 
 Customer registration and sign-in are available as an opt-in preview via
 `ENABLE_CUSTOMER_ACCOUNTS=1 npm start`. The pricing page then uses email/password
 accounts and the persistent credit balance. Run `node scripts/verify-accounts.mjs`
-for the self-contained browser test. Real email delivery is pending;
+for the self-contained browser test. Hosted email delivery has been verified;
 this preview is not a public account launch.
 
 Signed-in customer accounts can change their password and sign out every session.
 The account panel also shows the latest 50 ledger entries. Password changes
-require the current password and preserve the credit balance; real email delivery still requires configuration and validation.
+require the current password and preserve the credit balance; hosted verification and recovery delivery have been verified.
 
 Checkout requests reuse an account-scoped attempt after network errors or reloads.
 The return page checks for webhook confirmation and refreshes confirmed credits.
-Provider calls remain test-only and the automated checkout tests use a mock.
+Automated checkout tests use a mock. Production live calls require the separate permission, credentials and admin switch described in LIVE-PAYMENTS.md.
 
 Verification and forgotten-password recovery now have single-use, expiring links
 and a local test inbox. A real email provider is not configured. The automated

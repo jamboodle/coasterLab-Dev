@@ -21,7 +21,7 @@ export class Ledger {
     const columns=new Set(this.db.prepare('PRAGMA table_info(orders)').all().map(row=>row.name));
     if(!columns.has('request_key'))this.db.exec('ALTER TABLE orders ADD COLUMN request_key TEXT');
     if(!columns.has('created_at'))this.db.exec('ALTER TABLE orders ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
-    for(const [name,definition] of [['pack_id',"TEXT NOT NULL DEFAULT 'starter'"],['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"]]){
+    for(const [name,definition] of [['payment_mode',"TEXT NOT NULL DEFAULT 'test'"],['pack_id',"TEXT NOT NULL DEFAULT 'starter'"],['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"]]){
       if(!columns.has(name))this.db.exec(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
     }
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key); CREATE INDEX IF NOT EXISTS entries_account ON entries(account)');
@@ -148,8 +148,8 @@ export class Ledger {
     if(!Number.isInteger(count)||count<1||count>1000)throw Error('Use 1 to 1000 test credits');
     this.db.prepare("INSERT INTO entries VALUES (?,?,?,'test_grant')").run('grant:'+randomBytes(16).toString('hex'),account,count);
   }
-  checkoutOrder(account,key,now=Date.now(),pack={amount:500,credits:10,currency:'usd'}) {
-    this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at,amount,credits,currency,pack_id) VALUES (?,?,?,?,?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now,pack.amount,pack.credits,pack.currency,pack.id || 'starter');
+  checkoutOrder(account,key,now=Date.now(),pack={amount:500,credits:10,currency:'usd'},paymentMode='test') {
+    this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at,amount,credits,currency,pack_id,payment_mode) VALUES (?,?,?,?,?,?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now,pack.amount,pack.credits,pack.currency,pack.id || 'starter',paymentMode);
     return this.db.prepare('SELECT * FROM orders WHERE account=? AND request_key=?').get(account,key);
   }
   orderStatus(account,id,now=Date.now()) {
@@ -167,12 +167,19 @@ export class Ledger {
     const result=this.db.prepare('UPDATE orders SET session=? WHERE id=? AND (session IS NULL OR session=?)').run(session,id,session);
     if(result.changes!==1)throw new Error('Checkout session mismatch');
   }
-  creditPayment(event) {
+  creditPayment(event,paymentMode='test') {
     const s=event.data?.object;
     if (!['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)) return false;
-    if (event.livemode !== false || s?.livemode !== false || s.payment_status !== 'paid' || s.mode !== 'payment') return false;
+    if(!['test','live'].includes(paymentMode))return false;
+    const live=paymentMode==='live';
+    if (event.livemode !== live || s?.livemode !== live || s.payment_status !== 'paid' || s.mode !== 'payment') return false;
     const order=this.db.prepare('SELECT * FROM orders WHERE session=?').get(s.id);
-    if (!order) throw new Error('Unknown checkout session');
+    if(!order){
+      const pending=typeof s.metadata?.order_id==='string'?this.db.prepare('SELECT * FROM orders WHERE id=?').get(s.metadata.order_id):undefined;
+      if(pending && !pending.session && pending.payment_mode===paymentMode)throw Error('Checkout attachment pending; retry webhook');
+      return false;
+    }
+    if(order.payment_mode!==paymentMode)return false;
     if(s.amount_total!==order.amount || s.currency!==order.currency)return false;
     this.db.exec('BEGIN IMMEDIATE');
     try {
@@ -189,7 +196,7 @@ export class Ledger {
     this.revokeAllSessions(identity.account);return identity.account;
   }
   settings() {
-    const defaults={welcomeCredits:15,billingEnabled:false,amount:500,credits:10,currency:'usd',additionalPacks:[{id:'standard',amount:1000,credits:50},{id:'large',amount:1500,credits:100}],secretKey:'',webhookSecret:''};
+    const defaults={paymentMode:'test',livePaymentsEnabled:false,liveSecretKey:'',liveWebhookSecret:'',welcomeCredits:15,billingEnabled:false,amount:500,credits:10,currency:'usd',additionalPacks:[{id:'standard',amount:1000,credits:50},{id:'large',amount:1500,credits:100}],secretKey:'',webhookSecret:''};
     for(const row of this.db.prepare('SELECT key,value FROM settings').all())if(Object.hasOwn(defaults,row.key))defaults[row.key]=JSON.parse(row.value);
     return defaults;
   }

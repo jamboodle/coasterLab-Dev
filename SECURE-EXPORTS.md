@@ -77,7 +77,7 @@ exportable, and previously downloaded standalone code cannot be recalled. Users
 can convert free geometry with other software. The service counts submitted
 coaster assemblies; no system can infer the number of original images from
 arbitrarily edited meshes. This is not DRM against manual model editing/conversion.
-Live Stripe keys remain unsupported; this release does not enable live payments.
+Live Stripe support is separately gated and disabled by default; see LIVE-PAYMENTS.md.
 
 ## Verification
 

@@ -2,16 +2,19 @@
 (async()=>{
   const el=id=>document.getElementById(id);
   const status=message=>{el('account-status').textContent=message;};
+  let paymentMode='test';
   let pack={amount:500,credits:10,currency:'usd'},packs=[],selectedPack='starter',signedIn=false,configured=false,customerAccounts=false,developmentLogin=false,emailEnabled=false;
   let checkoutAttempt,pollTimer,pollGeneration=0;
   function stopPolling(){clearTimeout(pollTimer);pollGeneration++;}
   const returnedPack=new URLSearchParams(location.search).get('pack');if(['standard','large'].includes(returnedPack))selectedPack=returnedPack;
-  let attemptStorage='coasterprint.checkoutAttempt'+(selectedPack==='starter'?'':'.'+selectedPack);
-  function clearAttempt(){checkoutAttempt=undefined;try{sessionStorage.removeItem(attemptStorage);if(selectedPack==='starter')sessionStorage.removeItem('coasterlab.checkoutAttempt');}catch{}}
+  const returnedMode=new URLSearchParams(location.search).get('paymentMode');
+  const storageKey=(mode=paymentMode)=>'coasterprint.checkoutAttempt'+(mode==='live'?'.live':'')+(selectedPack==='starter'?'':'.'+selectedPack);
+  let attemptStorage=storageKey();
+  function clearAttempt(mode=paymentMode){if(mode===paymentMode)checkoutAttempt=undefined;try{sessionStorage.removeItem(storageKey(mode));if(mode==='test'&&selectedPack==='starter')sessionStorage.removeItem('coasterlab.checkoutAttempt');}catch{}}
   function requestKey(){
-    if(!checkoutAttempt){try{checkoutAttempt=sessionStorage.getItem(attemptStorage) || (selectedPack==='starter'?sessionStorage.getItem('coasterlab.checkoutAttempt'):null);}catch{}}
+    if(!checkoutAttempt){try{checkoutAttempt=sessionStorage.getItem(attemptStorage) || (paymentMode==='test'&&selectedPack==='starter'?sessionStorage.getItem('coasterlab.checkoutAttempt'):null);}catch{}}
     if(!checkoutAttempt || !/^[a-zA-Z0-9_-]{16,100}$/.test(checkoutAttempt))checkoutAttempt=crypto.randomUUID();
-    try{sessionStorage.setItem(attemptStorage,checkoutAttempt);if(selectedPack==='starter')sessionStorage.removeItem('coasterlab.checkoutAttempt');}catch{}
+    try{sessionStorage.setItem(attemptStorage,checkoutAttempt);if(paymentMode==='test'&&selectedPack==='starter')sessionStorage.removeItem('coasterlab.checkoutAttempt');}catch{}
     return checkoutAttempt;
   }
   async function request(path,options={}) {
@@ -32,8 +35,8 @@
   function checkoutState(connected){
     signedIn=connected;
     el('test-checkout').disabled=!configured || !signedIn;
-    el('test-checkout').textContent=!configured?'Purchases unavailable':signedIn?`Open test checkout · $${(pack.amount/100).toFixed(2)} / ${pack.credits} credits`:'Sign in to use test checkout';
-    el('purchase-hint').textContent=!configured?'Purchases are not available yet. No live payments are collected.':'Test checkout only. No real money will be charged.';
+    el('test-checkout').textContent=!configured?'Purchases unavailable':signedIn?`${paymentMode==='live'?'Buy credits':'Open test checkout'} · $${(pack.amount/100).toFixed(2)} / ${pack.credits} credits`:'Sign in to buy credits';
+    el('purchase-hint').textContent=!configured?'New credit purchases are currently unavailable.':paymentMode==='live'?`You will pay $${(pack.amount/100).toFixed(2)} USD for ${pack.credits} credits. One-time purchase.`:'Test checkout only. No real money will be charged.';
   }
   function unavailable(){el('account-unavailable').textContent='Account services are unavailable in this preview. You can still use the maker.';checkoutState(false);}
   setAuthMode('signin');
@@ -63,9 +66,10 @@
     customerAccounts=config.customerAccounts===true;developmentLogin=config.developmentLogin===true;
     if(!developmentLogin && !customerAccounts){unavailable();return;}
     el('welcome-hint').textContent=config.welcomeCredits>0?`Start with ${config.welcomeCredits} free credits.`:'';el('welcome-description').textContent=config.welcomeCredits>0?`New accounts start with ${config.welcomeCredits} credits.`:'';
+    paymentMode=config.mode==='live'?'live':'test';attemptStorage=storageKey();el('payment-badge').textContent=paymentMode==='live'?'Credit packs':'Sandbox';el('payment-note').textContent=paymentMode==='live'?'Payments are handled securely by Stripe. Credits are added after payment confirmation.':'Sandbox payments only. No real money is charged.';
     packs=config.packs;pack=packs.find(pack=>pack.id===selectedPack);
     el('pack-options').replaceChildren();const legend=document.createElement('legend');legend.textContent='Choose your credit pack';el('pack-options').append(legend);
-    for(const option of packs){const label=document.createElement('label');label.className='pack-choice';const radio=document.createElement('input');radio.type='radio';radio.name='credit-pack';radio.value=option.id;radio.checked=option.id===selectedPack;const credits=document.createElement('span');credits.textContent=option.credits+' credits';const price=document.createElement('strong');price.textContent=new Intl.NumberFormat('en-US',{style:'currency',currency:option.currency}).format(option.amount/100)+' USD';if(option.id==='starter'){credits.id='pack-credits';price.id='pack-price';}label.append(radio,credits,price);el('pack-options').append(label);radio.addEventListener('change',()=>{if(!radio.checked)return;selectedPack=option.id;pack=option;checkoutAttempt=undefined;attemptStorage='coasterprint.checkoutAttempt'+(selectedPack==='starter'?'':'.'+selectedPack);checkoutState(signedIn);});}
+    for(const option of packs){const label=document.createElement('label');label.className='pack-choice';const radio=document.createElement('input');radio.type='radio';radio.name='credit-pack';radio.value=option.id;radio.checked=option.id===selectedPack;const credits=document.createElement('span');credits.textContent=option.credits+' credits';const price=document.createElement('strong');price.textContent=new Intl.NumberFormat('en-US',{style:'currency',currency:option.currency}).format(option.amount/100)+' USD';if(option.id==='starter'){credits.id='pack-credits';price.id='pack-price';}label.append(radio,credits,price);el('pack-options').append(label);radio.addEventListener('change',()=>{if(!radio.checked)return;selectedPack=option.id;pack=option;checkoutAttempt=undefined;attemptStorage=storageKey();checkoutState(signedIn);});}
     configured=config.paymentsEnabled===true;emailEnabled=config.emailEnabled===true;
     el('recovery-link').hidden=!customerAccounts || !emailEnabled;el('test-inbox-link').hidden=!config.developmentInbox;
     el('account-unavailable').hidden=true;el('test-account').hidden=false;
@@ -83,7 +87,7 @@
           try{
             const result=await request('/api/checkout-status?order='+order);
             if(generation!==pollGeneration)return true;
-            if(result.status==='confirmed'){clearAttempt();await refresh();status('Payment confirmed. Your credits are ready.');return true;}
+            if(result.status==='confirmed'){clearAttempt(['test','live'].includes(returnedMode)?returnedMode:paymentMode);await refresh();status('Payment confirmed. Your credits are ready.');return true;}
             if(result.status==='expired'){clearAttempt();status('This checkout has expired. Refresh your balance before starting another purchase.');return true;}
             status('Payment confirmation is pending. Your credits will appear after the payment provider confirms it.');
           }catch{if(generation===pollGeneration)status('Could not check payment confirmation. Refresh your balance or try again later.');return true;}
@@ -141,12 +145,12 @@
     try{await request('/api/logout-all',{method:'POST'});el('password-change').reset();clearAttempt();disconnected();status('Signed out everywhere.');}catch(error){status(error.message);}
   });
   el('test-checkout').addEventListener('click',async()=>{
-    el('test-checkout').disabled=true;status('Opening Stripe test checkout…');
+    el('test-checkout').disabled=true;status(paymentMode==='live'?'Opening secure Stripe checkout…':'Opening Stripe test checkout…');
     try{
-      const data=await request('/api/checkout',{method:'POST',headers:{'Idempotency-Key':requestKey(),'Content-Type':'application/json'},body:JSON.stringify({pack:selectedPack})});
+      const data=await request('/api/checkout',{method:'POST',headers:{'Idempotency-Key':requestKey(),'Content-Type':'application/json'},body:JSON.stringify({pack:selectedPack,mode:paymentMode})});
       const url=new URL(data.url);
       if(url.protocol!=='https:' || url.hostname!=='checkout.stripe.com')throw Error('Invalid checkout destination.');
       location.assign(url.href);
-    }catch(error){if(['checkout_complete','checkout_expired','checkout_pack_mismatch'].includes(error.code)){clearAttempt();await refresh();}status(error.message);el('test-checkout').disabled=!configured;}
+    }catch(error){if(['checkout_mode_changed','checkout_mode_mismatch'].includes(error.code)){clearAttempt();location.reload();return;}if(['checkout_complete','checkout_expired','checkout_pack_mismatch'].includes(error.code)){clearAttempt();await refresh();}status(error.message);el('test-checkout').disabled=!configured;}
   });
 })();

@@ -6,7 +6,7 @@ export function creditPacks(settings){return [{id:'starter',amount:settings.amou
 export function publicSettings(settings){
  return {welcomeCredits:settings.welcomeCredits,billingEnabled:settings.billingEnabled,amount:settings.amount,credits:settings.credits,currency:settings.currency,packs:creditPacks(settings)};
 }
-export async function adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret}){
+export async function adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments}){
  if(!ledger.control(account).admin || !ledger.identityForAccount(account))return send(403,{error:'Administrator access required.'});
  if(req.method==='POST' && req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
  if(req.method==='GET' && path==='/api/admin/users'){
@@ -17,14 +17,23 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
  }
  if(req.method==='GET' && path==='/api/admin/audit')return send(200,{entries:ledger.auditLog()});
  if(req.method==='GET' && path==='/api/admin/settings'){
-  const settings=ledger.settings();return send(200,{...publicSettings(settings),secretKeyConfigured:Boolean(settings.secretKey || secretKey),webhookSecretConfigured:Boolean(settings.webhookSecret || webhookSecret),mode:'test'});
+  const settings=ledger.settings();return send(200,{...publicSettings(settings),secretKeyConfigured:Boolean(settings.secretKey || secretKey),webhookSecretConfigured:Boolean(settings.webhookSecret || webhookSecret),liveSecretKeyConfigured:Boolean(settings.liveSecretKey),liveWebhookSecretConfigured:Boolean(settings.liveWebhookSecret),paymentMode:settings.paymentMode,livePaymentsEnabled:settings.livePaymentsEnabled,livePaymentsAllowed:payments.liveAllowed,testPaymentsAllowed:payments.testAllowed,mode:payments.mode});
  }
  if(req.method!=='POST')return send(404,{error:'Not found'});
  try{
   const body=await jsonBody(req);
   if(path==='/api/admin/settings'){
-   const allowed=['welcomeCredits','billingEnabled','amount','credits','currency','additionalPacks','secretKey','webhookSecret'];
+   const allowed=['paymentMode','livePaymentsEnabled','liveSecretKey','liveWebhookSecret','welcomeCredits','billingEnabled','amount','credits','currency','additionalPacks','secretKey','webhookSecret'];
    if(Object.keys(body).some(key=>!allowed.includes(key)))throw Error('Unknown setting.');
+   if('paymentMode' in body&&!['test','live'].includes(body.paymentMode))throw Error('Choose test or live payment mode.');
+   if('livePaymentsEnabled' in body&&typeof body.livePaymentsEnabled!=='boolean')throw Error('Live payments must be on or off.');
+   const current=ledger.settings();
+   if(((body.paymentMode==='live'&&current.paymentMode!=='live')||(body.livePaymentsEnabled===true&&!current.livePaymentsEnabled)||'liveSecretKey' in body||'liveWebhookSecret' in body)&&!payments.liveAllowed)throw Error('Live payments are locked. Enable them on the production server first.');
+   if('liveSecretKey' in body&&(typeof body.liveSecretKey!=='string'||!/^sk_live_[A-Za-z0-9_]{4,240}$/.test(body.liveSecretKey)))throw Error('Enter a Stripe live secret key beginning sk_live_.');
+   if('liveWebhookSecret' in body&&(typeof body.liveWebhookSecret!=='string'||!/^whsec_[A-Za-z0-9_]{4,240}$/.test(body.liveWebhookSecret)))throw Error('Enter a valid live webhook signing secret.');
+   const next={...current,...body};
+   if(('liveSecretKey' in body||'liveWebhookSecret' in body)&&next.livePaymentsEnabled)throw Error('Turn live payments off before replacing live credentials.');
+   if(next.livePaymentsEnabled&&(!next.liveSecretKey||!next.liveWebhookSecret))throw Error('Configure the live secret key and live webhook before enabling live payments.');
    if('welcomeCredits' in body && (!Number.isInteger(body.welcomeCredits)||body.welcomeCredits<0||body.welcomeCredits>100000))throw Error('New user credits must be a whole number from 0 to 100,000.');
    if('billingEnabled' in body && typeof body.billingEnabled!=='boolean')throw Error('Billing must be on or off.');
    if('amount' in body && (!Number.isInteger(body.amount)||body.amount<50||body.amount>100000))throw Error('Price must be between $0.50 and $1,000.');
@@ -36,7 +45,7 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
     }
    }
    if('currency' in body && body.currency!=='usd')throw Error('Only USD is currently supported.');
-   if('secretKey' in body && (typeof body.secretKey!=='string'||!/^sk_test_[A-Za-z0-9_]{4,240}$/.test(body.secretKey)))throw Error('Only Stripe test secret keys are supported until live billing is implemented.');
+   if('secretKey' in body && (typeof body.secretKey!=='string'||!/^sk_test_[A-Za-z0-9_]{4,240}$/.test(body.secretKey)))throw Error('Enter a Stripe sandbox secret key beginning sk_test_. Live keys belong in the separate live connection.');
    if('webhookSecret' in body && (typeof body.webhookSecret!=='string'||!/^whsec_[A-Za-z0-9_]{4,240}$/.test(body.webhookSecret)))throw Error('Enter a valid webhook signing secret.');
    ledger.saveSettings(account,body);return send(200,{ok:true});
   }

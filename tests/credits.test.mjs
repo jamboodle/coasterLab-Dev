@@ -40,7 +40,7 @@ test('unpaid, wrong-value, live, unknown and canceled purchases never add credit
    const event=payment();Object.assign(event.data.object,change);assert.equal(ledger.creditPayment(event),false);
   }
   const expired=payment();expired.type='checkout.session.expired';assert.equal(ledger.creditPayment(expired),false);
-  assert.throws(()=>ledger.creditPayment(payment('evt_unknown','cs_unknown')),/Unknown/);
+  assert.equal(ledger.creditPayment(payment('evt_unknown','cs_unknown')),false);
   assert.equal(ledger.balance(a.id),0);
  }finally{ledger.close();}
 });

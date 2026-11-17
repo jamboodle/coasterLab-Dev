@@ -35,8 +35,9 @@ and https://coasterprint.com/admin/. Development admin access is not copied.
   Secret values are write-only from the panel and are not included in audit output.
   They are stored in the protected `.data/credits.sqlite` database, not encrypted
   separately; restrict OS/database access. Blank inputs keep the existing keys.
-  Stored values override service environment keys. Live Stripe keys remain
-  unsupported until the separate live billing work is completed.
+  Stored sandbox values override sandbox service environment keys. Live keys and
+  signing secrets use separate fields, a separate production-only server permission
+  and an explicit live-payments switch. See [LIVE-PAYMENTS.md](LIVE-PAYMENTS.md).
 - Business identity, bank and payout changes are made in Stripe's own dashboard,
   linked from Payments. These details are not collected or stored by CoasterPrint.
 
@@ -67,4 +68,4 @@ retries of the same bytes do not debit twice.
 3MF assembly and release now run on the server; see [SECURE-EXPORTS.md](SECURE-EXPORTS.md)
 for the deployment proxy step, privacy changes, retention and limits. Free STL
 geometry remains local and can be converted in other software. Live billing is
-still disabled until live Stripe support is implemented.
+off by default and require production activation; see [LIVE-PAYMENTS.md](LIVE-PAYMENTS.md).

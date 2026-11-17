@@ -14,7 +14,7 @@ test('three authoritative packs, independent checkout references, snapshot prici
   const config=await (await fetch(origin+'/api/config')).json();assert.deepEqual(config.packs.map(({id,amount,credits})=>({id,amount,credits})),[{id:'starter',amount:500,credits:10},{id:'standard',amount:1000,credits:50},{id:'large',amount:1500,credits:100}]);
   for(const [pack,amount,credits] of [['standard',1000,50],['large',1500,100]]){
    const key='pack-request-'+pack;assert.equal((await checkout(pack,key,{amount:1,credits:9999})).status,200);
-   assert.equal(forms.at(-1).get('line_items[0][price_data][unit_amount]'),String(amount));assert.match(forms.at(-1).get('line_items[0][price_data][product_data][name]'),new RegExp(credits+' export credits'));assert.ok(forms.at(-1).get('success_url').endsWith('&pack='+pack));
+   assert.equal(forms.at(-1).get('line_items[0][price_data][unit_amount]'),String(amount));assert.match(forms.at(-1).get('line_items[0][price_data][product_data][name]'),new RegExp(credits+' export credits'));assert.equal(new URL(forms.at(-1).get('success_url')).searchParams.get('pack'),pack);
    const order=ledger.db.prepare('SELECT * FROM orders WHERE request_key=?').get(key);assert.equal(order.credits,credits);
    const event={id:'evt_'+pack,type:'checkout.session.completed',livemode:false,data:{object:{id:order.session,livemode:false,payment_status:'paid',mode:'payment',amount_total:amount,currency:'usd'}}};
    const wrong=structuredClone(event);wrong.data.object.amount_total=500;assert.equal(ledger.creditPayment(wrong),false);assert.equal(ledger.creditPayment(event),true);assert.equal(ledger.creditPayment(event),false);
