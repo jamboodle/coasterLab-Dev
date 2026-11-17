@@ -29,7 +29,7 @@ test('old release and holder-download links redirect to the new filenames',async
  try{
   for(const [old,target] of [['/coasterlab-r27.html','/coasterprint-r27.html'],['/downloads/coasterlab-holder-pack.zip','/downloads/coasterprint-holder-pack.zip']]){
    const response=await fetch(origin+old,{redirect:'manual'});assert.equal(response.status,308);assert.equal(response.headers.get('location'),target);
-   assert.equal((await fetch(origin+target)).status,200);
+   assert.equal((await fetch(origin+target)).status,200);if(target.endsWith('.html'))assert.equal((await fetch(origin+target,{redirect:'manual'})).headers.get('location'),'/');
   }
  }finally{await new Promise(r=>server.close(r));}
 });

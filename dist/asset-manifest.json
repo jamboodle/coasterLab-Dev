@@ -7,13 +7,11 @@
     "mono.js": "mono.a20efc23ac4a.js",
     "edge-artifacts.js": "edge-artifacts.f23987ebdf16.js",
     "stl-geometry.js": "stl-geometry.f8a893bdde00.js",
-    "filament-palette.js": "filament-palette.f9e95eb63a55.js",
-    "three-mf.js": "three-mf.13ebb7df5584.js",
     "worker.js": "worker.74127e14aef2.js",
     "stl-worker.js": "stl-worker.68bc44f813fd.js",
-    "app.js": "app.34f061ebbc7b.js",
-    "stl.js": "stl.0c80572fad34.js",
-    "batch-3mf.js": "batch-3mf.67cb02e85cf9.js",
-    "export-codec.js": "export-codec.5d7d9167e4eb.js"
+    "app.js": "app.eae56259e813.js",
+    "stl.js": "stl.28e4bd7566ef.js",
+    "batch-3mf.js": "batch-3mf.77d2b5d6fcaa.js",
+    "export-codec.js": "export-codec.ff8aa22c0237.js"
   }
 }

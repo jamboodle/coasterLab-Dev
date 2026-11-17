@@ -10,20 +10,18 @@ function parseBambuTemplate(bytes,name){
  return {name,config,width,depth,minX,minY,printer:String(config.printer_model||config.printer_settings_id||'Bambu printer'),nozzles:nozzles.map(Number),colors:Array.isArray(config.filament_colour)?config.filament_colour:[]};
 }
 function updateBatchControls(){const ready=items.filter(i=>i.stl).length;$('downloadBatch3MF').disabled=busy||ready<2||!batchTemplate;$('downloadIndividualZIP').disabled=busy||ready<2;$('batchTemplate').disabled=busy;$('batchDefault').disabled=busy;$('batchActiveProfile').textContent=batchTemplate?'Batch profile: '+batchTemplate.printer+' · '+batchTemplate.nozzles.join(' / ')+' mm nozzle':'Batch profile is not loaded. Choose a template below.';$('batchCount').textContent=ready?ready+' converted coaster'+(ready===1?'':'s')+' ready. One coaster per plate.':'Convert at least two coasters to create a multi-plate project.';}
-async function downloadBatchProject(){const ready=items.filter(i=>i.stl);if(!batchTemplate){$('batchOptions').open=true;$('batchOptions').scrollIntoView({behavior:'smooth',block:'center'});$('batchProfile').textContent='Choose a project saved from your Bambu Studio to supply printer and plate settings.';$('batchTemplate').focus();return;}if(ready.length<2)return;busy=true;render();$('notice').textContent='Packing '+ready.length+' coasters onto separate plates…';await new Promise(r=>setTimeout(r,30));try{const bytes=await packProject(ready,batchTemplate);const url=URL.createObjectURL(new Blob([bytes],{type:'model/3mf'}));download(url,'coasterprint-'+ready.length+'-plate-project.3mf',ready.length);setTimeout(()=>URL.revokeObjectURL(url),30000);const failed=items.length-ready.length;$('notice').textContent=ready.length+' plates exported using '+batchTemplate.printer+'. Colors assigned. Open as a project in Bambu Studio and match the filament slots to your spools.'+(failed?' '+failed+' image(s) without a completed 3D model were excluded.':'');}catch(e){$('notice').textContent=e.message;}finally{busy=false;render();}}
+async function downloadProject(selected,format='project'){
+ if(!selected.length||busy)return;
+ if(!batchTemplate)await batchProfilePromise;if(!batchTemplate){$('notice').textContent='Choose a Bambu printer profile first.';return;}
+ const template={config:JSON.parse(JSON.stringify(batchTemplate.config))};
+ return window.creditTrialDownload(()=>packInWorker('upload',{items:selected.map(projectGeometry),template,format}));
+}
+async function downloadBatchProject(){return downloadProject(items.filter(item=>item.stl&&!item.traceStale));}
 $('batchTemplate').onchange=async e=>{const file=e.target.files[0];if(!file)return;const token=++batchTemplateRead;batchTemplate=null;updateBatchControls();try{if(file.size>64*1024*1024)throw Error('Use an unsliced Bambu project template smaller than 64 MB.');const bytes=new Uint8Array(await file.arrayBuffer());if(token!==batchTemplateRead)return;batchTemplate=parseBambuTemplate(bytes,file.name);$('batchProfile').textContent=batchTemplate.printer+' · '+batchTemplate.nozzles.join(' / ')+' mm nozzle · '+batchTemplate.width+' × '+batchTemplate.depth+' mm plate';}catch(e){if(token===batchTemplateRead)$('batchProfile').textContent=e.message;}refreshColorProjects();updateBatchControls();};
 $('downloadBatch3MF').onclick=downloadBatchProject;
-$('downloadIndividualZIP').onclick=()=>{const ready=items.filter(i=>i.threeMF),files={};for(const item of ready)files[item.outname.replace(/\.svg$/,'.3mf')]=item.threeMF;const url=URL.createObjectURL(new Blob([fflate.zipSync(files,{level:6})],{type:'application/zip'}));download(url,'coasterprint-individual-models.zip',ready.length,true);setTimeout(()=>URL.revokeObjectURL(url),30000);};
+$('downloadIndividualZIP').onclick=()=>void downloadProject(items.filter(item=>item.stl&&!item.traceStale),'individual');
 
 async function useDefaultBatchProfile(){const token=++batchTemplateRead;batchTemplate=null;updateBatchControls();$('batchProfile').textContent='Loading P1S / 0.4 mm starter profile…';try{const response=await fetch('presets/bambu-p1s-04.json');if(!response.ok)throw Error('Default profile could not load. Choose your own Bambu project template.');const config=await response.json();if(token!==batchTemplateRead)return;const archive=fflate.zipSync({'Metadata/project_settings.config':fflate.strToU8(JSON.stringify(config))});batchTemplate=parseBambuTemplate(archive,'CoasterPrint P1S / 0.4 mm starter');$('batchTemplate').value='';$('batchProfile').textContent='Default: '+batchTemplate.printer+' · 0.4 mm nozzle · '+batchTemplate.width+' × '+batchTemplate.depth+' mm plate';}catch(e){if(token===batchTemplateRead)$('batchProfile').textContent=e.message;}refreshColorProjects();updateBatchControls();}
 $('batchDefault').onclick=useDefaultBatchProfile;let batchProfilePromise=useDefaultBatchProfile();
 
-async function refreshColorProjects(){
- if(!batchTemplate)return;
- const ready=items.filter(item=>item.stl);if(!ready.length){render();return;}
- const template=batchTemplate;busy=true;render();
- try{for(const item of ready){
-  const model=item.stl;if(item.threeMFUrl)URL.revokeObjectURL(item.threeMFUrl);item.threeMF=null;item.threeMFUrl=null;
-  try{const bytes=await packProject([{file:item.file,stl:model}],template);if(batchTemplate!==template || item.stl!==model || !items.includes(item))continue;item.threeMF=bytes;item.threeMFUrl=URL.createObjectURL(new Blob([bytes],{type:'model/3mf'}));item.stlError=null;}catch(error){item.stlError=error.message;}
- }}finally{busy=false;render();}
-}
+function refreshColorProjects(){render();}

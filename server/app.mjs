@@ -1,4 +1,5 @@
 import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto';
+import {exportRequest} from './exports.mjs';
 import {adminRequest,publicSettings,creditPacks} from './admin.mjs';
 import {credentials,passwordHash,passwordMatches} from './passwords.mjs';
 export function verifyWebhook(body, signature, secret, now=Date.now()) {
@@ -9,7 +10,7 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, secureExports=true, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch}) {
 
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
@@ -43,7 +44,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
       if(req.method==='GET' && path==='/api/maker-access'){const id=ledger.authenticate(bearer) || ledger.sessionAccount(session);if(id)ledger.touchVisit(id);return send(200,ledger.makerAccess(id));}
-      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox,exportCreditTrial:chargeExports,exportLoginRequired:customerAccounts,...publicSettings(settings)});
+      if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode:'test',emailEnabled,developmentInbox,secureExports,exportCreditTrial:chargeExports,exportLoginRequired:customerAccounts,...publicSettings(settings)});
       if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
       if(req.method==='GET' && path==='/api/dev/inbox') {
         const local=['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
@@ -131,8 +132,10 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if(typeof body?.name!=='string'||body.name.trim().length>80||/[\x00-\x1f\x7f]/.test(body.name))return send(400,{error:'Use a name of up to 80 characters.'});
         ledger.updateName(account,body.name.trim());return send(200,{ok:true});
       }
+      if(path==='/api/exports'||path.startsWith('/api/exports/'))return await exportRequest({req,res,path,send,ledger,account,origin,billingEnabled:chargeExports});
       if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret});
       if(req.method==='POST' && ['/api/export-quote','/api/export-debit'].includes(path)) {
+        if(secureExports)return send(410,{error:'Use the account-bound export preparation and download flow.'});
         if(!customerAccounts && !chargeExports)return send(404,{error:'Account exports are disabled'});
         if(req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Payload too large'});}

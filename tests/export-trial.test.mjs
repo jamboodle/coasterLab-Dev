@@ -21,7 +21,7 @@ test('export quotes do not spend; one debit survives retries and database restar
 });
 test('export HTTP trial validates requests, isolates accounts and prevents concurrent overspending',async()=>{
  const ledger=new Ledger(':memory:');const a=ledger.createAccount(),b=ledger.createAccount();ledger.grantTestCredits(a.id,3);let origin;
- const server=createServer((req,res)=>handler({ledger,origin,exportCreditTrial:true})(req,res));
+ const server=createServer((req,res)=>handler({ledger,origin,secureExports:false,exportCreditTrial:true})(req,res));
  await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
  const headers={Origin:origin,Authorization:'Bearer '+a.token};
  const post=(path,body,override={})=>fetch(origin+path,{method:'POST',headers:{...headers,...override},body:JSON.stringify(body)});
@@ -39,7 +39,7 @@ test('export HTTP trial validates requests, isolates accounts and prevents concu
 });
 test('export accounting routes are disabled by default',async()=>{
  const ledger=new Ledger(':memory:');const a=ledger.createAccount();let origin;
- const server=createServer((req,res)=>handler({ledger,origin})(req,res));
+ const server=createServer((req,res)=>handler({ledger,origin,secureExports:false})(req,res));
  await new Promise(r=>server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+server.address().port;
  try{
   assert.equal((await (await fetch(origin+'/api/config')).json()).exportCreditTrial,false);

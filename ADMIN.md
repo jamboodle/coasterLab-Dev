@@ -64,8 +64,7 @@ registration. Insufficient-credit notices link to the free STL option and the
 credit purchase section. The free-STL action directly packages the existing base and color parts as a ZIP, with import instructions and no rebuild or sign-in step. Merged STL is not offered. A freshly requested quote/debit checks current settings;
 retries of the same bytes do not debit twice.
 
-Generation still runs locally in the browser. This change provides the supported
-UI flow and authoritative ledger debits, not tamper-proof paid file delivery.
-A determined user can bypass client controls or use previously distributed
-standalone exports. Server-controlled production delivery remains billing work;
-do not treat these controls as a secure paid-download boundary.
+3MF assembly and release now run on the server; see [SECURE-EXPORTS.md](SECURE-EXPORTS.md)
+for the deployment proxy step, privacy changes, retention and limits. Free STL
+geometry remains local and can be converted in other software. Live billing is
+still disabled until live Stripe support is implemented.

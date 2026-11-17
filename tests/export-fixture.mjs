@@ -1,0 +1,4 @@
+export function modelPayload(count=1,format='project'){
+ function mesh(z,height){const points=[[0,0,z],[10,0,z],[0,10,z],[0,0,z+height]],faces=[[0,2,1],[0,1,3],[1,2,3],[2,0,3]],buffer=Buffer.alloc(84+faces.length*50);buffer.writeUInt32LE(faces.length,80);faces.forEach((face,index)=>face.forEach((vertex,k)=>points[vertex].forEach((n,axis)=>buffer.writeFloatLE(n,84+index*50+12+k*12+axis*4))));return buffer.toString('base64');}
+ return {format,template:{config:{printer_model:'Bambu Lab P1S',nozzle_diameter:['0.4'],printable_area:['0x0','256x0','256x256','0x256'],filament_colour:['#FF0000','#0000FF']}},items:Array.from({length:count},(_,index)=>({file:{name:'coaster-'+index+'.png'},stl:{baseMM:2,topMM:.5,baseFill:'#FF0000',base:{buffer:mesh(0,2)},parts:[{index:1,fill:'#0000FF',buffer:mesh(2,.5)}]}}))};
+}

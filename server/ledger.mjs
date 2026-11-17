@@ -9,6 +9,7 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS orders(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), session TEXT UNIQUE);
       CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), delta INTEGER NOT NULL, kind TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS export_trials(account TEXT NOT NULL REFERENCES accounts(id), fingerprint TEXT NOT NULL, cost INTEGER NOT NULL CHECK(cost BETWEEN 1 AND 10), PRIMARY KEY(account,fingerprint));
+      CREATE TABLE IF NOT EXISTS export_jobs(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), fingerprint TEXT NOT NULL, count INTEGER NOT NULL, format TEXT NOT NULL, bytes BLOB NOT NULL, released INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL, UNIQUE(account,fingerprint));
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS identities(email TEXT PRIMARY KEY, account TEXT UNIQUE NOT NULL REFERENCES accounts(id), salt TEXT NOT NULL, digest TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS challenges(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), purpose TEXT NOT NULL, expires INTEGER NOT NULL, credential_digest TEXT NOT NULL);
@@ -240,5 +241,32 @@ export class Ledger {
     }catch(error){this.db.exec('ROLLBACK');throw error;}
   }
   auditLog() {return this.db.prepare('SELECT a.actor,i.email AS actorEmail,a.action,a.target,t.email AS targetEmail,a.detail,a.created_at FROM admin_audit a LEFT JOIN identities i ON i.account=a.actor LEFT JOIN identities t ON t.account=a.target ORDER BY a.rowid DESC LIMIT 100').all();}
+  pruneExports(now=Date.now()){this.db.prepare('DELETE FROM export_jobs WHERE expires<=?').run(now);}
+  exportJob(account,id){return this.db.prepare('SELECT id,fingerprint,count,format,released,expires,length(bytes) AS size FROM export_jobs WHERE account=? AND id=? AND expires>?').get(account,id,Date.now());}
+  storeExport(account,result){
+    this.pruneExports();const existing=this.db.prepare('SELECT id FROM export_jobs WHERE account=? AND fingerprint=?').get(account,result.fingerprint);if(existing)return existing.id;
+    let owner=this.db.prepare('SELECT COUNT(*) AS count,COALESCE(SUM(length(bytes)),0) AS size FROM export_jobs WHERE account=?').get(account);
+    while(owner.count && (owner.count>=6||owner.size+result.bytes.length>100000000)){
+      this.db.prepare('DELETE FROM export_jobs WHERE id=(SELECT id FROM export_jobs WHERE account=? ORDER BY expires,id LIMIT 1)').run(account);
+      owner=this.db.prepare('SELECT COUNT(*) AS count,COALESCE(SUM(length(bytes)),0) AS size FROM export_jobs WHERE account=?').get(account);
+    }
+    const capacity=this.db.prepare('SELECT COUNT(*) AS count,COALESCE(SUM(length(bytes)),0) AS size FROM export_jobs').get();
+    if(capacity.count>=100||capacity.size+result.bytes.length>512000000)throw Error('Export storage is busy. Try again later.');
+    const id=randomBytes(16).toString('hex');this.db.prepare('INSERT INTO export_jobs(id,account,fingerprint,count,format,bytes,expires) VALUES (?,?,?,?,?,?,?)').run(id,account,result.fingerprint,result.count,result.format,result.bytes,Date.now()+86400000);return id;
+  }
+  releaseExport(account,id,billingEnabled,expectedCost){
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      const job=this.exportJob(account,id);if(!job){this.db.exec('ROLLBACK');return {error:'Export expired or not found. Prepare it again.',status:404};}
+      const balance=this.balance(account);if(job.released){this.db.exec('COMMIT');return {cost:0,balance,remaining:balance,retry:true};}
+      const quote=billingEnabled?this.exportQuote(account,job.fingerprint,job.count):{cost:0,balance,remaining:balance,retry:false};
+      if(quote.error){this.db.exec('ROLLBACK');return quote;}
+      if(quote.cost!==expectedCost){this.db.exec('ROLLBACK');return {error:'Export pricing changed. Check the cost and confirm again.',status:409};}
+      if(quote.remaining<0){this.db.exec('ROLLBACK');return {error:'Not enough credits. Download STL free or purchase more credits.',status:402};}
+      if(quote.cost>0){this.db.prepare('INSERT INTO export_trials VALUES (?,?,?)').run(account,job.fingerprint,job.count);this.db.prepare("INSERT INTO entries VALUES (?,?,?,'export_trial')").run('export:'+account+':'+job.fingerprint,account,-quote.cost);}
+      this.db.prepare('UPDATE export_jobs SET released=1 WHERE id=? AND account=?').run(id,account);this.db.exec('COMMIT');return quote;
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
+  exportBytes(account,id){return this.db.prepare('SELECT bytes FROM export_jobs WHERE account=? AND id=? AND released=1 AND expires>?').get(account,id,Date.now())?.bytes;}
   close() {this.db.close();}
 }

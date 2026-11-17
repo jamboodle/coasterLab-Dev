@@ -46,12 +46,12 @@ and downloadable archives are retained; they are not rebuilt or deployed by
 this command. The current maker remains based on r27. Existing vendor/font
 licenses are retained.
 
-`dist/export-packing.js` provides the worker bridge. The maker builds the base
-and individual color parts once for 3MF and free STL-parts downloads. Merged STL
-is no longer offered. The visible free ZIP button and the insufficient-credit
-fallback package existing parts in a worker without rebuilding geometry. A batch
-ZIP keeps each coaster in a separate folder with color metadata and import
-instructions. 3MF XML/ZIP packaging also runs in a worker; artwork stays local. The
+`dist/export-packing.js` provides the browser worker bridge. The maker builds the
+base and individual color parts locally. Free STL ZIPs package those parts locally;
+merged STL is no longer offered. For 3MF, a browser worker serializes the model
+parts and printer settings, then the server validates and assembles a private
+account-bound file. Original images stay local. See [SECURE-EXPORTS.md](SECURE-EXPORTS.md)
+for upload disclosure, credit authorization, retention and deployment settings. The
 existing three-minute geometry limit remains in place. Complex artwork can
 still exceed a phone's memory or processing budget.
 
@@ -131,3 +131,5 @@ account modes, a clear balance, a small credit-pack summary and expandable
 activity, security and demo information. Billing behavior is unchanged.
 
 Administration and welcome credits: see [ADMIN.md](ADMIN.md) for first-admin setup, billing controls and the supported download flow.
+
+Private 3MF generation/delivery and deployment upload settings: [SECURE-EXPORTS.md](SECURE-EXPORTS.md). Current 3MF packaging is server-side; historical client packaging descriptions apply to earlier releases.

@@ -12,7 +12,7 @@ async function fixture(run){
  const ledger=new Ledger(':memory:');let origin;
  const admin=ledger.registerIdentity('admin@example.com','salt','digest'),user=ledger.registerIdentity('user@example.com','salt','digest');
  ledger.makeAdmin('admin@example.com');const adminCookie='cl_session='+ledger.createSession(admin),userCookie='cl_session='+ledger.createSession(user);
- const server=createServer((req,res)=>handler({ledger,origin,customerAccounts:true})(req,res));
+ const server=createServer((req,res)=>handler({ledger,origin,secureExports:false,customerAccounts:true})(req,res));
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));origin='http://127.0.0.1:'+server.address().port;
  async function call(path,{body,cookie=adminCookie,requestOrigin=origin}={}){const response=await fetch(origin+path,{method:body?'POST':'GET',headers:{Cookie:cookie,Origin:requestOrigin,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});return {status:response.status,data:await response.json()};}
  try{await run({ledger,admin,user,call,adminCookie,userCookie,origin});}finally{await new Promise(resolve=>server.close(resolve));ledger.close();}
@@ -76,7 +76,7 @@ test('checkout price and credit snapshots survive admin price changes and billin
  ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('billingEnabled','true');
  ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('amount','725');ledger.db.prepare('INSERT INTO settings VALUES (?,?)').run('credits','22');
  const secret='whsec_test';
- const server=createServer((req,res)=>handler({ledger,origin,secretKey:'sk_test_example',webhookSecret:secret,fetchImpl:async(_url,options)=>{form=options.body;return Response.json({id:'cs_snapshot',url:'https://checkout.stripe.com/example'});}})(req,res));
+ const server=createServer((req,res)=>handler({ledger,origin,secureExports:false,secretKey:'sk_test_example',webhookSecret:secret,fetchImpl:async(_url,options)=>{form=options.body;return Response.json({id:'cs_snapshot',url:'https://checkout.stripe.com/example'});}})(req,res));
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));origin='http://127.0.0.1:'+server.address().port;
  try{
   const headers={Authorization:'Bearer '+account.token,'Idempotency-Key':'snapshot-request-1234'};

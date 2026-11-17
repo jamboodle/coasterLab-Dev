@@ -14,7 +14,7 @@ const {unzipSync}=require('../dist/vendor/fflate.js');
   await page.locator('#files').setInputFiles({name:'test-coaster.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
   await page.locator('#trace').click();
   await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:60000});
-  const pending=page.waitForEvent('download');await page.locator('#download3MF').click();const download=await pending;
+  await page.locator('#download3MF').click();await page.locator('[data-authorize]').waitFor({state:'visible'});await page.locator('[data-authorize]').click();await page.locator('[data-save]').waitFor({state:'visible'});const pending=page.waitForEvent('download');await page.locator('[data-save]').click();const download=await pending;
   assert.match(download.suggestedFilename(),/\.3mf$/);
   assert.equal(await download.failure(),null);
   const chunks=[];for await(const chunk of await download.createReadStream())chunks.push(chunk);

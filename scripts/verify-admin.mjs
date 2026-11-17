@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
 import {fileURLToPath} from 'node:url';
+import {modelPayload} from '../tests/export-fixture.mjs';
 import {Ledger} from '../server/ledger.mjs';
 import {passwordHash} from '../server/passwords.mjs';
 import {handler} from '../server/app.mjs';
@@ -38,14 +39,14 @@ try{
  await context.close();
  const mobile=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true}),maker=await mobile.newPage();maker.on('pageerror',error=>errors.push(error.message));
  await maker.goto(origin);
- await maker.evaluate(()=>window.creditTrialDownload(URL.createObjectURL(new Blob(['ready-file'])),'test.3mf',1));
+ await maker.evaluate(payload=>window.creditTrialDownload(()=>Promise.resolve(JSON.stringify(payload))),modelPayload());
  await maker.locator('[data-account]').waitFor({state:'visible'});assert.match(await maker.locator('[data-message]').textContent(),/Log in or create/);assert.equal(ledger.balance(user),23);
  const response=await mobile.request.post(origin+'/api/login',{headers:{Origin:origin},data:{email:'customer@example.com',password}});assert.equal(response.status(),200);
  await maker.locator('[data-recheck]').click();await maker.locator('[data-authorize]').waitFor({state:'visible'});await maker.locator('[data-authorize]').click();await maker.locator('[data-save]').waitFor({state:'visible'});assert.equal(ledger.balance(user),22);
  await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});ledger.adjustCredits(admin,user,-22,'Empty balance fixture','test-empty-credit');
- await maker.evaluate(()=>window.creditTrialDownload(URL.createObjectURL(new Blob(['new-ready-file'])),'new.3mf',1));await maker.locator('[data-insufficient]').waitFor({state:'visible'});assert.match(await maker.locator('[data-insufficient]').textContent(),/STL.*free.*purchase more credits/s);assert.equal(await maker.locator('[data-insufficient] a').getAttribute('href'),'/pricing/#export-pack');
+ await maker.evaluate(payload=>{payload.items[0].file.name='new.png';return window.creditTrialDownload(()=>Promise.resolve(JSON.stringify(payload)));},modelPayload());await maker.locator('[data-insufficient]').waitFor({state:'visible'});assert.match(await maker.locator('[data-insufficient]').textContent(),/STL.*free.*purchase more credits/s);assert.equal(await maker.locator('[data-insufficient] a').getAttribute('href'),'/pricing/#export-pack');
  await maker.locator('[data-stl]').click();await maker.getByRole('dialog',{name:'STL parts ZIP',exact:true}).waitFor();assert.match(await maker.locator('[data-progress]').textContent(),/Build your coaster first/);await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});
- ledger.saveSettings(admin,{billingEnabled:false});await maker.evaluate(()=>window.creditTrialDownload(URL.createObjectURL(new Blob(['free-ready-file'])),'free.3mf',1));await maker.locator('[data-authorize]').waitFor({state:'visible'});await maker.locator('[data-authorize]').click();await maker.locator('[data-save]').waitFor({state:'visible'});assert.equal(ledger.balance(user),0);
+ ledger.saveSettings(admin,{billingEnabled:false});await maker.evaluate(payload=>{payload.items[0].file.name='free.png';return window.creditTrialDownload(()=>Promise.resolve(JSON.stringify(payload)));},modelPayload());await maker.locator('[data-authorize]').waitFor({state:'visible'});await maker.locator('[data-authorize]').click();await maker.locator('[data-save]').waitFor({state:'visible'});assert.equal(ledger.balance(user),0);
  await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});await maker.reload();await maker.waitForFunction(()=>document.getElementById('maker-account').textContent.includes('0 credits'));
  assert.deepEqual(errors,[]);await mobile.close();console.log('PASS admin responsive layout, credit adjustment, suspend/restore, dynamic billing/price, anonymous login prompt, insufficient-credit STL alternative, free billing mode, and maker balance');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));ledger.close();}

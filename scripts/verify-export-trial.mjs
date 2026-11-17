@@ -22,15 +22,13 @@ try{
  await page.locator('#trace').click();await page.waitForFunction(()=>!document.getElementById('download3MF').disabled,null,{timeout:60000});
  assert.equal(ledger.balance(account.id),1);
  const dialog=page.getByRole('dialog',{name:'Your download'});
- await page.evaluate(()=>download(URL.createObjectURL(new Blob([])),'empty.3mf'));
- await page.waitForFunction(()=>document.querySelector('[data-message]')?.textContent?.includes('generated file is empty'));
- assert.equal(ledger.balance(account.id),1);await page.keyboard.press('Escape');
+ assert.equal(await page.evaluate(()=>items[0].threeMF===true && !items[0].threeMFUrl),true,'No downloadable 3MF bytes should exist in the browser before authorization');
  await page.locator('#download3MF').click();await dialog.locator('[data-authorize]').waitFor();
  await page.waitForFunction(()=>document.querySelector('[data-summary]')?.textContent?.includes('Cost: 1'));
  await page.keyboard.press('Escape');assert.equal(ledger.balance(account.id),1);
  await page.locator('#download3MF').click();
  let drop=true;
- await page.route('**/api/export-debit',async route=>{if(drop){drop=false;await route.fetch();await route.abort('failed');}else await route.continue();});
+ await page.route('**/api/exports/*/authorize',async route=>{if(drop){drop=false;await route.fetch();await route.abort('failed');}else await route.continue();});
  await dialog.locator('[data-authorize]').click();await page.waitForFunction(()=>!document.querySelector('[data-authorize]').disabled);
  assert.equal(ledger.balance(account.id),0);
  await dialog.locator('[data-authorize]').click();await dialog.locator('[data-save]').waitFor({state:'visible'});

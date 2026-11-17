@@ -9,7 +9,7 @@ import {randomUUID} from 'node:crypto';
 import {Ledger} from '../server/ledger.mjs';
 import {handler} from '../server/app.mjs';
 
-async function fixture(run){const ledger=new Ledger(':memory:');let origin;const admin=ledger.registerIdentity('admin@example.com','salt','digest','Admin');ledger.makeAdmin('admin@example.com');const cookie='cl_session='+ledger.createSession(admin);const server=createServer((req,res)=>handler({ledger,origin,customerAccounts:true})(req,res));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));origin='http://127.0.0.1:'+server.address().port;
+async function fixture(run){const ledger=new Ledger(':memory:');let origin;const admin=ledger.registerIdentity('admin@example.com','salt','digest','Admin');ledger.makeAdmin('admin@example.com');const cookie='cl_session='+ledger.createSession(admin);const server=createServer((req,res)=>handler({ledger,origin,secureExports:false,customerAccounts:true})(req,res));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));origin='http://127.0.0.1:'+server.address().port;
  const call=async(path,{body,cookie:session=cookie}={})=>{const response=await fetch(origin+path,{method:body?'POST':'GET',headers:{Origin:origin,Cookie:session,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});return {status:response.status,data:await response.json()};};try{await run({ledger,admin,call,cookie});}finally{await new Promise(resolve=>server.close(resolve));ledger.close();}}
 
 test('batch access is 1 for guests and zero balances, 6 for positive registered accounts; 6-image exports debit six once',()=>fixture(async({ledger,admin,call})=>{
