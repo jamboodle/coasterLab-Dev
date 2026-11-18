@@ -17,9 +17,15 @@ const ledger = new Ledger(':memory:');
 const id = ledger.registerIdentity('artwork-admin@example.com', 'salt', 'digest');
 ledger.makeAdmin('artwork-admin@example.com');
 const session = ledger.createSession(id);
+let resolveTags;
+const holdTags = new Promise(resolve => { resolveTags = resolve; });
+let tagRequests = 0;
 const artwork = artworkLibrary({
   dataDir, key: 'fixture-key',
-  fetchImpl: async () => Response.json({choices: [{message: {content: '{"tags":["woodland","gold"]}'}}]})
+  fetchImpl: async () => {
+    if (++tagRequests === 2) await holdTags;
+    return Response.json({choices: [{message: {content: '{"tags":["woodland","gold"]}'}}]});
+  }
 });
 let origin;
 const server = createServer(withStatic((req, res) => handler({ledger, origin, artwork})(req, res), dist));
@@ -50,7 +56,19 @@ try {
   await page.goto(origin + '/admin/');
   await page.getByRole('tab', {name: 'Artwork'}).click();
   await page.getByRole('button', {name: 'Reindex'}).click();
+  await page.waitForFunction(() => {
+    const bar = document.querySelector('#artwork-progress');
+    return !bar.hidden && bar.max === 2 && bar.value === 1;
+  });
+  assert.match(await page.locator('#artwork-status').textContent(), /Processed 1 of 2 artwork files/);
+  assert.equal(await page.getByRole('button', {name: 'Reindex'}).isDisabled(), true);
+  await page.reload();
+  await page.getByRole('tab', {name: 'Artwork'}).click();
+  await page.waitForFunction(() => document.querySelector('#artwork-progress').position === 0.5);
+  resolveTags();
   await page.waitForFunction(() => document.querySelector('#artwork-status').textContent.includes('2 with tags.'));
+  assert.equal(await page.locator('#artwork-progress').isHidden(), true);
+  assert.equal(await page.getByRole('button', {name: 'Reindex'}).isEnabled(), true);
   await setup.close();
 
   const errors = [];
@@ -155,6 +173,7 @@ try {
   assert.deepEqual(errors, []);
   console.log('PASS artwork reindex, search, desktop editor, maker import limit, and unedited mobile handoff');
 } finally {
+  resolveTags();
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
   ledger.close();

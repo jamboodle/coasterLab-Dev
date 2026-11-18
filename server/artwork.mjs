@@ -70,7 +70,7 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
   const root = resolve(dataDir, 'artwork');
   const cachePath = resolve(dataDir, 'artwork-index.json');
   let current = {entries: [], updatedAt: null, failed: 0, skipped: 0};
-  let running = false;
+  let progress = null;
   let error = '';
   const ready = readFile(cachePath, 'utf8').then(raw => {
     const stored = JSON.parse(raw);
@@ -79,15 +79,14 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
     if (failure.code !== 'ENOENT') error = 'The saved artwork index could not be loaded.';
   });
   const status = () => ({
-    running, keyConfigured: Boolean(key), updatedAt: current.updatedAt, indexed: current.entries.length,
+    running: progress !== null, progress, keyConfigured: Boolean(key), updatedAt: current.updatedAt, indexed: current.entries.length,
     tagged: current.entries.filter(entry => entry.tags.length).length, failed: current.failed, skipped: current.skipped, error
   });
 
-  async function index() {
+  async function index(job) {
     const cached = new Map(current.entries.filter(entry => entry.tags.length).map(entry => [entry.digest, entry.tags]));
     const entries = [];
-    let failed = 0;
-    let skipped = 0;
+    const candidates = [];
 
     async function scan(folder, category) {
       for (const item of await readdir(join(root, folder), {withFileTypes: true})) {
@@ -99,32 +98,39 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
         const extension = extname(item.name).toLowerCase();
         if (!item.isFile() || !artworkExtensions.has(extension)) continue;
         const relative = join(folder, item.name);
-        let image;
-        try {
-          image = await readImage(root, relative);
-        } catch {
-          skipped++;
-          continue;
-        }
-        const digest = hash(image.bytes);
-        let tags = cached.get(digest);
-        if (!tags) {
-          try {
-            tags = await generateTags(image.bytes, image.type, key, fetchImpl);
-            cached.set(digest, tags);
-          } catch {
-            failed++;
-            tags = [];
-          }
-        }
-        entries.push({id: hash(relative), relative, digest, title: title(item.name.slice(0, -extension.length)), category, tags});
+        candidates.push({relative, title: title(item.name.slice(0, -extension.length)), category});
       }
     }
 
     await mkdir(root, {recursive: true, mode: 0o750});
     await scan('', 'General');
+    job.total = candidates.length;
+    for (const candidate of candidates) {
+      let image;
+      try {
+        image = await readImage(root, candidate.relative);
+      } catch {
+        job.skipped++;
+        job.processed++;
+        continue;
+      }
+      const digest = hash(image.bytes);
+      let tags = cached.get(digest);
+      if (!tags) {
+        try {
+          tags = await generateTags(image.bytes, image.type, key, fetchImpl);
+          cached.set(digest, tags);
+        } catch {
+          job.failed++;
+          tags = [];
+        }
+      }
+      entries.push({...candidate, id: hash(candidate.relative), digest, tags});
+      job.processed++;
+    }
+
     entries.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
-    const next = {version: 1, entries, updatedAt: new Date().toISOString(), failed, skipped};
+    const next = {version: 1, entries, updatedAt: new Date().toISOString(), failed: job.failed, skipped: job.skipped};
     const temp = join(dirname(cachePath), '.artwork-index-' + randomUUID());
     try {
       await writeFile(temp, JSON.stringify(next), {mode: 0o600, flag: 'wx'});
@@ -140,13 +146,13 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
       await ready;
       if (req.method === 'GET' && path === '/api/admin/artwork') return send(200, status());
       if (req.method !== 'POST' || path !== '/api/admin/artwork/reindex') return send(404, {error: 'Not found'});
-      if (running) return send(409, {error: 'Artwork indexing is already running.'});
+      if (progress) return send(409, {error: 'Artwork indexing is already running.'});
       if (!key) return send(503, {error: 'Configure OPENAI_API_KEY on the server before reindexing.'});
-      running = true;
+      progress = {total: null, processed: 0, failed: 0, skipped: 0};
       error = '';
-      void index().catch(() => {
+      void index(progress).catch(() => {
         error = 'Reindexing could not finish. Check artwork folder and index file permissions.';
-      }).finally(() => { running = false; });
+      }).finally(() => { progress = null; });
       return send(202, status());
     },
     async public(req, res, path, send) {

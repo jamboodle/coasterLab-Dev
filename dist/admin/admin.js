@@ -39,28 +39,48 @@
  for(const tab of document.querySelectorAll('[data-section]')){tab.onclick=()=>section(tab.dataset.section);tab.addEventListener('keydown',event=>{const tabs=[...document.querySelectorAll('[data-section]')],index=tabs.indexOf(tab);let next;if(event.key==='ArrowRight')next=(index+1)%tabs.length;if(event.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;if(event.key==='Home')next=0;if(event.key==='End')next=tabs.length-1;if(next!==undefined){event.preventDefault();section(tabs[next].dataset.section);tabs[next].focus();}});}
  for(const button of document.querySelectorAll('[data-sort]'))button.onclick=()=>{direction=sort===button.dataset.sort&&direction==='asc'?'desc':'asc';sort=button.dataset.sort;offset=0;void users().catch(error=>status(error.message));};
  $('page-size').onchange=()=>{limit=Number($('page-size').value);offset=0;void users().catch(error=>status(error.message));};$('page-number').onchange=()=>{offset=(Number($('page-number').value)-1)*limit;void users().catch(error=>status(error.message));};
- let artworkTimer;
+ let artworkTimer, artworkRequest=0;
  async function artworkStatus(reindex=false){
   clearTimeout(artworkTimer);
-  const button=$('reindex-artwork'),message=$('artwork-status');
+  const request=++artworkRequest;
+  const button=$('reindex-artwork'),message=$('artwork-status'),bar=$('artwork-progress');
   button.disabled=true;
   try{
    if(reindex)await api('/api/admin/artwork/reindex',{});
    const data=await api('/api/admin/artwork');
+   if(request!==artworkRequest)return;
+   const progress=data.progress;
+   bar.hidden=!data.running;
+   if(data.running){
+    if(progress?.total>0){
+     bar.max=progress.total;
+     bar.value=progress.processed;
+    }else bar.removeAttribute('value');
+    const progressMessage=[
+     !progress||progress.total===null?'Finding artwork files…':
+      progress.total===0?'Saving the empty artwork index…':
+      `Processed ${progress.processed} of ${progress.total} artwork files.`,
+     progress?.failed?progress.failed+' tag requests failed.':'',
+     progress?.skipped?progress.skipped+' files skipped.':''
+    ].filter(Boolean).join(' ');
+    if(message.textContent!==progressMessage)message.textContent=progressMessage;
+    artworkTimer=setTimeout(artworkStatus,2000);
+    return;
+   }
    message.textContent=[
-    data.running?'Reindexing artwork…':data.updatedAt?'Last indexed '+visitDate(new Date(data.updatedAt))+'.':'No index has been built.',
+    data.updatedAt?'Last indexed '+visitDate(new Date(data.updatedAt))+'.':'No index has been built.',
     data.indexed+' designs, '+data.tagged+' with tags.',
     data.failed?data.failed+' tag requests failed. Reindex to retry.':'',
     data.skipped?data.skipped+' unreadable or invalid images skipped.':'',
     data.keyConfigured?'':'Configure OPENAI_API_KEY on the server to enable indexing.',
     data.error
    ].filter(Boolean).join(' ');
-   button.disabled=data.running||!data.keyConfigured;
-   if(data.running)artworkTimer=setTimeout(artworkStatus,2000);
+   button.disabled=!data.keyConfigured;
   }catch(error){
+   if(request!==artworkRequest)return;
    message.textContent=error.message;
-   button.disabled=false;
-   if(error.status===409)artworkTimer=setTimeout(artworkStatus,2000);
+   if(error.status===409||(!bar.hidden&&(!error.status||error.status>=500)))artworkTimer=setTimeout(artworkStatus,2000);
+   else {bar.hidden=true;button.disabled=false;}
   }
  }
  $('reindex-artwork').onclick=()=>void artworkStatus(true);
