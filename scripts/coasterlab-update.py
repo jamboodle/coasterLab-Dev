@@ -5,12 +5,19 @@ import json
 import os
 from pathlib import Path
 import pwd
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import urllib.request
+
+
+_artifacts = Path(__file__).with_name('release_artifacts.py')
+if not _artifacts.is_file():
+    _artifacts = Path('/usr/local/lib/coasterprint/release_artifacts.py')
+release_artifacts = runpy.run_path(str(_artifacts))
 
 
 class Updater:
@@ -111,11 +118,23 @@ class Updater:
             'from pathlib import Path; import sys; Path(sys.argv[1]).write_text(sys.argv[2]+"\\n")',
             self.app / '.deployed-commit', revision])
 
+    def release_exists(self, revision):
+        return (release_artifacts['STORE'] / (revision + '.json')).is_file()
+
+    def stage_release(self, revision, stage):
+        archive = stage / '.publish.tar'
+        self.as_user(['git', 'archive', '--format=tar', '--output', archive, revision], self.source)
+        release_artifacts['stage_release'](archive, revision)
+        print('Production candidate packaged: ' + revision[:12])
+
     def deploy(self):
         try:
             revision, stage = self.prepare()
             marker = self.app / '.deployed-commit'
             if marker.exists() and marker.read_text().strip() == revision and self.healthy():
+                if not self.release_exists(revision):
+                    self.validate(stage)
+                    self.stage_release(revision, stage)
                 print('Already up to date: ' + revision[:12])
                 return
             self.validate(stage)
@@ -127,6 +146,7 @@ class Updater:
                 self.service('start')
             self.wait_healthy()
             self.write_marker(revision)
+            self.stage_release(revision, stage)
             print('Updated and healthy: ' + revision[:12])
             print('Accounts, balances, environment files and service settings preserved.')
         finally:

@@ -1,42 +1,56 @@
-# Separate production deployments
+# Independent production deployments
 
-Development stays at https://dev.jamboodle.com, in
-`/home/jamboodle/coasterlab-dev` on port 30001 (`coasterlab-dev-node`).
-Production is https://coasterprint.com, in `/home/jamboodle/coasterprint` on
-port 30002 (`coasterprint-node`). Both currently run as `jamboodle`; Webuzo's
-production domain account is `coasterprint`. Each app has its own `.data` database.
-Production mail configuration is `/etc/coasterprint/mail.env` through the
-service's `30-mail.conf` drop-in. Do not copy development service settings.
+After the one-time [account migration](ACCOUNT-SEPARATION.md), development stays
+at https://dev.jamboodle.com under `jamboodle`, and production runs entirely under
+Webuzo's `coasterprint` account:
 
-## Install the production command once
+| Item | Production location |
+| --- | --- |
+| Website | `https://coasterprint.com` |
+| Public assets | `/home/coasterprint/public_html` |
+| Private app | `/home/coasterprint/app` |
+| Customers, balances and payment settings | `/home/coasterprint/app/.data/credits.sqlite` |
+| Service | `coasterprint-node`, user `coasterprint`, loopback port 30002 |
+| Mail configuration | `/etc/coasterprint/mail.env` |
+| Release packages | `/var/lib/coasterprint/releases` (root only) |
 
-In the root terminal, after fetching this release into the existing source checkout:
-
-```sh
-install -o root -g root -m 0755 /home/jamboodle/coasterlab-source/scripts/coasterlab-update.py /usr/local/sbin/coasterlab-update
-install -o root -g root -m 0755 /home/jamboodle/coasterlab-source/scripts/coasterprint-publish.py /usr/local/sbin/coasterprint-publish
-```
-
-The two installed scripts must be kept together. The publisher reuses the installed
-development updater's validation, protected file-copy logic, and service handling.
+`STATIC_ROOT` points to public_html; `DATABASE_PATH` points to the private database.
+Passwords, payment keys and customer data must never be placed in public_html.
+The migration retains existing mail/live-payment service drop-ins and proxy/SSL.
 
 ## Routine updates
 
-1. Run `coasterlab-update` in the root terminal to update development from GitHub.
+1. In the root terminal, run `coasterlab-update` to update development and package
+   that exact healthy revision in the root-owned release store.
 2. Test changes at dev.jamboodle.com.
-3. When satisfied, run `coasterprint-publish` in the root terminal.
+3. Run `coasterprint-publish` to deploy the prepared package to production.
 
-Publishing uses the exact commit recorded in development's `.deployed-commit`,
-not a newer GitHub or checkout HEAD. It checks development health, archives that
-commit from the existing checkout, validates the maker build and backend tests,
-then briefly stops production to copy code and restarts it. Both update commands
-share a lock. No new backup archive is created.
+The publisher does not read development folders, use its GitHub checkout, or
+import the development updater. It validates the package's SHA-256, archive
+contents, maker build and backend tests as `coasterprint`, briefly stops the
+production service, copies private code and public assets, restarts, and checks
+loopback and public HTTPS health. Its release marker updates only after checks
+pass. A healthy already-deployed revision does not restart production.
 
-Production `.data/`, `.env*`, local files and systemd/mail settings are preserved.
-It does not copy development accounts, credits or mail configuration. Production
-gets its own release marker only after loopback and public HTTPS readiness pass.
-Already deployed healthy commits do not restart production. A failed copy still
-attempts to restart the service, but there is no automatic code rollback.
+Production `.data/`, `.env*`, local files, service/mail settings and `.well-known/`
+are preserved. No development accounts or credits are copied. Routine updates do
+not create backup archives. Failed copying still attempts to start the service;
+there is no automatic code rollback. Inspect failures with
+`journalctl -u coasterprint-node -n 40 --no-pager`.
 
-If a check fails, inspect `journalctl -u coasterprint-node -n 40 --no-pager`.
-Billing remains disabled; the current backend only supports test-mode payments.
+## Releases from another owner or build server
+
+Production can accept a package without any development account on the server:
+
+```sh
+coasterprint-publish FULL_40_CHARACTER_COMMIT --archive /path/to/release.tar --sha256 EXPECTED_SHA256
+```
+
+Create the tar from the approved Git revision (`git archive --format=tar COMMIT`),
+with its built assets committed. Transfer it through a trusted channel and verify
+the supplied digest. It must contain regular project files, no links, secrets,
+Git internals or customer data. SHA-256 detects changes; the operator remains
+responsible for approving the package's source. Installed root helpers are in
+`/usr/local/sbin/` and `/usr/local/lib/coasterprint/`, independent of either home.
+
+Live payment configuration is documented in [LIVE-PAYMENTS.md](LIVE-PAYMENTS.md).

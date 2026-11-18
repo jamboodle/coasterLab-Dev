@@ -30,7 +30,7 @@ secret values are never returned or placed in the audit log.
 1. Promote the tested release with `coasterprint-publish`. If not already applied,
    run the production private-export proxy helper described in SECURE-EXPORTS.md.
 2. Register/sign in on production. Grant your production account admin access
-   using the bootstrap command in ADMIN.md with `/home/jamboodle/coasterprint`.
+   using the bootstrap command in ADMIN.md with `/home/coasterprint/app`.
    Development admin privileges, settings, users and credits are not copied.
 3. Permit production to configure live payments. In the root terminal:
 

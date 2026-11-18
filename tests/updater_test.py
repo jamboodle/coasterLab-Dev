@@ -22,6 +22,12 @@ class FixtureUpdater(module.Updater):
         self.events = []
         self.fail = fail
 
+    def release_exists(self, revision):
+        return True
+
+    def stage_release(self, revision, stage):
+        pass
+
     def prepare(self):
         self.events.append('prepare')
         return self.revision, self.stage

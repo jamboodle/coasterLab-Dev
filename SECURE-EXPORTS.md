@@ -16,7 +16,7 @@ production until the release has been tested and published. Later, the productio
 command is:
 
 ```sh
-python3 /home/jamboodle/coasterprint/scripts/configure-export-proxy.py production
+python3 /home/coasterprint/app/scripts/configure-export-proxy.py production
 ```
 
 No new credentials or systemd variables are needed. The updater preserves `.data`

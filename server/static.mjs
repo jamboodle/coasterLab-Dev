@@ -11,6 +11,7 @@ export function withStatic(api, root) {
     if(/^\/(?:downloads\/)?coasterlab[-.a-z0-9]*\.(?:html|zip)$/i.test(pathname)){
       res.writeHead(308,{Location:pathname.replace(/coasterlab/i,'coasterprint')+parsed.search});return res.end();
     }
+    if(pathname.split('/').some(part=>part.startsWith('.')&&part!=='.well-known')){res.writeHead(404);return res.end('Not found');}
     if(pathname.startsWith('/api/') || pathname==='/health')return api(req,res);
     if(/^\/[^/]+\.html$/i.test(pathname)&&pathname!=='/index.html'){res.writeHead(308,{Location:'/'});return res.end();}
     if((/^\/[^/]+\.js$/i.test(pathname)&&!current.has(pathname.slice(1)))||(/^\/downloads\/.*\.zip$/i.test(pathname)&&pathname!=='/downloads/coasterprint-holder-pack.zip')){res.writeHead(410,{'Cache-Control':'no-store'});return res.end('This historical release has been retired. Use the current maker.');}

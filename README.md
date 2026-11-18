@@ -133,3 +133,7 @@ activity, security and demo information. Billing behavior is unchanged.
 Administration and welcome credits: see [ADMIN.md](ADMIN.md) for first-admin setup, billing controls and the supported download flow.
 
 Private 3MF generation/delivery and deployment upload settings: [SECURE-EXPORTS.md](SECURE-EXPORTS.md). Current 3MF packaging is server-side; historical client packaging descriptions apply to earlier releases.
+
+Production account separation and the one-time move are documented in
+[ACCOUNT-SEPARATION.md](ACCOUNT-SEPARATION.md). Routine releases are in
+[PRODUCTION.md](PRODUCTION.md).

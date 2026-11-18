@@ -16,8 +16,9 @@ runuser -u jamboodle -- sh -c 'cd /home/jamboodle/coasterlab-dev && /usr/local/a
 
 Sign in again at https://dev.jamboodle.com/admin/. Granting the role revokes existing
 sessions. There is no default password or public endpoint to grant admin access.
-For production, after publishing, use `/home/jamboodle/coasterprint` in the command
-and https://coasterprint.com/admin/. Development admin access is not copied.
+For production, after the [account migration](ACCOUNT-SEPARATION.md), use
+`runuser -u coasterprint`, working directory `/home/coasterprint/app`, and
+https://coasterprint.com/admin/. Development admin access is not copied.
 
 ## Admin panel
 

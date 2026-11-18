@@ -26,7 +26,7 @@ if(process.argv.includes('--make-admin')) {
   const parsed=new URL(origin);
   if (!['http:','https:'].includes(parsed.protocol) || parsed.origin!==origin) throw Error('APP_ORIGIN must be an HTTP(S) origin with no trailing slash');
   const {mailer,developmentInbox}=configureMailer(process.env,origin);
-  const server=createServer(withStatic(handler({ledger,origin,onMailFailure:()=>console.error('Account email submission failed; check the mail service.'),mailer,developmentInbox,developmentLogin:process.env.ENABLE_DEV_LOGIN==='1',allowLivePayments:process.env.ALLOW_LIVE_PAYMENTS==='1'&&process.env.NODE_ENV==='production',customerAccounts:process.env.ENABLE_CUSTOMER_ACCOUNTS==='1',secretKey:process.env.STRIPE_SECRET_KEY,webhookSecret:process.env.STRIPE_WEBHOOK_SECRET}),fileURLToPath(new URL('../dist/',import.meta.url))));
+  const server=createServer(withStatic(handler({ledger,origin,onMailFailure:()=>console.error('Account email submission failed; check the mail service.'),mailer,developmentInbox,developmentLogin:process.env.ENABLE_DEV_LOGIN==='1',allowLivePayments:process.env.ALLOW_LIVE_PAYMENTS==='1'&&process.env.NODE_ENV==='production',customerAccounts:process.env.ENABLE_CUSTOMER_ACCOUNTS==='1',secretKey:process.env.STRIPE_SECRET_KEY,webhookSecret:process.env.STRIPE_WEBHOOK_SECRET}),process.env.STATIC_ROOT || fileURLToPath(new URL('../dist/',import.meta.url))));
   server.listen(Number(process.env.PORT || 3003),'127.0.0.1',()=>console.log('CoasterPrint test credit API listening on loopback'));
   for (const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>server.close(()=>{ledger.close();process.exit(0);}));
 }
