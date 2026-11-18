@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {readFile,realpath,stat} from 'node:fs/promises';
 import {resolve,extname,sep,normalize} from 'node:path';
-const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.wasm':'application/wasm','.woff2':'font/woff2','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.zip':'application/zip'};
+const types={'.ico':'image/vnd.microsoft.icon','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.wasm':'application/wasm','.woff2':'font/woff2','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.zip':'application/zip'};
 export function withStatic(api, root) {
   root=resolve(root);
   const current=new Set(Object.values(JSON.parse(readFileSync(resolve(root,'asset-manifest.json'),'utf8')).scripts));
