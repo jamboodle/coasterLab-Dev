@@ -73,12 +73,14 @@ off by default and require production activation; see [LIVE-PAYMENTS.md](LIVE-PA
 
 ## Artwork library
 
-Upload JPG or PNG files (up to 20 MB each) into the `artwork/` directory next to
+Upload PNG, JPG or WebP files (up to 20 MB each) into the `artwork/` directory next to
 the environment's credits database. Use one level of folders to assign categories
 (for example, `artwork/Animals/Fox.png`). Files directly in `artwork/` appear under
 General. Start with artwork you intend to make public. File names become design
 titles, and reindexing sends image contents to OpenAI to generate public search
-tags. Upload files under a temporary extension and rename them when complete.
+tags. The library detects each image format from the file contents, including
+WebP saved with a .png extension. The browser converts a selected WebP to PNG
+for the maker while leaving the stored artwork intact. Upload files under a temporary extension and rename them when complete.
 
 | Environment | Default artwork path | Service |
 | --- | --- | --- |

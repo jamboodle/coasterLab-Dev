@@ -33,8 +33,26 @@ function showResults() {
   }));
 }
 
+async function asPng(blob) {
+  const image = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  try {
+    if (image.width * image.height > 80000000) throw Error('This design is too large to import.');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    canvas.getContext('2d').drawImage(image, 0, 0);
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(png => png ? resolve(png) : reject(Error('This design could not be converted to PNG.')), 'image/png');
+    });
+  } finally {
+    image.close();
+    canvas.width = canvas.height = 0;
+  }
+}
+
 async function transfer(blob, item) {
   if (!window.opener || window.opener.closed) throw Error('Open the artwork library from the maker to use a design.');
+  if (blob.type === 'image/webp') blob = await asPng(blob);
   const extension = blob.type === 'image/jpeg' ? '.jpg' : '.png';
   const name = item.title.replace(/[\\/:]/g, '-') + extension;
   const error = await window.opener.coasterPrintImportArtwork(window, new File([blob], name, {type: blob.type}));

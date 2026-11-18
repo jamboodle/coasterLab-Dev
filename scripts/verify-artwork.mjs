@@ -30,7 +30,7 @@ try {
   browser = await chromium.launch({executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox']});
   const setup = await browser.newContext();
   const page = await setup.newPage();
-  const pngUrl = await page.evaluate(() => {
+  const {png: pngUrl, webp: webpUrl} = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 120;
     canvas.height = 80;
@@ -39,16 +39,18 @@ try {
     context.fillRect(0, 0, 120, 80);
     context.fillStyle = '#222222';
     context.fillRect(35, 20, 50, 40);
-    return canvas.toDataURL('image/png');
+    return {png: canvas.toDataURL('image/png'), webp: canvas.toDataURL('image/webp')};
   });
   const category = join(dataDir, 'artwork', 'Animals');
   await mkdir(category, {recursive: true});
   await writeFile(join(category, 'Fox.png'), Buffer.from(pngUrl.split(',')[1], 'base64'));
+  assert.ok(webpUrl.startsWith('data:image/webp;'));
+  await writeFile(join(category, 'WebP listed as PNG.png'), Buffer.from(webpUrl.split(',')[1], 'base64'));
   await setup.addCookies([{name: 'cl_session', value: session, url: origin}]);
   await page.goto(origin + '/admin/');
   await page.getByRole('tab', {name: 'Artwork'}).click();
   await page.getByRole('button', {name: 'Reindex'}).click();
-  await page.waitForFunction(() => document.querySelector('#artwork-status').textContent.includes('1 with tags.'));
+  await page.waitForFunction(() => document.querySelector('#artwork-status').textContent.includes('2 with tags.'));
   await setup.close();
 
   const errors = [];
@@ -135,6 +137,21 @@ try {
     });
   });
   assert.equal(received, pngUrl);
+  await phoneMaker.locator('#clear').click();
+  const webpLibrary = await openLibrary(phoneMaker);
+  await Promise.all([
+    webpLibrary.waitForEvent('close'),
+    webpLibrary.getByRole('button', {name: 'WebP listed as PNG', exact: true}).tap()
+  ]);
+  const imported = phoneMaker.locator('#queue img[alt="WebP listed as PNG.png"]');
+  await imported.waitFor();
+  const converted = await imported.evaluate(async img => {
+    await img.decode();
+    const blob = await (await fetch(img.src)).blob();
+    return [blob.type, img.naturalWidth, img.naturalHeight,
+      Array.from(new Uint8Array(await blob.slice(0, 8).arrayBuffer()))];
+  });
+  assert.deepEqual(converted, ['image/png', 120, 80, [137, 80, 78, 71, 13, 10, 26, 10]]);
   assert.deepEqual(errors, []);
   console.log('PASS artwork reindex, search, desktop editor, maker import limit, and unedited mobile handoff');
 } finally {

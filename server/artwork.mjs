@@ -4,9 +4,18 @@ import {mkdir, open, readFile, readdir, realpath, rename, rm, writeFile} from 'n
 import {dirname, extname, join, resolve, sep} from 'node:path';
 
 const maxBytes = 20 * 1024 * 1024;
-const mime = new Map([['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg']]);
+const artworkExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const title = name => name.replace(/[-_]+/g, ' ').trim() || name;
+
+function imageType(bytes) {
+  if (bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') return 'image/png';
+  if (bytes.subarray(0, 3).toString('hex') === 'ffd8ff') return 'image/jpeg';
+  if (bytes.length >= 20 && bytes.toString('latin1', 0, 4) === 'RIFF' &&
+      bytes.readUInt32LE(4) === bytes.length - 8 && bytes.toString('latin1', 8, 12) === 'WEBP' &&
+      ['VP8 ', 'VP8L', 'VP8X'].includes(bytes.toString('latin1', 12, 16))) return 'image/webp';
+  throw Error('Invalid image signature.');
+}
 
 async function readImage(root, relative) {
   const path = join(root, relative);
@@ -24,10 +33,7 @@ async function readImage(root, relative) {
     }
     if (length !== info.size) throw Error('Artwork changed while reading.');
     const bytes = buffer.subarray(0, length);
-    const type = mime.get(extname(path).toLowerCase());
-    if (type === 'image/png' ? bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' :
-      type !== 'image/jpeg' || bytes.subarray(0, 3).toString('hex') !== 'ffd8ff') throw Error('Invalid image signature.');
-    return {bytes, type};
+    return {bytes, type: imageType(bytes)};
   } finally {
     await file.close();
   }
@@ -91,7 +97,7 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
           continue;
         }
         const extension = extname(item.name).toLowerCase();
-        if (!item.isFile() || !mime.has(extension)) continue;
+        if (!item.isFile() || !artworkExtensions.has(extension)) continue;
         const relative = join(folder, item.name);
         let image;
         try {
