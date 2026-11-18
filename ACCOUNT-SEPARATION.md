@@ -70,3 +70,23 @@ Stripe merchant account. The current Stripe merchant account also serves another
 site. A future owner must connect their own Stripe keys/webhook and business
 settings through production administration, and arrange domain/source transfers.
 Both hosting accounts are still administered by this server's root operator.
+
+## Read-only checks if a balance appears different
+
+Do not restore the retained database over production: it would discard new
+registrations, purchases, exports and admin adjustments. Keep both databases.
+After retrieving the latest tools with `coasterlab-update`, run this in the root
+terminal, using the rollback location printed by the migration:
+
+```sh
+python3 /home/jamboodle/coasterlab-dev/scripts/audit-production-migration.py /var/lib/coasterprint/migration/TIMESTAMP/legacy-app
+```
+
+It resolves the running service's actual database path, checks both SQLite
+snapshots, and compares accounts, identities, immutable credit entries, orders,
+processed payment events, controls and settings. It reports missing/changed row
+counts and balance changes explained by new entries. Email addresses, settings
+values, credentials and payment keys are withheld. It opens databases read-only
+and does not restart production. New credits are preserved. Changed mutable rows
+may be legitimate activity after migration; this report is evidence for review,
+not an automatic repair or a claim that every file/configuration migrated.
