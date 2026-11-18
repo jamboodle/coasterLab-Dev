@@ -11,7 +11,7 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, secureExports=true, allowLivePayments=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, secureExports=true, allowLivePayments=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch, artwork=null}) {
 
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
@@ -28,6 +28,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       const activeSecret=payments.credentials[mode].secret;
       const chargeExports=settings.billingEnabled || exportCreditTrial;
       const path=new URL(req.url,'http://localhost').pathname;
+      if (artwork && (path==='/api/artwork' || path.startsWith('/api/artwork/'))) return await artwork.public(req,res,path,send);
       if (req.method==='GET' && path==='/health') return send(200,{ok:true,paymentsEnabled:Boolean(paymentsEnabled),mode});
       if(req.method==='POST'&&['/api/webhooks/stripe','/api/webhooks/stripe/live'].includes(path)){
         const webhookMode=path.endsWith('/live')?'live':'test';
@@ -134,7 +135,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         ledger.updateName(account,body.name.trim());return send(200,{ok:true});
       }
       if(path==='/api/exports'||path.startsWith('/api/exports/'))return await exportRequest({req,res,path,send,ledger,account,origin,billingEnabled:chargeExports});
-      if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments});
+      if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork});
       if(req.method==='POST' && ['/api/export-quote','/api/export-debit'].includes(path)) {
         if(secureExports)return send(410,{error:'Use the account-bound export preparation and download flow.'});
         if(!customerAccounts && !chargeExports)return send(404,{error:'Account exports are disabled'});

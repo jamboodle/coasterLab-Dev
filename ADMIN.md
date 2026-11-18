@@ -70,3 +70,48 @@ retries of the same bytes do not debit twice.
 for the deployment proxy step, privacy changes, retention and limits. Free STL
 geometry remains local and can be converted in other software. Live billing is
 off by default and require production activation; see [LIVE-PAYMENTS.md](LIVE-PAYMENTS.md).
+
+## Artwork library
+
+Upload JPG or PNG files (up to 20 MB each) into the `artwork/` directory next to
+the environment's credits database. Use one level of folders to assign categories
+(for example, `artwork/Animals/Fox.png`). Files directly in `artwork/` appear under
+General. Start with artwork you intend to make public. File names become design
+titles, and reindexing sends image contents to OpenAI to generate public search
+tags. Upload files under a temporary extension and rename them when complete.
+
+| Environment | Default artwork path | Service |
+| --- | --- | --- |
+| Development | `/home/jamboodle/coasterlab-dev/.data/artwork/` | `coasterlab-dev-node` |
+| Production | `/home/coasterprint/app/.data/artwork/` | `coasterprint-node` |
+
+On each server service, set `OPENAI_API_KEY` using its own root-owned mode-0600
+systemd environment file outside the app and web root. For example, create
+`/etc/coasterlab-dev-artwork.env` for development, containing
+`OPENAI_API_KEY=<development key>`, and add this drop-in with
+`systemctl edit coasterlab-dev-node`:
+
+```ini
+[Service]
+EnvironmentFile=/etc/coasterlab-dev-artwork.env
+```
+
+Use a separate file and key for `coasterprint-node`. Reload systemd and restart
+only the service being configured. The app user needs read access to uploaded
+images and write access to the database directory. Keep these directories
+outside the public document root.
+
+After uploads, removals or replacements, sign in to that environment's
+`/admin/`, open **Artwork**, and click **Reindex**. The status reports the
+last completed scan, tagged designs, skipped files and tag failures. Images
+with a failed tag request can still be found by title or category. Reindexing
+retries failed requests and reuses tags for unchanged image contents. The app
+writes `artwork-index.json` alongside the database. Both deployment commands
+preserve this runtime directory, and each environment has its own uploads
+and index.
+
+Test development with the normal `coasterlab-update` workflow. Confirm
+`/api/artwork` returns JSON through the site's existing API proxy, that
+the maker opens the library, and that desktop and mobile selections land
+in the maker preview. Publish the tested revision with `coasterprint-publish`.
+Configure and index production's own artwork there.

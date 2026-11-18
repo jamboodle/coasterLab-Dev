@@ -35,10 +35,35 @@
    const credits=element('td',String(user.credits));credits.className='user-credits';row.append(credits,element('td',user.suspended?'Suspended':user.admin?'Admin':user.verified_at?'Verified':'Unverified'));const actions=element('td'),button=element('button','Manage');button.className='button secondary';button.setAttribute('aria-label','Manage '+(user.name || user.email));button.onclick=()=>manage(user);actions.append(button);row.append(actions);list.append(row);
   }
  }
- function section(name){for(const tab of document.querySelectorAll('[data-section]')){const active=tab.dataset.section===name;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$(tab.dataset.section).hidden=!active;}}
+ function section(name){if(name==='artwork')void artworkStatus();for(const tab of document.querySelectorAll('[data-section]')){const active=tab.dataset.section===name;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$(tab.dataset.section).hidden=!active;}}
  for(const tab of document.querySelectorAll('[data-section]')){tab.onclick=()=>section(tab.dataset.section);tab.addEventListener('keydown',event=>{const tabs=[...document.querySelectorAll('[data-section]')],index=tabs.indexOf(tab);let next;if(event.key==='ArrowRight')next=(index+1)%tabs.length;if(event.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;if(event.key==='Home')next=0;if(event.key==='End')next=tabs.length-1;if(next!==undefined){event.preventDefault();section(tabs[next].dataset.section);tabs[next].focus();}});}
  for(const button of document.querySelectorAll('[data-sort]'))button.onclick=()=>{direction=sort===button.dataset.sort&&direction==='asc'?'desc':'asc';sort=button.dataset.sort;offset=0;void users().catch(error=>status(error.message));};
  $('page-size').onchange=()=>{limit=Number($('page-size').value);offset=0;void users().catch(error=>status(error.message));};$('page-number').onchange=()=>{offset=(Number($('page-number').value)-1)*limit;void users().catch(error=>status(error.message));};
+ let artworkTimer;
+ async function artworkStatus(reindex=false){
+  clearTimeout(artworkTimer);
+  const button=$('reindex-artwork'),message=$('artwork-status');
+  button.disabled=true;
+  try{
+   if(reindex)await api('/api/admin/artwork/reindex',{});
+   const data=await api('/api/admin/artwork');
+   message.textContent=[
+    data.running?'Reindexing artwork…':data.updatedAt?'Last indexed '+visitDate(new Date(data.updatedAt))+'.':'No index has been built.',
+    data.indexed+' designs, '+data.tagged+' with tags.',
+    data.failed?data.failed+' tag requests failed. Reindex to retry.':'',
+    data.skipped?data.skipped+' unreadable or invalid images skipped.':'',
+    data.keyConfigured?'':'Configure OPENAI_API_KEY on the server to enable indexing.',
+    data.error
+   ].filter(Boolean).join(' ');
+   button.disabled=data.running||!data.keyConfigured;
+   if(data.running)artworkTimer=setTimeout(artworkStatus,2000);
+  }catch(error){
+   message.textContent=error.message;
+   button.disabled=false;
+   if(error.status===409)artworkTimer=setTimeout(artworkStatus,2000);
+  }
+ }
+ $('reindex-artwork').onclick=()=>void artworkStatus(true);
  async function settings(){const data=await api('/api/admin/settings'),form=$('settings');$('welcome-settings').elements.welcomeCredits.value=data.welcomeCredits;form.elements.billingEnabled.checked=data.billingEnabled;form.elements.paymentMode.value=data.paymentMode;form.elements.paymentMode.querySelector('[value=live]').disabled=!data.livePaymentsAllowed;form.elements.livePaymentsEnabled.checked=data.livePaymentsEnabled;form.elements.livePaymentsEnabled.disabled=!data.livePaymentsAllowed&&!data.livePaymentsEnabled;for(const key of ['liveSecretKey','liveWebhookSecret']){form.elements[key].value='';form.elements[key].disabled=!data.livePaymentsAllowed;}$('live-lock').textContent=data.livePaymentsAllowed?'Production is permitted to use live payments. Sandbox purchases remain restricted to development. Keep live payments off until setup is complete.':'Live payments are locked on this environment. Development remains in sandbox mode.';$('live-connection').textContent=`Live secret key: ${data.liveSecretKeyConfigured?'configured':'not configured'} · Live webhook: ${data.liveWebhookSecretConfigured?'configured':'not configured'}`;$('live-webhook-url').textContent=location.origin+'/api/webhooks/stripe/live';form.elements.price.value=(data.amount/100).toFixed(2);form.elements.credits.value=data.credits;for(const pack of data.packs.filter(pack=>pack.id!=='starter')){form.elements[pack.id+'Price'].value=(pack.amount/100).toFixed(2);form.elements[pack.id+'Credits'].value=pack.credits;}form.elements.secretKey.value='';form.elements.webhookSecret.value='';$('connection').textContent=`Test secret key: ${data.secretKeyConfigured?'configured':'not configured'} · Webhook secret: ${data.webhookSecretConfigured?'configured':'not configured'}`;$('webhook-url').textContent=location.origin+'/api/webhooks/stripe';}
  async function audit(){const data=await api('/api/admin/audit');$('audit-list').replaceChildren();for(const row of data.entries){const detail=JSON.parse(row.detail);let description=row.action;if(row.action==='credits')description=`${detail.delta>0?'+':''}${detail.delta} credits · ${detail.reason}`;if(row.action==='suspension')description=detail.suspended?'User suspended':'User restored';if(row.action==='settings'){const names={paymentMode:'payment mode',livePaymentsEnabled:'live payments switch',liveSecretKey:'live Stripe key',liveWebhookSecret:'live webhook secret',welcomeCredits:'new user credits',billingEnabled:'billing switch',amount:'pack price',credits:'pack credits',currency:'currency',additionalPacks:'additional credit packs',secretKey:'Stripe key',webhookSecret:'webhook secret'};description='Updated '+detail.changed.map(key=>names[key] || key).join(', ');}$('audit-list').append(element('li',`${new Date(row.created_at).toLocaleString()} · ${row.actorEmail}${row.targetEmail?' · '+row.targetEmail:''} · ${description}`));}}
  async function load(){try{const account=await api('/api/account');if(!account.admin){$('login').hidden=true;$('panel').hidden=true;status('This account does not have administrator access. Sign out from My account to use a different account.');return;}$('login').hidden=true;$('panel').hidden=false;await Promise.all([users(),settings(),audit()]);status('');}catch(error){$('panel').hidden=true;$('login').hidden=error.status!==401;status(error.status===401?'Sign in with your administrator account.':error.message);}}

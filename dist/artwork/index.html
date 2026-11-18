@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Artwork library | CoasterPrint</title>
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="stylesheet" href="/assets/brand/brand.css">
+  <link rel="stylesheet" href="artwork.css">
+  <script type="module" src="library.js"></script>
+</head>
+<body>
+  <main>
+    <section id="library">
+      <h1>Artwork library</h1>
+      <div class="filters">
+        <label>Search artwork <input id="search" type="search" maxlength="120" placeholder="Search titles or tags"></label>
+        <label>Category <select id="category"><option value="">All categories</option></select></label>
+      </div>
+      <p id="results" role="status"></p>
+      <p id="feedback" role="status"></p>
+      <div id="gallery"></div>
+    </section>
+    <section id="editor" aria-labelledby="editor-title" hidden>
+      <button id="back" type="button">Back to library</button>
+      <h1 id="editor-title" tabindex="-1"></h1>
+      <div class="tools" aria-label="Editing tools">
+        <button type="button" data-tool="paint" aria-pressed="true">Paint</button>
+        <button type="button" data-tool="fill" aria-pressed="false">Fill</button>
+        <button type="button" data-tool="erase" aria-pressed="false">Erase</button>
+        <label>Color <input id="ink" type="color" value="#222222"></label>
+        <label>Brush size <input id="brush" type="range" min="2" max="100" value="20"></label>
+        <button id="undo" type="button">Undo</button>
+        <button id="redo" type="button">Redo</button>
+        <button id="rotate" type="button">Rotate 90°</button>
+        <button id="flip" type="button">Flip horizontal</button>
+        <button id="flip-vertical" type="button">Flip vertical</button>
+      </div>
+      <canvas id="preview" aria-label="Artwork preview"></canvas>
+      <details>
+        <summary>Text blocks</summary>
+        <div id="text-blocks"></div>
+        <button id="add-text" type="button">Add text block</button>
+      </details>
+      <button class="primary" id="build" type="button">Build my coaster</button>
+    </section>
+  </main>
+</body>
+</html>

@@ -12,11 +12,28 @@ async function refreshMakerAccess(){
 async function checkProcessingAccess(count=items.length){const access=await refreshMakerAccess();if(count<=access.maxImages)return true;$('notice').textContent=`This account can process ${access.maxImages} image${access.maxImages===1?'':'s'} at a time. Remove images to continue, or sign in with a positive credit balance for batches of up to 6. Processing never spends credits.`;return false;}
 function removeItem(item){if(busy)return;clearSTL(item);URL.revokeObjectURL(item.url);if(item.svgUrl)URL.revokeObjectURL(item.svgUrl);items=items.filter(candidate=>candidate!==item);invalidateTraceOutputs();render();}
 async function addFiles(files){
- if(busy||addingFiles)return;addingFiles=true;
- try{const access=await refreshMakerAccess();if(busy)return;const previousCount=items.length,errors=[];
+ if(busy||addingFiles)return 'The maker is busy. Try again in a moment.';addingFiles=true;
+ try{const access=await refreshMakerAccess();if(busy)return 'The maker is busy. Try again in a moment.';const previousCount=items.length,errors=[];
  for(const file of files){if(!/\.(png|jpe?g)$/i.test(file.name)){errors.push(file.name+': use JPG or PNG.');continue;}if(file.size>20*1024*1024){errors.push(file.name+': exceeds 20 MB.');continue;}if(items.length>=access.maxImages){errors.push(access.maxImages===1?'Only 1 image at a time. Clear or remove the current image, or sign in with a positive credit balance for batches of up to 6.':'Batch limit is 6 images. Remove an image before adding another.');break;}items.push({id:++nextId,file,url:URL.createObjectURL(file),status:sizes(file.size)+' · Ready to trace'});}
  if(items.length!==previousCount)invalidateTraceOutputs();$('notice').textContent=errors.join(' ')||items.length+' image(s) added. Processing is free.';render();$('files').value='';
+ return errors[0] || '';
  }finally{addingFiles=false;}
+}
+let artworkWindow;
+const artworkLink = $('artwork-library');
+if (artworkLink) {
+ artworkLink.addEventListener('click', event => {
+  event.preventDefault();
+  artworkWindow = window.open(artworkLink.href, 'coasterprint-artwork', 'popup,width=1100,height=800');
+  if (artworkWindow) artworkWindow.focus();
+  else $('notice').textContent = 'Allow pop-ups for this site to open the artwork library.';
+ });
+ window.coasterPrintImportArtwork = async (source, file) => {
+  if (source !== artworkWindow) return 'Open the artwork library from the maker.';
+  const error = await addFiles([file]);
+  if (!error) $('queue').scrollIntoView({block: 'nearest'});
+  return error;
+ };
 }
 window.addEventListener('focus',()=>void refreshMakerAccess());window.addEventListener('coasterprint-balance',()=>void refreshMakerAccess());void refreshMakerAccess();
 $('files').onchange=e=>addFiles(e.target.files);$('drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('files').click();}};for(const event of ['dragover','dragleave','drop'])$('drop').addEventListener(event,e=>{e.preventDefault();$('drop').classList.toggle('over',event==='dragover');if(event==='drop')addFiles(e.dataTransfer.files);});
