@@ -6,6 +6,87 @@ function canvas(width, height) {
   return Object.assign(document.createElement('canvas'), {width, height});
 }
 
+const fonts = new Map([
+  ['system-ui', 'System sans'],
+  ['Arial, sans-serif', 'Arial'],
+  ['Georgia, serif', 'Georgia'],
+  ['"Times New Roman", serif', 'Times New Roman'],
+  ['"Courier New", monospace', 'Courier New']
+]);
+const layouts = new Map([['straight', 'Straight'], ['arc', 'Arc'], ['wave', 'Wave']]);
+const graphemes = new Intl.Segmenter(undefined, {granularity: 'grapheme'});
+
+function imageColors(image) {
+  const scale = Math.min(1, 512 / Math.max(image.width, image.height));
+  const sample = canvas(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)));
+  const context = sample.getContext('2d', {willReadFrequently: true});
+  context.imageSmoothingEnabled = false;
+  context.drawImage(image, 0, 0, sample.width, sample.height);
+  const {data} = context.getImageData(0, 0, sample.width, sample.height);
+  const bins = new Map();
+  for (let i = 0; i < data.length; i += 4) {
+    if (!data[i + 3]) continue;
+    const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const bin = bins.get(key);
+    if (bin) bin.weight += data[i + 3];
+    else bins.set(key, {weight: data[i + 3], rgb: (r << 16) | (g << 8) | b});
+  }
+  return [...bins.values()].sort((a, b) => b.weight - a.weight).slice(0, 16)
+    .map(({rgb}) => '#' + rgb.toString(16).padStart(6, '0'));
+}
+
+function styleColor(element, color) {
+  const rgb = Number.parseInt(color.slice(1), 16);
+  const lightness = 0.299 * (rgb >> 16) + 0.587 * ((rgb >> 8) & 255) + 0.114 * (rgb & 255);
+  element.style.backgroundColor = color;
+  element.style.color = lightness > 150 ? '#191919' : '#ffffff';
+}
+
+function colorOptions(select, colors) {
+  select.classList.add('image-color');
+  select.replaceChildren(...colors.map(color => {
+    const option = new Option(color, color);
+    styleColor(option, color);
+    return option;
+  }));
+}
+
+function drawText(context, block, size) {
+  context.font = `bold ${size}px ${block.font}`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  if (block.layout === 'straight' || !block.curve) {
+    context.fillText(block.value, 0, 0);
+    return;
+  }
+  const letters = Array.from(graphemes.segment(block.value), item => item.segment);
+  const widths = letters.map(letter => context.measureText(letter).width);
+  const width = widths.reduce((sum, advance) => sum + advance, 0);
+  if (!width) return;
+  const arc = block.layout === 'arc';
+  const bend = block.curve / 100;
+  const sweep = bend * Math.PI * 0.92;
+  const radius = width / sweep;
+  const amplitude = bend * Math.min(size * 0.8, width / 8);
+  let advance = -width / 2;
+  for (const [i, letter] of letters.entries()) {
+    const offset = advance + widths[i] / 2;
+    advance += widths[i];
+    const angle = offset / width * (arc ? sweep : 2 * Math.PI);
+    context.save();
+    if (arc) {
+      context.translate(radius * Math.sin(angle), radius * (1 - Math.cos(angle)));
+      context.rotate(angle);
+    } else {
+      context.translate(offset, amplitude * Math.sin(angle));
+      context.rotate(Math.atan(amplitude * 2 * Math.PI / width * Math.cos(angle)));
+    }
+    context.fillText(letter, 0, 0);
+    context.restore();
+  }
+}
+
 function fill(context, x, y, color) {
   const {width, height} = context.canvas;
   const image = context.getImageData(0, 0, width, height);
@@ -44,18 +125,31 @@ export async function createEditor(blob) {
   const image = await createImageBitmap(blob);
   const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
   const original = canvas(Math.max(1, Math.round(image.width * ratio)), Math.max(1, Math.round(image.height * ratio)));
+  let colors;
   try {
+    colors = imageColors(image);
     original.getContext('2d').drawImage(image, 0, 0, original.width, original.height);
   } finally {
     image.close();
   }
 
+  const ink = $('ink');
+  colorOptions(ink, colors);
+  ink.disabled = colors.length === 0;
+  if (colors.length) {
+    ink.value = colors[1] ?? colors[0];
+    styleColor(ink, ink.value);
+  } else {
+    ink.add(new Option('No visible colors', ''));
+    ink.style.backgroundColor = ink.style.color = '';
+  }
+  ink.onchange = () => styleColor(ink, ink.value);
   const preview = $('preview');
   const output = preview.getContext('2d');
   const history = [{raster: original, text: []}];
   let cursor = 0;
   let state = history[cursor];
-  let tool = 'paint';
+  let tool = colors.length ? 'paint' : 'erase';
   let stroke;
   let draft;
 
@@ -72,10 +166,8 @@ export async function createEditor(blob) {
       output.translate(block.x * raster.width / 100, block.y * raster.height / 100);
       output.transform(...block.matrix, 0, 0);
       output.fillStyle = block.color;
-      output.font = `bold ${Math.max(1, block.size * Math.min(raster.width, raster.height) / 100)}px system-ui`;
-      output.textAlign = 'center';
-      output.textBaseline = 'middle';
-      output.fillText(block.value, 0, 0);
+      const size = Math.max(1, block.size * Math.min(raster.width, raster.height) / 100);
+      drawText(output, block, size);
       output.restore();
     }
   }
@@ -83,7 +175,7 @@ export async function createEditor(blob) {
   function updateButtons() {
     $('undo').disabled = cursor === 0;
     $('redo').disabled = cursor === history.length - 1;
-    $('add-text').disabled = state.text.length >= 3;
+    $('add-text').disabled = !colors.length || state.text.length >= 3;
   }
 
   function commit(next) {
@@ -101,17 +193,20 @@ export async function createEditor(blob) {
     const rows = state.text.map((block, index) => {
       const row = document.createElement('div');
       row.className = 'text-controls';
-      function field(label, key, type, min, max) {
+      function field(label, key, type, {min, max, options} = {}) {
         const wrapper = document.createElement('label');
-        const input = document.createElement('input');
-        input.type = type;
-        input.value = block[key];
+        const input = document.createElement(type === 'select' ? 'select' : 'input');
+        if (type !== 'select') input.type = type;
+        if (options) for (const [value, name] of options) input.add(new Option(name, value));
+        if (key === 'color') colorOptions(input, colors);
         input.setAttribute('aria-label', label + (key === 'value' ? '' : ' for text block ' + (index + 1)));
         if (type === 'range') {
           input.min = min;
           input.max = max;
         }
         if (type === 'text') input.maxLength = 80;
+        input.value = block[key];
+        if (key === 'color') styleColor(input, input.value);
         function next() {
           const value = type === 'range' ? input.valueAsNumber : input.value;
           return {...state, text: state.text.map((item, i) => i === index ? {...item, [key]: value} : item)};
@@ -120,15 +215,24 @@ export async function createEditor(blob) {
           draft = next();
           draw();
         };
-        input.onchange = () => commit(next());
+        input.onchange = () => {
+          commit(next());
+          if (key === 'color') styleColor(input, input.value);
+          if (key === 'layout') curve.hidden = input.value === 'straight';
+        };
         wrapper.append(label, input);
         row.append(wrapper);
+        return wrapper;
       }
       field('Text block ' + (index + 1), 'value', 'text');
-      field('Color', 'color', 'color');
-      field('Size', 'size', 'range', 2, 35);
-      field('Horizontal', 'x', 'range', 0, 100);
-      field('Vertical', 'y', 'range', 0, 100);
+      field('Color', 'color', 'select');
+      field('Font', 'font', 'select', {options: fonts});
+      field('Layout', 'layout', 'select', {options: layouts});
+      const curve = field('Curve', 'curve', 'range', {min: -100, max: 100});
+      curve.hidden = block.layout === 'straight';
+      field('Size', 'size', 'range', {min: 2, max: 35});
+      field('Horizontal', 'x', 'range', {min: 0, max: 100});
+      field('Vertical', 'y', 'range', {min: 0, max: 100});
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = 'Remove';
@@ -206,13 +310,13 @@ export async function createEditor(blob) {
     context.drawImage(state.raster, 0, 0);
     const next = {...state, raster};
     if (tool === 'fill') {
-      if (fill(context, ...start, $('ink').value)) commit(next);
+      if (fill(context, ...start, ink.value)) commit(next);
       return;
     }
     const size = $('brush').valueAsNumber;
     context.lineWidth = size;
     context.lineCap = 'round';
-    context.strokeStyle = context.fillStyle = $('ink').value;
+    context.strokeStyle = context.fillStyle = ink.value;
     if (tool === 'erase') context.globalCompositeOperation = 'destination-out';
     draft = next;
     stroke = {context, size, id: event.pointerId};
@@ -232,6 +336,7 @@ export async function createEditor(blob) {
 
   const tools = [...document.querySelectorAll('[data-tool]')];
   for (const button of tools) {
+    button.disabled = !colors.length && button.dataset.tool !== 'erase';
     button.setAttribute('aria-pressed', String(button.dataset.tool === tool));
     button.onclick = () => {
       tool = button.dataset.tool;
@@ -244,9 +349,9 @@ export async function createEditor(blob) {
   $('flip').onclick = () => transform('horizontal');
   $('flip-vertical').onclick = () => transform('vertical');
   $('add-text').onclick = () => {
-    if (state.text.length >= 3 || stroke) return;
+    if (!colors.length || state.text.length >= 3 || stroke) return;
     commit({...state, text: [...state.text, {
-      value: '', color: '#222222', size: 12, x: 50, y: 30 + 20 * state.text.length, matrix: [1, 0, 0, 1]
+      value: '', color: ink.value, font: 'system-ui', layout: 'straight', curve: 55, size: 12, x: 50, y: 30 + 20 * state.text.length, matrix: [1, 0, 0, 1]
     }]});
     showTextControls();
     $('text-blocks').lastElementChild.querySelector('input').focus();

@@ -106,10 +106,12 @@ try {
   await popup.getByRole('button', {name: 'Erase', exact: true}).click();
   await canvas.click({position: {x: 60, y: 40}});
   assert.equal((await pixel(60, 40))[3], 0);
-  await popup.getByLabel('Color', {exact: true}).fill('#ff0000');
+  const ink = popup.getByLabel('Image color', {exact: true});
+  assert.deepEqual(await ink.locator('option').evaluateAll(options => options.map(option => option.value)), ['#ffcc66', '#222222']);
+  await ink.selectOption('#ffcc66');
   await popup.getByRole('button', {name: 'Paint', exact: true}).click();
   await canvas.click({position: {x: 60, y: 40}});
-  assert.deepEqual(await pixel(60, 40), [255, 0, 0, 255]);
+  assert.deepEqual(await pixel(60, 40), [255, 204, 102, 255]);
   await popup.getByRole('button', {name: 'Rotate 90°'}).click();
   assert.equal(await canvas.evaluate(element => element.width), 80);
   await popup.getByRole('button', {name: 'Flip horizontal'}).click();
@@ -120,7 +122,33 @@ try {
     await addText.click();
     await popup.getByLabel('Text block ' + i, {exact: true}).fill('Label ' + i);
   }
+  await popup.getByLabel('Text block 3', {exact: true}).press('Tab');
   assert.equal(await addText.isDisabled(), true);
+  const textColor = popup.getByLabel('Color for text block 1', {exact: true});
+  assert.deepEqual(await textColor.locator('option').evaluateAll(options => options.map(option => option.value)), ['#ffcc66', '#222222']);
+  const snapshot = () => canvas.evaluate(element => element.toDataURL());
+  const straight = await snapshot();
+  const font = popup.getByLabel('Font for text block 1', {exact: true});
+  await font.selectOption({label: 'Courier New'});
+  const monospace = await snapshot();
+  assert.notEqual(monospace, straight);
+  const layout = popup.getByLabel('Layout for text block 1', {exact: true});
+  const curve = popup.getByLabel('Curve for text block 1', {exact: true});
+  assert.equal(await curve.isHidden(), true);
+  await layout.selectOption('arc');
+  assert.equal(await curve.isVisible(), true);
+  const arc = await snapshot();
+  assert.notEqual(arc, monospace);
+  await layout.selectOption('wave');
+  const wave = await snapshot();
+  assert.notEqual(wave, arc);
+  assert.notEqual(wave, monospace);
+  await popup.getByRole('button', {name: 'Undo', exact: true}).click();
+  assert.equal(await layout.inputValue(), 'arc');
+  assert.equal(await snapshot(), arc);
+  await popup.getByRole('button', {name: 'Redo', exact: true}).click();
+  assert.equal(await layout.inputValue(), 'wave');
+  assert.equal(await snapshot(), wave);
   await Promise.all([
     popup.waitForEvent('close'),
     popup.getByRole('button', {name: 'Build my coaster'}).click()
