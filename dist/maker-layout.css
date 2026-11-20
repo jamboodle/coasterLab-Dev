@@ -18,3 +18,24 @@
 @media(max-width:700px){.holders-section{padding:22px 0}.holders-section .section-heading{display:flex;align-items:flex-start;flex-wrap:wrap;gap:14px}.holders-section .section-heading h2{font-size:24px}.holders-section .section-heading .eyebrow{font-size:9px}.holder-pack{margin-top:0}.holders-grid{gap:12px}.holder-card img{height:100px}.holder-info{padding:10px;padding-top:2px}.holder-info h3{font-size:14px}.holder-dimensions{font-size:9px}.holder-download{font-size:10px;padding:10px 6px}}
 
 .maker-account{max-width:1160px;margin:12px auto;padding:0 24px;font-size:14px;overflow-wrap:anywhere}.maker-account a{color:inherit}
+
+.plaque-feature {
+  display:grid;
+  grid-template-columns:1fr minmax(0,1fr);
+  gap:clamp(22px,4vw,50px);
+  align-items:center;
+  border:1px solid #5e5742;
+  border-left:4px solid var(--yellow);
+  border-radius:14px;
+  padding:clamp(20px,4vw,40px);
+  background:#26231c;
+  margin-bottom:30px;
+}
+.plaque-feature h2 {font-size:clamp(28px,4vw,42px);line-height:1.06;letter-spacing:-.04em;margin:0 0 12px}
+.plaque-feature-copy>p {max-width:46ch;color:#e0dbcf;font-size:15px;line-height:1.6;margin:0 0 18px}
+.plaque-feature img {display:block;width:100%;height:auto;border-radius:9px;background:#f3efe5}
+.plaque-feature-link {display:inline-flex;align-items:center;gap:12px;min-height:46px;padding:9px 15px;border-radius:7px;background:var(--yellow);color:#181509;font-size:14px;font-weight:800;text-decoration:none}
+.plaque-feature-link:hover {filter:brightness(1.12)}
+.plaque-feature-link:focus-visible {outline:2px solid #fff;outline-offset:4px}
+.plaque-feature-copy .plaque-feature-formats {margin:10px 0 0;font-size:12px;color:#d1c9b7}
+@media(max-width:680px){.plaque-feature{grid-template-columns:1fr;gap:18px}.plaque-feature img{max-width:520px}}
