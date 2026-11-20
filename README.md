@@ -72,6 +72,20 @@ Use a small amount of compatible adhesive if the inserts need rear retention.
 The static page ships with the existing development and production release
 packages. No additional service or proxy configuration is required.
 
+## Plaque Maker
+
+Open `/plaque/` from the main navigation. Upload a PNG or JPG and trace it into
+solid colors. Set each color’s top height above the bed and choose its print
+color, then build the stacked relief. Higher sections sit on the lower tiers.
+Enable edge-background removal for a plain background, or upload a PNG with
+transparency for direct control over the footprint.
+
+The 3MF uses the existing Bambu P1S 0.4 mm project preset and assigns each
+tier to its filament. The prime tower defaults to off because large plaques can
+occupy its usual spot. The STL ZIP includes the same stacked geometry and a
+height guide. Import all STL tiers together to preserve the vertical offsets.
+The page runs locally in the browser and ships with the usual site release.
+
 ## Next development
 
 See [ROADMAP.md](ROADMAP.md). The first selected priority is export credits and the

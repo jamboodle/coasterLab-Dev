@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plaque Maker | CoasterPrint</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/assets/brand/brand.css">
+  <link rel="stylesheet" href="/suncatcher/suncatcher.css">
+  <link rel="stylesheet" href="plaque.css">
+  <script src="/vendor/fflate.js" defer></script>
+  <script type="module" src="maker.js"></script>
+</head>
+<body>
+  <header class="site-header-logo">
+    <a class="brand brand--logo" href="/" aria-label="CoasterPrint home"><img src="/assets/brand/coasterprint-logo-light.png" alt="CoasterPrint"></a>
+    <nav aria-label="Main navigation">
+      <a href="/#maker">Make a coaster</a>
+      <a href="/plaque/" aria-current="page">Plaque Maker</a>
+      <a href="/#holders">Coaster holders</a>
+      <a href="/pricing/">Account &amp; credits</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Plaque Maker</h1>
+    <p class="intro">Turn artwork into a solid-color plaque with stacked relief. Each color can finish at a different height.</p>
+    <section aria-labelledby="trace-title">
+      <h2 id="trace-title">Artwork and colors</h2>
+      <div class="controls">
+        <label>Upload PNG or JPG <input id="file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg"></label>
+        <button id="sample" type="button">Try the sample</button>
+      </div>
+      <div class="controls trace-controls">
+        <label>Maximum colors <input id="color-count" type="number" min="2" max="12" value="5"></label>
+        <label>Trace detail <select id="detail"><option value="smooth">Smooth</option><option value="normal" selected>Normal</option><option value="fine">Fine</option></select></label>
+        <label class="check"><input id="background" type="checkbox" checked> Remove edge background</label>
+        <button id="trace-artwork" type="button" disabled>Trace artwork</button>
+      </div>
+      <p id="trace-status" role="status">Use a transparent image or a plain background. Your artwork stays in this browser.</p>
+      <div class="split artwork-previews" id="artwork-previews" hidden>
+        <figure><h3>Original</h3><canvas id="original" aria-label="Original artwork"></canvas></figure>
+        <figure><h3>Traced colors</h3><div id="traced"></div></figure>
+      </div>
+    </section>
+    <section aria-labelledby="height-title">
+      <h2 id="height-title">Height by color</h2>
+      <p>Set each color’s top height above the print bed. The lowest tier forms the base. Each higher tier rests on the layers below it.</p>
+      <div id="tiers"></div>
+      <div class="controls">
+        <label>Finished width (mm) <input id="width" type="number" min="25" max="250" step="0.1" value="220"></label>
+        <label class="check"><input id="largest" type="checkbox" checked> Keep only the largest outline</label>
+        <button id="build" type="button" disabled>Build plaque</button>
+      </div>
+    </section>
+    <section aria-labelledby="model-title">
+      <h2 id="model-title">Plaque preview</h2>
+      <canvas id="model" width="640" height="340" aria-label="Angled preview of the stacked plaque"></canvas>
+      <p id="model-status" role="status">Trace your artwork, set the heights, then build the plaque.</p>
+      <div class="controls">
+        <button class="primary" id="project" type="button" disabled>Download 3MF</button>
+        <button id="stls" type="button" disabled>Download STL tiers</button>
+      </div>
+      <p>The 3MF includes Bambu P1S settings and filament colors. The STL ZIP includes a height guide for manual filament swaps.</p>
+      <p id="export-status" role="status"></p>
+    </section>
+  </main>
+</body>
+</html>
