@@ -77,8 +77,8 @@ packages. No additional service or proxy configuration is required.
 Open `/plaque/` from the main navigation. Choose or drop a PNG or JPG and trace it into
 solid colors. Set each color’s top height above the bed and choose its print
 color, then build the stacked relief. Drag the 3D preview to inspect the actual
-export mesh. Colors start sorted by traced area, with the largest in the bottom row, marked
-**Base**. Drag a different color there to change the backing. It
+export mesh. Colors start sorted by traced area, with the most visible at the top and the
+least visible at the bottom, marked **Base**. Drag a different color there to change the backing. It
 fills the plaque outline, and each lower tier extends under the tiers above
 it. The listed heights are measured from the print bed. Reordering colors
 reassigns the existing heights.

@@ -169,11 +169,11 @@ try {
   }, upload);
   await page.locator('#drop').dispatchEvent('drop', {dataTransfer: files});
   await page.waitForFunction(() => document.querySelectorAll('.tier').length === 6);
-  assert.equal(await page.locator('.tier').last().getAttribute('data-source'), '#428c12');
+  assert.equal(await page.locator('.tier').first().getAttribute('data-source'), '#428c12');
   const areas = await page.locator('.tier-area').evaluateAll(labels => labels.map(label =>
     Number(label.textContent.match(/\d+(?:\.\d+)?/)[0])));
-  assert.deepEqual(areas, [...areas].sort((a, b) => a - b));
-  assert.ok(areas.at(-1) > 50);
+  assert.deepEqual(areas, [...areas].sort((a, b) => b - a));
+  assert.ok(areas[0] > 50);
   await page.locator('.tier[data-source="#ffff00"] .tier-grip').dragTo(page.locator('.tier').last());
   assert.equal(await page.locator('.tier').last().getAttribute('data-source'), '#ffff00');
   await page.locator('#width').fill('220');

@@ -197,7 +197,7 @@ $('sort-area').onclick = () => {
   const order = [...trace.sourceColors].reverse();
   const sorted = order.map(color => rows.find(row => row.dataset.source === color));
   if (sorted.some((row, index) => row !== rows[index])) applyTierOrder(sorted, heights);
-  $('tier-status').textContent = 'Sorted by traced area. The largest color is the base.';
+  $('tier-status').textContent = 'Sorted by traced area. The most visible color is on top.';
 };
 
 function moveTier(row, destination, keyboardDirection) {
@@ -350,7 +350,7 @@ async function traceSource() {
     image.alt = 'Artwork traced into solid colors';
     await image.decode();
     const areas = colorAreas(image, nextTrace.sourceColors, width, height);
-    nextTrace.sourceColors.sort((a, b) => areas.get(b) - areas.get(a));
+    nextTrace.sourceColors.sort((a, b) => areas.get(a) - areas.get(b));
     trace = nextTrace;
     renderTiers(trace.sourceColors, areas);
     $('traced').replaceChildren(image);
