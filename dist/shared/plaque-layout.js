@@ -3,6 +3,7 @@ export function printGuide(model) {
     'CoasterPrint Plaque Maker', '',
     'The 3MF contains a single assembled plaque. Preserve the relative positions of all tiers.',
     'The STL coordinates are millimeters. Import them together as one multipart object to preserve the Z offsets.',
+    'A properly stacked plaque prints flat without supports. If the slicer shows areas that need supports, check that the base is flat and the tiers are aligned, then review the layer order in Plaque Maker.',
     'Each listed height is measured from the build plate.',
     'For manual filament swaps, use the slicer preview to pick the first layer of each new tier.',
     '',
