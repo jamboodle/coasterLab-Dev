@@ -86,7 +86,9 @@ The 3MF uses the existing Bambu P1S 0.4 mm project preset and assigns each
 tier to its filament. The prime tower defaults to off because large plaques can
 occupy its usual spot. The STL ZIP includes the same stacked geometry and a
 height guide. Import all STL tiers together to preserve the vertical offsets.
-The page runs locally in the browser and ships with the usual site release.
+Tracing, geometry, and free STL downloads run in the browser. A private 3MF
+uses the same CoasterPrint account balance, at one credit when billing is on.
+The server assembles the 3MF from model parts; the original artwork stays local.
 
 ## Next development
 

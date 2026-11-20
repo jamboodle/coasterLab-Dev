@@ -6,9 +6,10 @@
   const response=await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?(typeof body==='string'?body:JSON.stringify(body)):undefined,signal:AbortSignal.timeout(path==='/api/exports'?90000:15000)});
   const data=await response.json();if(!response.ok){const error=Error(data.error || 'Credit service unavailable. Please retry.');error.status=response.status;throw error;}return data;
  }
- function panel(){
+ function panel(kind){
+  const printNote=kind==='plaque'?'Keep all plaque tiers together, with the flat base on the build plate.':'Coasters import design-side up so you can inspect the colors and details. For the best surface finish, flip each whole coaster design-side down onto the build plate before slicing. Keep the base and color parts together.';
   const dialog=document.createElement('dialog');dialog.setAttribute('aria-labelledby','export-credit-title');dialog.className='export-credit-dialog';
-  dialog.innerHTML='<form method="dialog"><button class="dialog-close" aria-label="Close export confirmation">×</button></form><p class="eyebrow">3MF DOWNLOAD</p><h2 id="export-credit-title">Your download</h2><p><strong>Before printing:</strong> Coasters import design-side up so you can inspect the colors and details. For the best surface finish, flip each whole coaster design-side down onto the build plate before slicing. Keep the base and color parts together.</p><p data-summary></p><p data-message role="status" aria-live="polite"></p><div class="dialog-actions"><button data-authorize hidden>Confirm credits</button><button class="download-ready" data-save hidden>Download Ready</button></div><p data-account hidden><a href="/pricing/" target="_blank" rel="noopener">Log in</a> or <a href="/pricing/?register=1" target="_blank" rel="noopener">Create an account</a></p><button data-recheck hidden>I’m signed in · check again</button><p data-insufficient hidden>Change the download type to STL to download free, or <a href="/pricing/#export-pack" target="_blank" rel="noopener">purchase more credits</a>.</p><button data-stl hidden>Switch to free STL</button><details><summary>Credits & retries</summary><p>One credit per coaster when billing is on. STL is free. Retrying these exact file bytes does not deduct credits again. Keep this page open to retry.</p></details>';
+  dialog.innerHTML='<form method="dialog"><button class="dialog-close" aria-label="Close export confirmation">×</button></form><p class="eyebrow">3MF DOWNLOAD</p><h2 id="export-credit-title">Your download</h2><p><strong>Before printing:</strong> '+printNote+'</p><p data-summary></p><p data-message role="status" aria-live="polite"></p><div class="dialog-actions"><button data-authorize hidden>Confirm credits</button><button class="download-ready" data-save hidden>Download Ready</button></div><p data-account hidden><a href="/pricing/" target="_blank" rel="noopener">Log in</a> or <a href="/pricing/?register=1" target="_blank" rel="noopener">Create an account</a></p><button data-recheck hidden>I’m signed in · check again</button><p data-insufficient hidden>Change the download type to STL to download free, or <a href="/pricing/#export-pack" target="_blank" rel="noopener">purchase more credits</a>.</p><button data-stl hidden>Switch to free STL</button><details><summary>Credits & retries</summary><p>One credit per '+kind+' when billing is on. STL is free. Retrying these exact file bytes does not deduct credits again. Keep this page open to retry.</p></details>';
   document.body.append(dialog);return dialog;
  }
  window.freeSTLDownload=async(selected)=>{
@@ -23,30 +24,30 @@
    const notice=document.getElementById('notice');if(notice)notice.textContent='Free STL parts ZIP is ready. Download it from the open dialog.';
   }catch(error){if(dialog.open){dialog.querySelector('[data-progress]').textContent=error.message;dialog.querySelector('[data-free-save]').textContent='ZIP unavailable';}}
  };
- window.creditTrialDownload=async(preparePayload)=>{
+ window.creditTrialDownload=async(preparePayload,{kind='coaster',freeSTL=()=>window.freeSTLDownload(),onError}={})=>{
   if(preparing)return;preparing=true;let dialog;
   try{
-   const config=await request('/api/config');dialog=panel();dialog.showModal();const signup=dialog.querySelector('[data-account] a[href*=register]');if(config.welcomeCredits>0)signup.textContent=`Create an account · ${config.welcomeCredits} free credits`;
+   const config=await request('/api/config');dialog=panel(kind);dialog.showModal();const signup=dialog.querySelector('[data-account] a[href*=register]');if(config.welcomeCredits>0)signup.textContent=`Create an account · ${config.welcomeCredits} free credits`;
    const summary=dialog.querySelector('[data-summary]'),message=dialog.querySelector('[data-message]'),authorize=dialog.querySelector('[data-authorize]'),ready=dialog.querySelector('[data-save]'),account=dialog.querySelector('[data-account]'),recheck=dialog.querySelector('[data-recheck]'),insufficient=dialog.querySelector('[data-insufficient]'),stl=dialog.querySelector('[data-stl]');
    const privacy=document.createElement('p');privacy.textContent='Preparing 3MF uploads the generated model parts and printer settings to our server. Original images stay in your browser. Prepared downloads are private and kept for up to 24 hours.';privacy.className='hint';dialog.append(privacy);
    dialog.addEventListener('close',()=>{dialog.remove();preparing=false;},{once:true});let job,quote,downloadUrl;
-   stl.onclick=()=>{dialog.close();void window.freeSTLDownload();};
+   stl.onclick=()=>{dialog.close();void freeSTL();};
    async function check(){
     authorize.hidden=true;ready.hidden=true;account.hidden=true;recheck.hidden=true;insufficient.hidden=true;stl.hidden=true;message.textContent='Checking your account…';
     try{
      await request('/api/account');if(!dialog.open)return;
-     if(!job){message.textContent='Preparing your private 3MF download… No credits are deducted yet.';if(typeof preparePayload!=='function')throw Error('Build your coaster and use its 3MF download button.');const result=await request('/api/exports',await preparePayload());job=result.id;quote=result;}
+     if(!job){message.textContent='Preparing your private 3MF download… No credits are deducted yet.';if(typeof preparePayload!=='function')throw Error('Build your '+kind+' and use its 3MF download button.');const result=await request('/api/exports',await preparePayload());job=result.id;quote=result;}
      else quote=await request('/api/exports/'+job);
      if(!dialog.open)return;
-     summary.textContent=`${quote.count} coaster${quote.count===1?'':'s'} · Cost: ${quote.cost} credit${quote.cost===1?'':'s'} · Balance: ${quote.balance} · After export: ${quote.remaining}`;
+     summary.textContent=`${quote.count} ${kind}${quote.count===1?'':'s'} · Cost: ${quote.cost} credit${quote.cost===1?'':'s'} · Balance: ${quote.balance} · After export: ${quote.remaining}`;
      if(quote.remaining<0){message.textContent='Not enough credits. No credits were used.';insufficient.hidden=false;stl.hidden=false;return;}
      message.textContent=quote.cost===0?'No credits will be deducted for this download.':'Your file is ready. Credits are deducted only after you confirm.';authorize.textContent=quote.cost===0?'Prepare free download':`Confirm · ${quote.cost} credit${quote.cost===1?'':'s'}`;authorize.hidden=false;authorize.disabled=false;
     }catch(error){if(error.status===401){message.textContent='Log in or create an account to download 3MF. '+(config.welcomeCredits>0?`New accounts start with ${config.welcomeCredits} credits. `:'')+'STL downloads are free.';account.hidden=false;stl.hidden=false;recheck.textContent='I’m signed in · check again';}else{message.textContent=error.message;recheck.textContent='Try again';}recheck.hidden=false;}
    }
    recheck.onclick=()=>void check();
    authorize.onclick=async()=>{authorize.disabled=true;message.textContent='Authorizing your private download…';try{const debit=await request('/api/exports/'+job+'/authorize',{expectedCost:quote.cost});downloadUrl=debit.url;summary.textContent=`Remaining balance: ${debit.remaining} credits`;message.textContent=debit.retry?'No additional credits were used. Your file is ready.':`${debit.cost} credit${debit.cost===1?'':'s'} used. Your file is ready.`;authorize.hidden=true;ready.hidden=false;ready.focus();window.dispatchEvent(new Event('coasterprint-balance'));}catch(error){message.textContent=error.message;authorize.disabled=false;if(error.status===409)await check();if(error.status===402){insufficient.hidden=false;stl.hidden=false;}if(error.status===401){authorize.hidden=true;account.hidden=false;recheck.hidden=false;}}};
-   ready.onclick=()=>save(downloadUrl,quote.format==='individual'?'coasterprint-individual-models.zip':'coasterprint-coaster.3mf');await check();
-  }catch(error){if(dialog?.open)dialog.querySelector('[data-message]').textContent=error.message;else{const notice=document.getElementById('notice');if(notice)notice.textContent=error.message;}}
+   ready.onclick=()=>save(downloadUrl,quote.format==='plaque'?'coasterprint-plaque.3mf':quote.format==='individual'?'coasterprint-individual-models.zip':'coasterprint-coaster.3mf');await check();
+  }catch(error){if(dialog?.open)dialog.querySelector('[data-message]').textContent=error.message;else if(onError)onError(error);else{const notice=document.getElementById('notice');if(notice)notice.textContent=error.message;}}
   finally{if(!dialog?.open)preparing=false;}
  };
 })();

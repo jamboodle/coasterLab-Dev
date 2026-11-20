@@ -1,5 +1,6 @@
 import {createViewer} from './viewer.js';
-import {bambuPlacement, downloadFile, plaque3MF, plaqueSTLs} from './export.js';
+import {downloadFile, plaqueSTLs, preparePlaqueUpload} from './export.js';
+import {bambuPlacement} from '../shared/plaque-layout.js';
 
 const $ = id => document.getElementById(id);
 const traceControls = ['mode', 'color-count', 'detail', 'background', 'smooth-outer', 'edge-strength', 'clean-specks', 'seal-rim', 'threshold', 'pinhole'];
@@ -442,14 +443,13 @@ async function build() {
   }
 }
 
-async function exportModel(kind) {
+async function exportSTL() {
   if (!model || busy) return;
   busy = true;
   refresh();
   $('export-status').textContent = 'Preparing download…';
   try {
-    if (kind === '3mf') downloadFile('coasterprint-plaque.3mf', await plaque3MF(model), 'model/3mf');
-    else downloadFile('coasterprint-plaque-stls.zip', await plaqueSTLs(model), 'application/zip');
+    downloadFile('coasterprint-plaque-stls.zip', await plaqueSTLs(model), 'application/zip');
     $('export-status').textContent = 'Download ready.';
   } catch (error) {
     $('export-status').textContent = error.message;
@@ -510,5 +510,19 @@ $('threshold').oninput = () => {
 for (const id of ['width', 'largest', 'clean-relief']) $(id).oninput = invalidateModel;
 $('trace-artwork').onclick = () => void traceSource();
 $('build').onclick = () => void build();
-$('project').onclick = () => void exportModel('3mf');
-$('stls').onclick = () => void exportModel('stl');
+$('project').onclick = async () => {
+  if (!model || busy) return;
+  const selected = model;
+  const onError = error => { $('export-status').textContent = error.message; };
+  try {
+    const {scripts} = await getAssets();
+    await import('/' + scripts['export-credit-trial.js']);
+    if (model !== selected || busy) return;
+    await window.creditTrialDownload(() => preparePlaqueUpload(selected), {
+      kind: 'plaque',
+      freeSTL: exportSTL,
+      onError
+    });
+  } catch (error) { onError(error); }
+};
+$('stls').onclick = () => void exportSTL();

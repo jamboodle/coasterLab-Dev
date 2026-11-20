@@ -43,3 +43,44 @@ test('historical packaging scripts and archives are retired, including encoded U
  const {withStatic}=await import('../server/static.mjs'),{fileURLToPath}=await import('node:url');const server=createServer(withStatic((_req,res)=>{res.writeHead(404);res.end();},fileURLToPath(new URL('../dist/',import.meta.url))));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin='http://127.0.0.1:'+server.address().port;
  try{for(const path of ['/export-codec.5d7d9167e4eb.js','/%65xport-codec.5d7d9167e4eb.js','/downloads/coasterprint-self-hosted-r27.zip','/downloads/coasterprint-self-hosted-r27%2ezip'])assert.equal((await fetch(origin+path)).status,410);for(const path of ['/coasterprint-r27.html','/coasterprint-r27%2ehtml'])assert.equal((await fetch(origin+path,{redirect:'manual'})).headers.get('location'),'/');assert.equal((await fetch(origin+'/server/project-codec.mjs')).status,404);assert.equal((await fetch(origin+'/downloads/coasterprint-holder-pack.zip')).status,200);}finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('plaque 3MF shares the coaster balance, costs one credit, and stays private until confirmed',()=>fixture(async({ledger,a,b,call})=>{
+ const coaster=await (await call('/api/exports',{body:modelPayload(2)})).json();
+ assert.equal((await call('/api/exports/'+coaster.id+'/authorize',{body:{expectedCost:2}})).status,200);
+ const geometry=modelPayload().items[0].stl;
+ const plaque={format:'plaque',count:0,parts:[
+  {source:'#ffd800',color:'#FFD800',top:2,buffer:geometry.base.buffer},
+  {source:'#42a535',color:'#42A535',top:2.5,buffer:geometry.parts[0].buffer}
+ ]};
+ assert.equal((await call('/api/exports',{body:plaque,token:''})).status,401);
+ const invalid=structuredClone(plaque);invalid.parts[1].top=9;
+ assert.equal((await call('/api/exports',{body:invalid})).status,400);
+ assert.equal(ledger.balance(a.id),4);
+ const prepared=await call('/api/exports',{body:plaque});
+ assert.equal(prepared.status,201);
+ const job=await prepared.json();
+ assert.deepEqual([job.format,job.count,job.cost,job.balance],['plaque',1,1,4]);
+ const prefix='/api/exports/'+job.id;
+ assert.equal((await call(prefix+'/file')).status,403);
+ assert.equal((await call(prefix+'/file',{token:b.token})).status,404);
+ const results=await Promise.all([1,1].map(expectedCost=>call(prefix+'/authorize',{body:{expectedCost}})));
+ assert.ok(results.every(response=>response.status===200));
+ assert.equal(ledger.balance(a.id),3);
+ const file=await call(prefix+'/file');
+ assert.equal(file.status,200);
+ assert.match(file.headers.get('content-disposition'),/coasterprint-plaque\.3mf/);
+ const archive=unzipSync(new Uint8Array(await file.arrayBuffer()));
+ assert.match(Buffer.from(archive['3D/3dmodel.model']).toString(),/name="Plaque"/);
+ assert.match(Buffer.from(archive['Metadata/FILAMENT-HEIGHTS.txt']).toString(),/Z 2–2\.5 mm/);
+ const duplicate=structuredClone(plaque);duplicate.parts[0].color='#ffd800';duplicate.count=999;
+ const replay=await (await call('/api/exports',{body:duplicate})).json();
+ assert.equal(replay.id,job.id);
+ assert.equal(replay.cost,0);
+
+ ledger.saveSettings(a.id,{billingEnabled:false});
+ const newPlaque=structuredClone(plaque);newPlaque.parts[0].color='#ffffff';
+ const free=await (await call('/api/exports',{body:newPlaque})).json();
+ assert.equal(free.cost,0);
+ assert.equal((await call('/api/exports/'+free.id+'/authorize',{body:{expectedCost:0}})).status,200);
+ assert.equal(ledger.balance(a.id),3);
+}));

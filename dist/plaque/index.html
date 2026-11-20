@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="/assets/brand/brand.css">
   <link rel="stylesheet" href="/suncatcher/suncatcher.css">
   <link rel="stylesheet" href="plaque.css">
+  <link rel="stylesheet" href="/assets/brand/export-dialog.css">
+  <script src="/maker-account.js" defer></script>
   <script src="/vendor/fflate.js" defer></script>
   <script type="module" src="maker.js"></script>
 </head>
@@ -22,6 +24,7 @@
     </nav>
   </header>
   <main>
+    <p id="maker-account" role="status"></p>
     <h1>Plaque Maker</h1>
     <p class="intro">Turn artwork into a solid-color plaque with stacked relief. Each color can finish at a different height.</p>
     <section aria-labelledby="trace-title">
@@ -88,7 +91,7 @@
         <button class="primary" id="project" type="button" disabled>Download 3MF</button>
         <button id="stls" type="button" disabled>Download STL tiers</button>
       </div>
-      <p>The 3MF includes Bambu P1S settings and filament colors. The STL ZIP includes a height guide for manual filament swaps.</p>
+      <p>3MF uses the same CoasterPrint credit balance and includes Bambu P1S settings and filament colors. STL is free and includes a filament-height guide.</p>
       <p id="export-status" role="status"></p>
     </section>
   </main>

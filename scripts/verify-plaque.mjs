@@ -5,13 +5,20 @@ import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {withStatic} from '../server/static.mjs';
+import {handler} from '../server/app.mjs';
+import {Ledger} from '../server/ledger.mjs';
+import {modelPayload} from '../tests/export-fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const {chromium} = require('playwright');
 const {unzipSync, strFromU8} = require('../dist/vendor/fflate.js');
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
 const manifest = JSON.parse(await readFile(join(root, 'asset-manifest.json'), 'utf8'));
-const serve = withStatic((req, res) => res.writeHead(404).end(), root);
+const ledger = new Ledger(':memory:');
+const account = ledger.registerIdentity('plaque@example.com', 'salt', 'digest');
+ledger.saveSettings(account, {billingEnabled: true});
+const session = ledger.createSession(account);
+const serve = withStatic((req, res) => handler({ledger, origin, customerAccounts: true})(req, res), root);
 const server = createServer((req, res) => {
   if (req.url === '/plaque/test-mesh.js') {
     const source = '/' + manifest.scripts['stl-geometry.js'];
@@ -57,6 +64,33 @@ try {
   }
   await buildPlaque();
   assert.match(await page.locator('#model-status').textContent(), /3 watertight tiers · 220 × [\d.]+ × 7\.5 mm/);
+  await project.click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByText(/Log in or create an account to download 3MF/).waitFor();
+  const [anonymousSTL] = await Promise.all([
+    page.waitForEvent('download'), dialog.getByRole('button', {name: 'Switch to free STL'}).click()
+  ]);
+  assert.equal(anonymousSTL.suggestedFilename(), 'coasterprint-plaque-stls.zip');
+  assert.equal(ledger.balance(account), 15);
+  await page.context().addCookies([{name: 'cl_session', value: session, url: origin}]);
+
+  async function getProject(expectedCost) {
+    const startingBalance = ledger.balance(account);
+    await project.click();
+    const confirm = dialog.getByRole('button', {name: expectedCost ? /Confirm · 1 credit/ : 'Prepare free download'});
+    await confirm.waitFor();
+    assert.match(await dialog.locator('[data-summary]').textContent(), /1 plaque/);
+    assert.equal(ledger.balance(account), startingBalance);
+    await confirm.click();
+    const [file] = await Promise.all([
+      page.waitForEvent('download'), dialog.getByRole('button', {name: 'Download Ready'}).click()
+    ]);
+    assert.equal(file.suggestedFilename(), 'coasterprint-plaque.3mf');
+    assert.equal(ledger.balance(account), startingBalance - expectedCost);
+    await dialog.getByRole('button', {name: 'Close export confirmation'}).click();
+    return file;
+  }
+
   const stack = page.locator('.tier');
   const order = () => stack.evaluateAll(rows => rows.map(row => row.dataset.source));
   const values = () => heights.evaluateAll(inputs => inputs.map(input => input.valueAsNumber));
@@ -148,7 +182,7 @@ try {
     }
   }
   if (process.env.PLAQUE_VERIFY_OUTPUT) {
-    const [borderProject] = await Promise.all([page.waitForEvent('download'), project.click()]);
+    const borderProject = await getProject(1);
     const output = process.env.PLAQUE_VERIFY_OUTPUT;
     await mkdir(output, {recursive: true});
     await writeFile(join(output, 'border-plaque.3mf'), await readFile(await borderProject.path()));
@@ -166,8 +200,7 @@ try {
   assert.match(await page.locator('#model-status').textContent(), /5 watertight tiers · 220 × 220 × 10 mm/);
 
   let downloadCount = 0;
-  async function getArchive(button) {
-    const [download] = await Promise.all([page.waitForEvent('download'), button.click()]);
+  async function readArchive(download) {
     const bytes = await readFile(await download.path());
     const output = process.env.PLAQUE_VERIFY_OUTPUT;
     if (output) {
@@ -176,7 +209,18 @@ try {
     }
     return unzipSync(new Uint8Array(bytes));
   }
-  const output = await getArchive(project);
+  const output = await readArchive(await getProject(1));
+  await readArchive(await getProject(0));
+  const balanceBeforeCoaster = ledger.balance(account);
+  const response = await page.request.post(origin + '/api/exports', {data: modelPayload(), headers: {Origin: origin}});
+  assert.equal(response.status(), 201);
+  const quote = await response.json();
+  assert.equal(quote.balance, balanceBeforeCoaster);
+  const authorized = await page.request.post(origin + '/api/exports/' + quote.id + '/authorize', {
+    data: {expectedCost: 1}, headers: {Origin: origin}
+  });
+  assert.equal(authorized.status(), 200);
+  assert.equal(ledger.balance(account), balanceBeforeCoaster - 1);
   const xml = strFromU8(output['3D/3dmodel.model']);
   assert.match(xml, /unit="millimeter"/);
   const placement = /<item objectid="100" transform="([^"]+)"/.exec(xml)?.[1].split(' ').map(Number);
@@ -191,7 +235,12 @@ try {
   const partSettings = strFromU8(output['Metadata/model_settings.config']);
   assert.equal((partSettings.match(/key="extruder" value="3"/g) || []).length, 2);
   assert.match(strFromU8(output['Metadata/FILAMENT-HEIGHTS.txt']), /tier-05: artwork .* filament #dc83bd, Z 8–10 mm/);
-  const stls = await getArchive(page.getByRole('button', {name: 'Download STL tiers'}));
+  const beforeSTL = ledger.balance(account);
+  const [stlFile] = await Promise.all([
+    page.waitForEvent('download'), page.getByRole('button', {name: 'Download STL tiers'}).click()
+  ]);
+  const stls = await readArchive(stlFile);
+  assert.equal(ledger.balance(account), beforeSTL);
   for (let i = 1; i <= 5; i++) {
     const bytes = Buffer.from(stls['tier-0' + i + '.stl']);
     const triangles = bytes.readUInt32LE(80);
@@ -220,7 +269,7 @@ try {
     await page.waitForFunction(() => document.querySelectorAll('.tier').length === 4);
     await buildPlaque();
     assert.match(await page.locator('#model-status').textContent(), /4 watertight tiers/);
-    await getArchive(project);
+    await readArchive(await getProject(1));
   }
   const recovery = await page.evaluate(() => new Promise((resolve, reject) => {
     const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
@@ -244,4 +293,5 @@ try {
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
+  ledger.close();
 }

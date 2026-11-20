@@ -59,3 +59,9 @@ main button:disabled { opacity: .58; }
 #viewer:active { cursor: grabbing; }
 .viewer-controls { margin-top: .65rem; }
 #viewer-help { font-size: .88rem; }
+
+.export-credit-dialog { --yellow: #f9e064; }
+.export-credit-dialog button:not(.dialog-close) { border-radius: 7px; padding: .45rem .65rem; cursor: pointer; }
+#maker-account { margin-top: 0; font-size: .9rem; }
+
+.export-credit-dialog .dialog-actions .download-ready { background: #8de2c6; border-color: #8de2c6; }
