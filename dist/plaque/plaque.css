@@ -70,3 +70,6 @@ main button:disabled { opacity: .58; }
 .layer-guide ol { margin: .4rem 0; padding-left: 1.25rem; }
 .layer-guide li + li { margin-top: .4rem; }
 .layer-guide p { margin: .65rem 0 0; }
+
+.source-color { flex-wrap: wrap; }
+.tier-area { flex-basis: 100%; margin-left: 1.6rem; font: .74rem system-ui, sans-serif; color: #d7d1c6; }

@@ -4,7 +4,7 @@ import {bambuPlacement} from '../shared/plaque-layout.js';
 
 const $ = id => document.getElementById(id);
 const traceControls = ['mode', 'color-count', 'detail', 'background', 'smooth-outer', 'edge-strength', 'clean-specks', 'seal-rim', 'threshold', 'pinhole'];
-const controls = ['file', 'sample', ...traceControls, 'trace-artwork', 'width', 'largest', 'clean-relief', 'build', 'project', 'stls'];
+const controls = ['file', 'sample', ...traceControls, 'trace-artwork', 'sort-area', 'width', 'largest', 'clean-relief', 'build', 'project', 'stls'];
 let assets;
 async function getAssets() {
   if (assets) return assets;
@@ -32,6 +32,7 @@ function refresh() {
   $('edge-strength').disabled ||= !$('smooth-outer').checked;
   $('trace-artwork').disabled ||= !imageLoaded;
   $('build').disabled ||= !trace;
+  $('sort-area').disabled ||= rows.length < 2;
   $('project').disabled ||= !model;
   $('stls').disabled ||= !model;
 }
@@ -128,24 +129,23 @@ function hexColor(value) {
   return '#' + rgb.slice(1).map(channel => Number(channel).toString(16).padStart(2, '0')).join('');
 }
 
-function borderColor(sourceColors) {
-  if ($('background').checked) return null;
-  const canvas = $('original'), ctx = canvas.getContext('2d');
-  const points = [[0, 0], [canvas.width - 1, 0], [0, canvas.height - 1], [canvas.width - 1, canvas.height - 1]];
-  const pixels = points.map(([x, y]) => ctx.getImageData(x, y, 1, 1).data);
-  const corner = pixels.find(pixel => pixel[3] >= 245 && pixels.filter(other => other[3] >= 245 &&
-    [0, 1, 2].every(channel => Math.abs(pixel[channel] - other[channel]) < 24)).length >= 3);
-  if (!corner) return null;
-  let best, distance = Infinity;
-  for (const color of sourceColors) {
-    const next = [0, 1, 2].reduce((total, channel) => total +
-      (parseInt(color.slice(1 + 2 * channel, 3 + 2 * channel), 16) - corner[channel]) ** 2, 0);
-    if (next < distance) {
-      best = color;
-      distance = next;
-    }
+function colorAreas(image, sourceColors, width, height) {
+  const canvas = Object.assign(document.createElement('canvas'), {width, height});
+  const context = canvas.getContext('2d', {willReadFrequently: true});
+  context.drawImage(image, 0, 0, width, height);
+  const {data} = context.getImageData(0, 0, width, height);
+  const counts = new Map(sourceColors.map(color => [parseInt(color.slice(1), 16), 0]));
+  let total = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 128) continue;
+    const key = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+    const count = counts.get(key);
+    // Ignore blended boundary pixels so they don't count as additional colors.
+    if (count === undefined) continue;
+    counts.set(key, count + 1);
+    total++;
   }
-  return best;
+  return new Map(sourceColors.map(color => [color, total ? 100 * counts.get(parseInt(color.slice(1), 16)) / total : 0]));
 }
 
 function readTrace(result, width) {
@@ -157,11 +157,6 @@ function readTrace(result, width) {
   const perimeter = result.perimeterPathID && document.getElementById(result.perimeterPathID)?.getAttribute('d');
   const rimColor = result.perimeterFill && hexColor(result.perimeterFill);
   const sourceColors = [...new Set(paths.map(path => path.color))];
-  const dominant = borderColor(sourceColors) || rimColor;
-  if (sourceColors.includes(dominant)) {
-    sourceColors.splice(sourceColors.indexOf(dominant), 1);
-    sourceColors.unshift(dominant);
-  }
   const perimeterMask = result.perimeterMaskPathID && document.getElementById(result.perimeterMaskPathID)?.getAttribute('d');
   return {paths, perimeter, perimeterMask, rimColor, rimWidth: result.perimeterRimPx, rimSeal: result.rimSealPx,
     removedEdges: result.edgeCleanup?.removedRegionsD, viewWidth: width, sourceColors};
@@ -184,6 +179,27 @@ function describeTierOrder() {
   }
 }
 
+function applyTierOrder(rows, heights) {
+  $('tiers').append(...rows);
+  for (const [index, row] of rows.entries()) heightInput(row).value = heights[index];
+  describeTierOrder();
+  invalidateModel();
+}
+
+$('sort-area').onclick = () => {
+  if (busy || !trace) return;
+  const rows = [...$('tiers').children];
+  const heights = orderedHeights(rows);
+  if (!heights) {
+    $('tier-status').textContent = 'Fix the heights before reordering. ' + heightError;
+    return;
+  }
+  const order = [...trace.sourceColors].reverse();
+  const sorted = order.map(color => rows.find(row => row.dataset.source === color));
+  if (sorted.some((row, index) => row !== rows[index])) applyTierOrder(sorted, heights);
+  $('tier-status').textContent = 'Sorted by traced area. The largest color is the base.';
+};
+
 function moveTier(row, destination, keyboardDirection) {
   if (busy || row === destination) return;
   const list = $('tiers'), rows = [...list.children];
@@ -194,10 +210,9 @@ function moveTier(row, destination, keyboardDirection) {
     $('tier-status').textContent = 'Fix the heights before reordering. ' + heightError;
     return;
   }
-  list.insertBefore(row, from < to ? destination.nextSibling : destination);
-  for (const [index, tier] of [...list.children].entries()) heightInput(tier).value = heights[index];
-  describeTierOrder();
-  invalidateModel();
+  rows.splice(from, 1);
+  rows.splice(to, 0, row);
+  applyTierOrder(rows, heights);
   $('tier-status').textContent = `${row.dataset.source.toUpperCase()} moved to ${heights[to]} mm. Heights updated.`;
   if (keyboardDirection) {
     const button = row.querySelector(`[data-move="${keyboardDirection}"]`);
@@ -210,7 +225,7 @@ function clearTierDrag() {
   for (const row of $('tiers').children) row.classList.remove('dragging', 'drop-before', 'drop-after');
 }
 
-function renderTiers(sourceColors) {
+function renderTiers(sourceColors, areas) {
   const rows = sourceColors.map((source, index) => {
     const row = document.createElement('div');
     row.className = 'tier';
@@ -229,7 +244,11 @@ function renderTiers(sourceColors) {
     swatch.style.backgroundColor = source;
     const position = document.createElement('small');
     position.className = 'tier-position';
-    original.append(swatch, source.toUpperCase(), position);
+    const area = document.createElement('small');
+    area.className = 'tier-area';
+    const share = areas.get(source);
+    area.textContent = (share < 0.05 ? '<0.1%' : share.toFixed(1) + '%') + ' area';
+    original.append(swatch, source.toUpperCase(), position, area);
     heading.append(grip, original);
 
     grip.ondragstart = event => {
@@ -324,14 +343,18 @@ async function traceSource() {
       cleanEdgeSpecks: $('clean-specks').checked, sealOuterRim: $('seal-rim').checked,
       threshold: $('threshold').valueAsNumber, pinholeArea: Number($('pinhole').value)
     }, [pixels.buffer]);
-    trace = readTrace(output, width);
-    renderTiers(trace.sourceColors);
+    const nextTrace = readTrace(output, width);
     svgURL = URL.createObjectURL(new Blob([output.svg], {type: 'image/svg+xml'}));
     const image = new Image();
     image.src = svgURL;
     image.alt = 'Artwork traced into solid colors';
+    await image.decode();
+    const areas = colorAreas(image, nextTrace.sourceColors, width, height);
+    nextTrace.sourceColors.sort((a, b) => areas.get(b) - areas.get(a));
+    trace = nextTrace;
+    renderTiers(trace.sourceColors, areas);
     $('traced').replaceChildren(image);
-    $('trace-status').textContent = `${trace.sourceColors.length} solid colors. Set the top height for each color below.`;
+    $('trace-status').textContent = `${trace.sourceColors.length} solid colors, ordered by traced area.`;
     invalidateModel();
   } catch (error) {
     $('trace-status').textContent = error.message;

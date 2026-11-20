@@ -68,12 +68,13 @@
       <div class="layer-guide">
         <h3>How the layers stack</h3>
         <ol>
-          <li><strong>Choose the base.</strong> Drag the color you want for the flat backing to the bottom row, marked <strong>Base</strong>. It starts on the print bed and fills the entire plaque outline.</li>
+          <li><strong>Check the base.</strong> The color covering the most area in the trace starts at the bottom, marked <strong>Base</strong>. Smaller colors start higher. Drag another color to the bottom if you want it as the backing.</li>
           <li><strong>Stack from broad shapes to raised details.</strong> Put lettering or accents higher in the list when you want them to stand out. The maker extends each lower tier under the tiers above it so every raised area has material directly underneath. Lower colors can show on the sides of raised details.</li>
           <li><strong>Set the top heights.</strong> Heights are measured from the print bed. For example, a 2 mm base, 4 mm middle tier, and 6 mm top tier print at 0–2, 2–4, and 4–6 mm. Dragging or using the arrow buttons reassigns the existing heights in the new order.</li>
         </ol>
         <p>Build the plaque and rotate the 3D preview to check the stack before downloading.</p>
       </div>
+      <button id="sort-area" type="button" disabled>Sort by traced area</button>
       <div id="tiers" role="list" aria-label="Plaque tiers from top to base"></div>
       <p id="tier-status" role="status"></p>
       <div class="controls">

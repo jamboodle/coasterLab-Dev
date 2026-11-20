@@ -103,6 +103,11 @@ try {
   assert.deepEqual(await values(), [7.5, 5, 2]);
   assert.equal(await stack.last().locator('[data-field=color]').inputValue(), '#a42b70');
   assert.equal(await project.isDisabled(), true);
+  await page.getByRole('button', {name: 'Sort by traced area'}).click();
+  assert.deepEqual(await order(), colorsBefore);
+  assert.deepEqual(await values(), [7.5, 5, 2]);
+  assert.equal(await stack.first().locator('[data-field=color]').inputValue(), '#a42b70');
+  await stack.first().locator('.tier-grip').dragTo(stack.last());
   const up = page.getByRole('button', {name: 'Move ' + colorsBefore[0] + ' higher'});
   await up.press('Enter');
   await up.press('Enter');
@@ -164,6 +169,12 @@ try {
   }, upload);
   await page.locator('#drop').dispatchEvent('drop', {dataTransfer: files});
   await page.waitForFunction(() => document.querySelectorAll('.tier').length === 6);
+  assert.equal(await page.locator('.tier').last().getAttribute('data-source'), '#428c12');
+  const areas = await page.locator('.tier-area').evaluateAll(labels => labels.map(label =>
+    Number(label.textContent.match(/\d+(?:\.\d+)?/)[0])));
+  assert.deepEqual(areas, [...areas].sort((a, b) => a - b));
+  assert.ok(areas.at(-1) > 50);
+  await page.locator('.tier[data-source="#ffff00"] .tier-grip').dragTo(page.locator('.tier').last());
   assert.equal(await page.locator('.tier').last().getAttribute('data-source'), '#ffff00');
   await page.locator('#width').fill('220');
   await buildPlaque();
