@@ -65,3 +65,8 @@ main button:disabled { opacity: .58; }
 #maker-account { margin-top: 0; font-size: .9rem; }
 
 .export-credit-dialog .dialog-actions .download-ready { background: #8de2c6; border-color: #8de2c6; }
+
+.layer-guide { padding: .8rem 1rem; border-left: 3px solid var(--accent); background: #1e1e1b; }
+.layer-guide ol { margin: .4rem 0; padding-left: 1.25rem; }
+.layer-guide li + li { margin-top: .4rem; }
+.layer-guide p { margin: .65rem 0 0; }
