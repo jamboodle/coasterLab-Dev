@@ -1,7 +1,8 @@
 import {bambuPlacement, downloadFile, plaque3MF, plaqueSTLs} from './export.js';
 
 const $ = id => document.getElementById(id);
-const controls = ['file', 'sample', 'color-count', 'detail', 'background', 'trace-artwork', 'width', 'largest', 'build', 'project', 'stls'];
+const traceControls = ['mode', 'color-count', 'detail', 'background', 'smooth-outer', 'edge-strength', 'clean-specks', 'seal-rim', 'threshold', 'pinhole'];
+const controls = ['file', 'sample', ...traceControls, 'trace-artwork', 'width', 'largest', 'clean-relief', 'build', 'project', 'stls'];
 let assets;
 async function getAssets() {
   if (assets) return assets;
@@ -15,6 +16,12 @@ let svgURL, imageLoaded = false, trace, model, busy = false;
 function refresh() {
   for (const id of controls) $(id).disabled = busy;
   for (const input of $('tiers').querySelectorAll('input')) input.disabled = busy;
+  const monochrome = $('mode').value === 'bw';
+  $('color-settings').hidden = monochrome;
+  $('mono-settings').hidden = !monochrome;
+  $('clean-specks').disabled ||= monochrome;
+  $('seal-rim').disabled ||= monochrome;
+  $('edge-strength').disabled ||= !$('smooth-outer').checked;
   $('trace-artwork').disabled ||= !imageLoaded;
   $('build').disabled ||= !trace;
   $('project').disabled ||= !model;
@@ -74,8 +81,6 @@ function sampleImage() {
   canvas.width = 520;
   canvas.height = 500;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#f6c72c';
-  ctx.fillRect(0, 0, 520, 500);
   ctx.fillStyle = '#3b794e';
   ctx.beginPath();
   ctx.moveTo(260, 450);
@@ -105,6 +110,26 @@ function hexColor(value) {
   return '#' + rgb.slice(1).map(channel => Number(channel).toString(16).padStart(2, '0')).join('');
 }
 
+function borderColor(sourceColors) {
+  if ($('background').checked) return null;
+  const canvas = $('original'), ctx = canvas.getContext('2d');
+  const points = [[0, 0], [canvas.width - 1, 0], [0, canvas.height - 1], [canvas.width - 1, canvas.height - 1]];
+  const pixels = points.map(([x, y]) => ctx.getImageData(x, y, 1, 1).data);
+  const corner = pixels.find(pixel => pixel[3] >= 245 && pixels.filter(other => other[3] >= 245 &&
+    [0, 1, 2].every(channel => Math.abs(pixel[channel] - other[channel]) < 24)).length >= 3);
+  if (!corner) return null;
+  let best, distance = Infinity;
+  for (const color of sourceColors) {
+    const next = [0, 1, 2].reduce((total, channel) => total +
+      (parseInt(color.slice(1 + 2 * channel, 3 + 2 * channel), 16) - corner[channel]) ** 2, 0);
+    if (next < distance) {
+      best = color;
+      distance = next;
+    }
+  }
+  return best;
+}
+
 function readTrace(result, width) {
   const document = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
   const paths = [...document.querySelectorAll('path[fill][d]')].filter(path => !path.closest('defs')).map(path => ({
@@ -112,13 +137,16 @@ function readTrace(result, width) {
   }));
   if (!paths.length) throw Error('No printable colors were detected.');
   const perimeter = result.perimeterPathID && document.getElementById(result.perimeterPathID)?.getAttribute('d');
-  const dominant = result.perimeterFill && hexColor(result.perimeterFill);
+  const rimColor = result.perimeterFill && hexColor(result.perimeterFill);
   const sourceColors = [...new Set(paths.map(path => path.color))];
+  const dominant = borderColor(sourceColors) || rimColor;
   if (sourceColors.includes(dominant)) {
     sourceColors.splice(sourceColors.indexOf(dominant), 1);
     sourceColors.unshift(dominant);
   }
-  return {paths, perimeter, viewWidth: width, sourceColors};
+  const perimeterMask = result.perimeterMaskPathID && document.getElementById(result.perimeterMaskPathID)?.getAttribute('d');
+  return {paths, perimeter, perimeterMask, rimColor, rimWidth: result.perimeterRimPx, rimSeal: result.rimSealPx,
+    removedEdges: result.edgeCleanup?.removedRegionsD, viewWidth: width, sourceColors};
 }
 
 function renderTiers(sourceColors) {
@@ -150,7 +178,7 @@ function renderTiers(sourceColors) {
 async function traceSource() {
   if (busy || !imageLoaded) return;
   const count = $('color-count').valueAsNumber;
-  if (!Number.isInteger(count) || count < 2 || count > 12) {
+  if ($('mode').value === 'color' && (!Number.isInteger(count) || count < 2 || count > 12)) {
     $('trace-status').textContent = 'Enter a maximum of 2 to 12 colors.';
     return;
   }
@@ -164,8 +192,11 @@ async function traceSource() {
     const {width, height} = canvas;
     const pixels = canvas.getContext('2d').getImageData(0, 0, width, height).data;
     const output = await runWorker('/' + scripts['worker.js'], {type: 'classic'}, {
-      id: 'plaque', mode: 'color', colors: count, width, height, pixels,
-      detail: $('detail').value, removeBackground: $('background').checked
+      id: 'plaque', mode: $('mode').value, colors: count, width, height, pixels,
+      detail: $('detail').value, removeBackground: $('background').checked,
+      smoothOuter: $('smooth-outer').checked, edgeStrength: $('edge-strength').value,
+      cleanEdgeSpecks: $('clean-specks').checked, sealOuterRim: $('seal-rim').checked,
+      threshold: $('threshold').valueAsNumber, pinholeArea: Number($('pinhole').value)
     }, [pixels.buffer]);
     trace = readTrace(output, width);
     renderTiers(trace.sourceColors);
@@ -199,7 +230,7 @@ function heightSettings() {
     }
     previous = tier.top;
   }
-  return {width, tiers, largest: $('largest').checked};
+  return {width, tiers, largest: $('largest').checked, cleanRelief: $('clean-relief').checked};
 }
 
 function paintModel(result) {
@@ -255,9 +286,11 @@ async function build() {
     const dims = [result.width, result.height, result.depth].map(value => Number(value.toFixed(2))).join(' × ');
     $('model-status').textContent = [
       `${result.parts.length} watertight tiers · ${dims} mm`,
+      result.cleaned ? 'Smoothed relief edges and cleaned small stray details.' : '',
+      result.filtered ? `${result.filtered} detached raised detail(s) removed.` : '',
       result.inset ? `Relief edges inset by up to ${result.inset} mm for a watertight export.` : '',
       result.trimmed ? `${result.trimmed} detached outline(s) removed.` : '',
-      result.omitted ? `${result.omitted} color(s) had no area inside the retained outline.` : '',
+      result.omitted ? `${result.omitted} color(s) had no printable area after tracing and cleanup.` : '',
       bambuPlacement(result).checkExclusion ? 'Check clearance around the P1S front-left exclusion in the slicer, or reduce the width.' : ''
     ].filter(Boolean).join(' ');
   } catch (error) {
@@ -285,9 +318,8 @@ async function exportModel(kind) {
   }
 }
 
-$('file').onchange = async event => {
-  const [file] = event.target.files;
-  if (!file) return;
+async function loadFile(file) {
+  if (!file || busy) return;
   busy = true;
   refresh();
   try {
@@ -306,15 +338,34 @@ $('file').onchange = async event => {
     refresh();
   }
   await traceSource();
+}
+$('file').onchange = event => void loadFile(event.target.files[0]);
+const drop = $('drop');
+drop.ondragover = event => {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = busy ? 'none' : 'copy';
+  drop.classList.toggle('over', !busy);
+};
+drop.ondragleave = event => {
+  if (!drop.contains(event.relatedTarget)) drop.classList.remove('over');
+};
+drop.ondrop = event => {
+  event.preventDefault();
+  drop.classList.remove('over');
+  void loadFile(event.dataTransfer.files[0]);
 };
 $('sample').onclick = () => {
   $('color-count').value = 3;
-  $('background').checked = true;
+  $('mode').value = 'color';
   showSource(sampleImage(), 'Flower plaque sample');
   void traceSource();
 };
-for (const id of ['color-count', 'detail', 'background']) $(id).onchange = invalidateTrace;
-for (const id of ['width', 'largest']) $(id).oninput = invalidateModel;
+for (const id of traceControls) $(id).onchange = invalidateTrace;
+$('threshold').oninput = () => {
+  $('threshold-value').textContent = $('threshold').value;
+  invalidateTrace();
+};
+for (const id of ['width', 'largest', 'clean-relief']) $(id).oninput = invalidateModel;
 $('trace-artwork').onclick = () => void traceSource();
 $('build').onclick = () => void build();
 $('project').onclick = () => void exportModel('3mf');

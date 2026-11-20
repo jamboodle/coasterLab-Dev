@@ -74,11 +74,12 @@ packages. No additional service or proxy configuration is required.
 
 ## Plaque Maker
 
-Open `/plaque/` from the main navigation. Upload a PNG or JPG and trace it into
+Open `/plaque/` from the main navigation. Choose or drop a PNG or JPG and trace it into
 solid colors. Set each color’s top height above the bed and choose its print
 color, then build the stacked relief. Higher sections sit on the lower tiers.
-Enable edge-background removal for a plain background, or upload a PNG with
-transparency for direct control over the footprint.
+Background colors are kept by default. Enable edge-background removal to discard
+a plain exterior color. Advanced tracing uses the coaster maker’s controls.
+Relief cleanup smooths narrow edges and removes small disconnected raised details.
 
 The 3MF uses the existing Bambu P1S 0.4 mm project preset and assigns each
 tier to its filament. The prime tower defaults to off because large plaques can

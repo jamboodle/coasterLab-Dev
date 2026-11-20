@@ -1,7 +1,8 @@
 import Module from '../vendor/manifold.js';
 
-async function build({paths, perimeter, viewWidth, width, largest, tiers, geometryScript}) {
-  const [kernel, {pathContours, binarySTL}] = await Promise.all([
+async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSeal, removedEdges,
+    viewWidth, width, largest, cleanRelief, tiers, geometryScript}) {
+  const [kernel, {pathContours, signedArea, binarySTL}] = await Promise.all([
     Module({locateFile: name => new URL('../vendor/' + name, import.meta.url).href}),
     import('/' + geometryScript)
   ]);
@@ -9,15 +10,42 @@ async function build({paths, perimeter, viewWidth, width, largest, tiers, geomet
   const {CrossSection} = kernel;
   const owned = [];
   const keep = value => { owned.push(value); return value; };
-  const contours = (d, rule) => {
-    const polygon = pathContours(d, 220 / viewWidth, 0.025);
-    return polygon.length ? keep(new CrossSection(polygon, rule)) : keep(CrossSection.union([]));
-  };
+  const cross = (polygons, rule = 'NonZero') =>
+    polygons.length ? keep(new CrossSection(polygons, rule)) : keep(CrossSection.union([]));
+  const contours = (d, rule) => cross(pathContours(d, 220 / viewWidth, 0.012), rule);
+  const union = shapes => keep(CrossSection.union(shapes));
+  const offset = (shape, amount) => keep(shape.offset(amount, 'Round', 2, 20));
+
+  function applyTraceRim(raw, outline) {
+    if (!outline || !rimColor || !rimWidth) return;
+    const region = raw.find(entry => entry.color === rimColor);
+    if (!region) return;
+    const px = 220 / viewWidth;
+    const mask = perimeterMask ? contours(perimeterMask, 'NonZero') : null;
+    const restrict = shape => mask ? keep(shape.intersect(mask)) : shape;
+    const original = union(raw.map(entry => entry.shape));
+    const rim = restrict(keep(outline.subtract(offset(outline, -rimWidth * px))));
+    let patch = keep(rim.subtract(original));
+    const holes = original.toPolygons().filter(polygon => signedArea(polygon) < 0).map(polygon => polygon.slice().reverse());
+    if (holes.length) patch = keep(patch.subtract(cross(holes, 'Positive')));
+    if (!patch.isEmpty()) region.shape = keep(region.shape.add(patch));
+    if (removedEdges) {
+      const formerSpecks = restrict(keep(offset(contours(removedEdges, 'NonZero'), 0.25 * px).intersect(outline)));
+      if (!formerSpecks.isEmpty()) region.shape = keep(region.shape.add(formerSpecks));
+    }
+    if (!rimSeal) return;
+    const seal = restrict(keep(outline.subtract(offset(outline, -rimSeal * px))));
+    for (const entry of raw) {
+      entry.shape = keep(entry === region ? entry.shape.add(seal) : entry.shape.subtract(seal));
+    }
+  }
   try {
     const raw = paths.map(({color, d, fillRule}) => ({
       color, shape: contours(d, fillRule === 'evenodd' ? 'EvenOdd' : 'NonZero')
     }));
-    let silhouette = perimeter ? contours(perimeter, 'NonZero') : keep(CrossSection.union(raw.map(region => region.shape)));
+    const outline = perimeter ? contours(perimeter, 'NonZero') : null;
+    applyTraceRim(raw, outline);
+    let silhouette = outline || union(raw.map(region => region.shape));
     if (silhouette.isEmpty()) throw Error('The trace has no printable outline.');
     const components = silhouette.decompose().map(keep).sort((a, b) => b.area() - a.area());
     if (largest) silhouette = components[0];
@@ -38,16 +66,39 @@ async function build({paths, perimeter, viewWidth, width, largest, tiers, geomet
       covered = covered ? keep(covered.add(clipped)) : clipped;
     }
     const sorted = [...tiers].sort((a, b) => a.top - b.top);
-    const printable = sorted.filter(tier => detail.has(tier.source));
-    const omitted = sorted.length - printable.length;
+    let printable = sorted.filter(tier => detail.has(tier.source));
     if (!printable.length) throw Error('No visible colors remain inside the outline.');
     let upper;
-    const sections = [];
+    let sections = [];
     for (let index = printable.length - 1; index >= 0; index--) {
       const shape = detail.get(printable[index].source);
       upper = index === 0 ? base : upper ? keep(upper.add(shape)) : shape;
       sections[index] = upper;
     }
+
+    let filtered = 0;
+    if (cleanRelief && sections.length > 1) {
+      // Opening removes thin towers; closing rounds notches from raster tracing.
+      // Each layer is intersected with its support so the stepped relief stays nested.
+      const radius = 0.18;
+      for (let index = 1; index < sections.length; index++) {
+        const opened = offset(offset(sections[index], -radius), radius);
+        const rounded = opened.isEmpty() ? opened : offset(offset(opened, radius), -radius);
+        let section = keep(rounded.intersect(sections[index - 1]));
+        const parts = section.decompose().map(keep);
+        if (parts.length > 1) {
+          const largestArea = Math.max(...parts.map(part => part.area()));
+          const minimum = index === 1 ? Math.max(0.5, Math.min(55, largestArea * 0.004)) : 0.5;
+          const retained = parts.filter(part => part.area() >= minimum);
+          filtered += parts.length - retained.length;
+          if (retained.length !== parts.length) section = union(retained);
+        }
+        sections[index] = section;
+      }
+      printable = printable.filter((_, index) => !sections[index].isEmpty());
+      sections = sections.filter(section => !section.isEmpty());
+    }
+    const omitted = sorted.length - printable.length;
 
     function meshTiers(inset) {
       const start = owned.length, parts = [];
@@ -82,7 +133,7 @@ async function build({paths, perimeter, viewWidth, width, largest, tiers, geomet
     // Sub-pixel relief insets can resolve coincident edge contacts at export precision.
     for (const inset of [0, 0.008, 0.02, 0.045, 0.08]) {
       try {
-        return {parts: meshTiers(inset), inset, omitted, trimmed: largest ? components.length - 1 : 0,
+        return {parts: meshTiers(inset), inset, omitted, filtered, cleaned: cleanRelief, trimmed: largest ? components.length - 1 : 0,
           width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
       } catch (error) {
         if (error instanceof WebAssembly.RuntimeError) throw Error('The geometry engine hit a memory error. Try fewer colors or Smooth detail.');

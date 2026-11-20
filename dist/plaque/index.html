@@ -27,16 +27,34 @@
     <section aria-labelledby="trace-title">
       <h2 id="trace-title">Artwork and colors</h2>
       <div class="controls">
-        <label>Upload PNG or JPG <input id="file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg"></label>
+        <label id="drop" class="plaque-drop" for="file">
+          <strong>Choose artwork or drag it here</strong>
+          <span>PNG or JPG · up to 20 MB</span>
+          <input id="file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" aria-label="Upload PNG or JPG">
+        </label>
         <button id="sample" type="button">Try the sample</button>
       </div>
       <div class="controls trace-controls">
-        <label>Maximum colors <input id="color-count" type="number" min="2" max="12" value="5"></label>
-        <label>Trace detail <select id="detail"><option value="smooth">Smooth</option><option value="normal" selected>Normal</option><option value="fine">Fine</option></select></label>
-        <label class="check"><input id="background" type="checkbox" checked> Remove edge background</label>
+        <label>Trace mode <select id="mode"><option value="color">Solid colors</option><option value="bw">Black and white</option></select></label>
+        <label id="color-settings">Maximum colors <input id="color-count" type="number" min="2" max="12" value="6"></label>
+        <label>Trace detail <select id="detail"><option value="balanced" selected>Balanced</option><option value="fine">Fine detail</option><option value="smooth">Smooth shapes</option></select></label>
+        <label class="check"><input id="background" type="checkbox"> Remove edge background</label>
         <button id="trace-artwork" type="button" disabled>Trace artwork</button>
       </div>
-      <p id="trace-status" role="status">Use a transparent image or a plain background. Your artwork stays in this browser.</p>
+      <details class="trace-controls">
+        <summary>Advanced tracing</summary>
+        <div class="controls">
+          <label class="check"><input id="smooth-outer" type="checkbox" checked> Smooth outer outline</label>
+          <label>Outline smoothing <select id="edge-strength"><option value="gentle">Gentle</option><option value="balanced" selected>Balanced</option><option value="strong">Strong</option></select></label>
+          <label class="check"><input id="clean-specks" type="checkbox" checked> Clean edge specks</label>
+          <label class="check"><input id="seal-rim" type="checkbox" checked> Seal outer rim</label>
+        </div>
+        <div id="mono-settings" class="controls" hidden>
+          <label>Black threshold <output id="threshold-value">128</output><input id="threshold" type="range" min="1" max="254" value="128"></label>
+          <label>Fill pinholes up to <select id="pinhole"><option value="0">Off</option><option value="4">4 pixels</option><option value="9" selected>9 pixels</option><option value="25">25 pixels</option><option value="64">64 pixels</option></select></label>
+        </div>
+      </details>
+      <p id="trace-status" role="status">Artwork stays in this browser. Background colors are kept unless you remove them.</p>
       <div class="split artwork-previews" id="artwork-previews" hidden>
         <figure><h3>Original</h3><canvas id="original" aria-label="Original artwork"></canvas></figure>
         <figure><h3>Traced colors</h3><div id="traced"></div></figure>
@@ -49,6 +67,7 @@
       <div class="controls">
         <label>Finished width (mm) <input id="width" type="number" min="25" max="250" step="0.1" value="220"></label>
         <label class="check"><input id="largest" type="checkbox" checked> Keep only the largest outline</label>
+        <label class="check"><input id="clean-relief" type="checkbox" checked> Smooth relief edges and clean stray details</label>
         <button id="build" type="button" disabled>Build plaque</button>
       </div>
     </section>

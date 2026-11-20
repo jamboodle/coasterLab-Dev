@@ -29,3 +29,9 @@ button.primary { color: #191919; background: var(--accent); border-color: var(--
   .tier { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .source-color { grid-column: 1 / -1; }
 }
+
+.plaque-drop { flex: 1 1 250px; gap: .4rem; padding: .9rem 1rem; border: 1px dashed #80796c; border-radius: 8px; cursor: pointer; }
+.plaque-drop.over { border-color: var(--accent); background: #3b3529; }
+.plaque-drop input { width: 100%; }
+.trace-controls summary { cursor: pointer; color: var(--accent); }
+.trace-controls > .controls { padding: .65rem 0; }
