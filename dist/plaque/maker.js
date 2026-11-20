@@ -425,6 +425,7 @@ async function build() {
     $('model-status').textContent = [
       `${result.parts.length} watertight tiers · ${dims} mm`,
       result.scaledToHeight ? 'Resized proportionally to fit the 240 mm height limit.' : '',
+      result.imprinted ? '' : 'The underside is too narrow for the CoasterPrint.Com imprint.',
       result.cleaned ? 'Smoothed relief edges and cleaned small stray details.' : '',
       result.filtered ? `${result.filtered} detached raised detail(s) removed.` : '',
       result.repair ? `Used a ${result.repair} mm contour cleanup to make the mesh watertight.` : '',

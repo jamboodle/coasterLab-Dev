@@ -253,6 +253,8 @@ try {
   assert.equal(ledger.balance(account), balanceBeforeCoaster - 1);
   const xml = strFromU8(output['3D/3dmodel.model']);
   assert.match(xml, /unit="millimeter"/);
+  assert.ok([...xml.matchAll(/<vertex [^>]* z="([^"]+)"/g)].some(match => Math.abs(+match[1] - 0.2) < 0.00001),
+    '3MF contains the shallow engraving in the base');
   const placement = /<item objectid="100" transform="([^"]+)"/.exec(xml)?.[1].split(' ').map(Number);
   assert.ok(placement && Math.abs(placement[9] - 24) < 0.01 && Math.abs(placement[10] - 18) < 0.01);
   assert.equal((xml.match(/<item objectid=/g) || []).length, 1);
@@ -279,7 +281,8 @@ try {
     for (let triangle = 0; triangle < triangles; triangle++) {
       for (let corner = 0; corner < 3; corner++) heights.add(bytes.readFloatLE(104 + 50 * triangle + 12 * corner));
     }
-    assert.deepEqual([...heights].sort((a, b) => a - b), [(i - 1) * 2, i * 2]);
+    const expected = i === 1 ? [0, Math.fround(0.2), 2] : [(i - 1) * 2, i * 2];
+    assert.deepEqual([...heights].sort((a, b) => a - b), expected);
   }
   await page.locator('#mode').selectOption('bw');
   await page.getByText('Advanced tracing', {exact: true}).click();

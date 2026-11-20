@@ -1,3 +1,4 @@
+import {makeImprint} from './shared/imprint.js';
 import Module from './vendor/manifold.js';
 import {pathContours,signedArea,binarySTL} from './stl-geometry.js';
 onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,perimeterFill,perimeterRimPx,viewWidth,widthMM,baseMM,topMM,includeSTL=true}})=>{
@@ -20,13 +21,17 @@ onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,pe
  if(!sections.length)throw Error('No filled paths to convert.');
  const footprint=keep(CrossSection.union(sections.map(p=>p.shape))),bounds=footprint.bounds();const factor=widthMM/(bounds.max[0]-bounds.min[0]);if(!Number.isFinite(factor))throw Error('The image outline is empty.');
  const normalise=shape=>keep(keep(shape.translate([-bounds.min[0],-bounds.min[1]])).scale(factor));
+ const topShape=normalise(footprint);
+ const imprint=makeImprint(CrossSection,keep,topShape,baseMM+topMM,topMM);
+ if(!imprint)warnings.push('The top surface is too narrow for the CoasterPrint.Com imprint.');
+ const carve=solid=>imprint?keep(solid.subtract(imprint)):solid;
  const prepare=(shape,tolerance)=>{if(!tolerance)return shape;const inset=keep(shape.offset(-tolerance,'Round',2,12));if(inset.isEmpty())return shape;const opened=keep(inset.offset(tolerance,'Round',2,12));return opened.isEmpty()?shape:opened;};
  const clean=(solid,tolerance)=>keep(keep(solid.asOriginal()).setTolerance(tolerance?Math.max(.002,tolerance*2):1e-6));
- function exportLayer(shape,z,height,label){let lastError;for(const tolerance of [.005,0,.01,.02]){try{const prepared=prepare(shape,tolerance),solid=keep(keep(prepared.extrude(height)).translate([0,0,z]));const output=binarySTL(clean(solid,tolerance),label+'; units mm');if(output.precisionCleanup)warnings.push(label+' removed '+output.precisionCleanup+' collapsed export faces; the repaired mesh passed watertight validation.');if(tolerance>.005)warnings.push(label+' required '+tolerance+' mm cleanup; microscopic features may change.');return {...output,solid};}catch(e){lastError=e;}}
+ function exportLayer(shape,z,height,label){const finish=solid=>z>0?carve(solid):solid;let lastError;for(const tolerance of [.005,0,.01,.02]){try{const prepared=prepare(shape,tolerance),solid=finish(keep(keep(prepared.extrude(height)).translate([0,0,z])));const output=binarySTL(clean(solid,tolerance),label+'; units mm');if(output.precisionCleanup)warnings.push(label+' removed '+output.precisionCleanup+' collapsed export faces; the repaired mesh passed watertight validation.');if(tolerance>.005)warnings.push(label+' required '+tolerance+' mm cleanup; microscopic features may change.');return {...output,solid};}catch(e){lastError=e;}}
  // A spatially coincident contact can be topologically valid in WASM yet
  // non-manifold after float32 welding. Separate only the failed color's
  // boundary by a micron-scale inset; keep validation fully enabled.
- if(z>0){for(const separation of [.001,.002,.005]){try{const separated=keep(shape.offset(-separation,'Round',2,12));if(separated.isEmpty())continue;const solid=keep(keep(separated.extrude(height)).translate([0,0,z]));const output=binarySTL(clean(solid,0),label+'; units mm');if(output.precisionCleanup)warnings.push(label+' removed '+output.precisionCleanup+' collapsed export faces; the repaired mesh passed watertight validation.');warnings.push(label+' needed '+separation+' mm boundary separation; microscopic regions may shrink or disappear.');return {...output,solid};}catch(e){lastError=e;}}}
+ if(z>0){for(const separation of [.001,.002,.005]){try{const separated=keep(shape.offset(-separation,'Round',2,12));if(separated.isEmpty())continue;const solid=finish(keep(keep(separated.extrude(height)).translate([0,0,z])));const output=binarySTL(clean(solid,0),label+'; units mm');if(output.precisionCleanup)warnings.push(label+' removed '+output.precisionCleanup+' collapsed export faces; the repaired mesh passed watertight validation.');warnings.push(label+' needed '+separation+' mm boundary separation; microscopic regions may shrink or disappear.');return {...output,solid};}catch(e){lastError=e;}}}
  throw Error(label+': '+(lastError.message||String(lastError)));}
  const outerLoops=footprint.toPolygons().filter(p=>signedArea(p)>0);
  const baseShape=normalise(cross(outerLoops,'Positive'));
@@ -36,7 +41,7 @@ onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,pe
  // The merged STL is optional. A failure here must not suppress validated 3MF parts.
  let combined=null,combinedSolid=null,combinedError='';
  if(includeSTL)postMessage({progress:'Building optional merged STL…'});
- if(includeSTL)for(const tolerance of [.005,0,.01,.02]){try{const topShape=prepare(normalise(footprint),tolerance);const top=keep(keep(topShape.extrude(topMM)).translate([0,0,baseMM]));const solid=keep(Manifold.union([base.solid,top]));combined=binarySTL(clean(solid,tolerance));combinedSolid=solid;if(tolerance>.005)warnings.push('Merged STL required '+tolerance+' mm cleanup.');break;}catch(e){combinedError=e.message||String(e);}}
+ if(includeSTL)for(const tolerance of [.005,0,.01,.02]){try{const top=carve(keep(keep(prepare(topShape,tolerance).extrude(topMM)).translate([0,0,baseMM])));const solid=keep(Manifold.union([base.solid,top]));combined=binarySTL(clean(solid,tolerance));combinedSolid=solid;if(tolerance>.005)warnings.push('Merged STL required '+tolerance+' mm cleanup.');break;}catch(e){combinedError=e.message||String(e);}}
  if(includeSTL&&!combined)warnings.push('Merged STL unavailable: '+combinedError+'. Validated multipart 3MF and STL parts remain available.');
  const b=base.solid.boundingBox();const dimensions={min:[...b.min],max:[b.max[0],b.max[1],baseMM+topMM]};
  const output={baseFill:perimeterFill||layers[0]?.fill,combined,base:{buffer:base.buffer,triangles:base.triangles},parts:layers.map(({fill,index,buffer,triangles})=>({fill,index,buffer,triangles})),dimensions,baseMM,topMM,widthMM,volume:combinedSolid?combinedSolid.volume():null,warnings};

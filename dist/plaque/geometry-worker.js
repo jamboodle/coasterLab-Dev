@@ -1,3 +1,4 @@
+import {makeImprint} from '../shared/imprint.js';
 import Module from '../vendor/manifold.js';
 
 async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSeal, removedEdges,
@@ -105,7 +106,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
 
     function meshTiers(inset, repair) {
       const start = owned.length, parts = [];
-      let support;
+      let support, imprinted = false;
       try {
         for (const [index, tier] of printable.entries()) {
           const source = sections[index];
@@ -121,7 +122,14 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
           support = section;
           if (section.isEmpty()) throw Error('Tier ' + (index + 1) + ' is too small to preserve.');
           const bottom = index ? printable[index - 1].top : 0;
-          const solid = keep(keep(section.extrude(tier.top - bottom)).translate([0, 0, bottom]));
+          let solid = keep(keep(section.extrude(tier.top - bottom)).translate([0, 0, bottom]));
+          if (index === 0) {
+            const imprint = makeImprint(CrossSection, keep, section, bottom, tier.top - bottom, true);
+            if (imprint) {
+              solid = keep(solid.subtract(imprint));
+              imprinted = true;
+            }
+          }
           const cleaned = repair === 0.004 ? solid : keep(keep(solid.asOriginal()).setTolerance(0.0001));
           const name = 'tier-' + String(index + 1).padStart(2, '0');
           try {
@@ -132,7 +140,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
             throw Error('Tier ' + (index + 1) + ': ' + error.message);
           }
         }
-        return parts;
+        return {parts, imprinted};
       } finally {
         while (owned.length > start) {
           try { owned.pop().delete(); } catch { /* The worker is discarded if WASM traps. */ }
@@ -144,7 +152,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     // Retry the geometry before extrusion; STL validation stays enabled on every attempt.
     for (const [inset, repair] of [[0, 0], [0.008, 0.004], [0.02, 0.012], [0.045, 0.028], [0.08, 0.065], [0.12, 0.12]]) {
       try {
-        return {parts: meshTiers(inset, repair), inset, repair, omitted, filtered, cleaned: cleanRelief,
+        return {...meshTiers(inset, repair), inset, repair, omitted, filtered, cleaned: cleanRelief,
           trimmed: largest ? components.length - 1 : 0, scaledToHeight, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
       } catch (error) {
         if (error instanceof WebAssembly.RuntimeError) throw Error('The geometry engine hit a memory error. Try fewer colors or Smooth detail.');

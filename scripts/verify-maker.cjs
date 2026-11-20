@@ -22,6 +22,9 @@ const {unzipSync}=require('../dist/vendor/fflate.js');
   assert.ok(files['[Content_Types].xml']);
   const models=Object.entries(files).filter(([name])=>name.endsWith('.model')).map(([,bytes])=>Buffer.from(bytes).toString('utf8'));
   assert.ok(models.some(xml=>xml.includes('<mesh>') && xml.includes('<vertices>') && xml.includes('<triangles>')),'3MF must contain an actual triangle mesh');
+  const z = models.flatMap(xml => [...xml.matchAll(/<vertex [^>]* z="([^"]+)"/g)].map(match => +match[1]));
+  assert.ok(z.some(height => Math.abs(height - 2.3) < 0.00001), '3MF contains the shallow top engraving');
+  assert.ok(z.some(height => Math.abs(height - 2.5) < 0.00001), 'the full coaster top height remains');
   assert.deepEqual(errors,[]);
   console.log('PASS maker: PNG upload, worker tracing, WebAssembly geometry, downloaded 3MF archive and printable mesh');
  }finally{await browser.close();}
