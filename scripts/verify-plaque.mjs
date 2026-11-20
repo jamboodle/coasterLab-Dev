@@ -48,7 +48,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.tier').length === 5);
   await page.getByRole('button', {name: 'Build plaque'}).click();
   await page.waitForFunction(() => !document.querySelector('#build').disabled, null, {timeout: 90000});
-  assert.match(await page.locator('#model-status').textContent(), /5 watertight tiers · [\d.]+ × 250 × 10 mm/);
+  assert.match(await page.locator('#model-status').textContent(), /5 watertight tiers · [\d.]+ × 240 × 10 mm/);
   const fixture = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 400;
@@ -318,11 +318,11 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.tier').length === 2);
   await buildPlaque();
   const tallStatus = await page.locator('#model-status').textContent();
-  assert.match(tallStatus, /Resized proportionally to fit the 250 mm height limit/);
+  assert.match(tallStatus, /Resized proportionally to fit the 240 mm height limit/);
   const dimensions = /· ([\d.]+) × ([\d.]+) × ([\d.]+) mm/.exec(tallStatus);
   assert.ok(dimensions);
-  assert.equal(Number(dimensions[2]), 250);
-  assert.ok(Math.abs(Number(dimensions[1]) - 250 / 3) < 1, 'artwork aspect ratio is preserved');
+  assert.equal(Number(dimensions[2]), 240);
+  assert.ok(Math.abs(Number(dimensions[1]) - 240 / 3) < 1, 'artwork aspect ratio is preserved');
   assert.equal(Number(dimensions[3]), 4, 'tier heights are preserved');
   const [portraitSTL] = await Promise.all([
     page.waitForEvent('download'), page.getByRole('button', {name: 'Download STL tiers'}).click()
@@ -333,7 +333,7 @@ try {
   for (let i = 0; i < base.readUInt32LE(80); i++) {
     for (let j = 0; j < 3; j++) maxY = Math.max(maxY, base.readFloatLE(100 + 50 * i + 12 * j));
   }
-  assert.ok(maxY <= 250 && maxY > 249.99, 'the exported STL observes the height limit');
+  assert.ok(maxY <= 240 && maxY > 239.99, 'the exported STL observes the height limit');
   const recovery = await page.evaluate(() => new Promise((resolve, reject) => {
     const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
     worker.onmessage = ({data}) => {

@@ -54,7 +54,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     const artworkWidth = original.max[0] - original.min[0];
     const artworkHeight = original.max[1] - original.min[1];
     const requestedScale = width / artworkWidth;
-    const scale = Math.min(requestedScale, 250 / artworkHeight);
+    const scale = Math.min(requestedScale, 240 / artworkHeight);
     const scaledToHeight = scale < requestedScale;
     const normal = shape => keep(keep(shape.translate([-original.min[0], -original.min[1]])).scale(scale));
     const base = normal(silhouette);
