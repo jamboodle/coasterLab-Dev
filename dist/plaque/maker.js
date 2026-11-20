@@ -95,33 +95,6 @@ function showSource(image, name) {
   refresh();
 }
 
-function sampleImage() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 520;
-  canvas.height = 500;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#3b794e';
-  ctx.beginPath();
-  ctx.moveTo(260, 450);
-  ctx.bezierCurveTo(205, 405, 40, 293, 40, 158);
-  ctx.bezierCurveTo(40, 46, 176, 28, 260, 128);
-  ctx.bezierCurveTo(344, 28, 480, 46, 480, 158);
-  ctx.bezierCurveTo(480, 293, 315, 405, 260, 450);
-  ctx.fill();
-  ctx.fillStyle = '#f582a5';
-  for (let i = 0; i < 5; i++) {
-    const angle = Math.PI * 2 * i / 5;
-    ctx.beginPath();
-    ctx.arc(260 + Math.cos(angle) * 57, 242 + Math.sin(angle) * 57, 43, 0, 2 * Math.PI);
-    ctx.fill();
-  }
-  ctx.fillStyle = '#fff4d9';
-  ctx.beginPath();
-  ctx.arc(260, 242, 31, 0, 2 * Math.PI);
-  ctx.fill();
-  return canvas;
-}
-
 function hexColor(value) {
   if (/^#[0-9a-f]{6}$/i.test(value)) return value.toLowerCase();
   const rgb = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(value);
@@ -483,16 +456,27 @@ async function exportSTL() {
   }
 }
 
-async function loadFile(file) {
-  if (!file || busy) return;
+async function loadFile(file, {sample = false} = {}) {
+  if (busy || (!file && !sample)) return;
   busy = true;
   refresh();
   try {
+    if (sample) {
+      $('trace-status').textContent = 'Loading the Fairy Princess sample…';
+      const response = await fetch(new URL('./fairyprincess.png', import.meta.url));
+      if (!response.ok) throw Error('The Fairy Princess sample could not be loaded.');
+      file = new File([await response.blob()], 'fairyprincess.png', {type: 'image/png'});
+    }
     if (!/\.(png|jpe?g)$/i.test(file.name) || file.size > 20 * 1024 * 1024) throw Error('Choose a PNG or JPG up to 20 MB.');
     const image = await createImageBitmap(file);
     try {
       if (image.width * image.height > 80_000_000) throw Error('This image is too large. Resize it before uploading.');
-      showSource(image, file.name);
+      if (sample) {
+        $('mode').value = 'color';
+        $('color-count').value = 5;
+        $('background').checked = true;
+      }
+      showSource(image, sample ? 'Fairy Princess sample' : file.name);
     } finally { image.close(); }
   } catch (error) {
     $('trace-status').textContent = error.message;
@@ -520,12 +504,7 @@ drop.ondrop = event => {
   drop.classList.remove('over');
   void loadFile(event.dataTransfer.files[0]);
 };
-$('sample').onclick = () => {
-  $('color-count').value = 3;
-  $('mode').value = 'color';
-  showSource(sampleImage(), 'Flower plaque sample');
-  void traceSource();
-};
+$('sample').onclick = () => void loadFile(null, {sample: true});
 for (const id of traceControls) $(id).onchange = invalidateTrace;
 $('threshold').oninput = () => {
   $('threshold-value').textContent = $('threshold').value;

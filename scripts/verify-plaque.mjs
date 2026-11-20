@@ -45,6 +45,25 @@ try {
   await page.getByRole('link', {name: 'Plaque Maker', exact: true}).click();
   await page.waitForURL(origin + '/plaque/');
   await page.getByRole('button', {name: 'Try the sample'}).click();
+  await page.waitForFunction(() => document.querySelectorAll('.tier').length === 5);
+  await page.getByRole('button', {name: 'Build plaque'}).click();
+  await page.waitForFunction(() => !document.querySelector('#build').disabled, null, {timeout: 90000});
+  assert.match(await page.locator('#model-status').textContent(), /5 watertight tiers · [\d.]+ × 250 × 10 mm/);
+  const fixture = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 400;
+    const context = canvas.getContext('2d');
+    for (const [inset, color] of [[20, '#3b794e'], [75, '#f582a5'], [135, '#fff4d9']]) {
+      context.fillStyle = color;
+      context.fillRect(inset, inset, 400 - 2 * inset, 400 - 2 * inset);
+    }
+    return canvas.toDataURL().split(',')[1];
+  });
+  await page.locator('#background').uncheck();
+  await page.locator('#color-count').fill('3');
+  await page.locator('#file').setInputFiles({
+    name: 'three-color-plaque.png', mimeType: 'image/png', buffer: Buffer.from(fixture, 'base64')
+  });
   await page.waitForFunction(() => document.querySelectorAll('.tier').length === 3);
   const heights = page.locator('[data-field=top]');
   await heights.nth(1).fill('2');
