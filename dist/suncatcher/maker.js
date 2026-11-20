@@ -8,7 +8,7 @@ const traceCanvas = $('trace');
 const assembled = $('assembled');
 const dimensionFields = ['size-axis', 'size', 'frame', 'insert', 'clearance', 'loop'];
 let source, sourceTitle, trace, selected, result, settings, renderTimer, worker, downloadBusy = false;
-let imageVersion = 0, version = 0, requested = 0;
+let imageVersion = 0, version = 0, requested = 0, recoveryVersion;
 let assignments = new Map();
 const modelURLs = [];
 
@@ -108,14 +108,15 @@ function clearModel(message) {
   updateButtons();
 }
 
-function traceSource(reset = false) {
+function traceSource(reset = false, reduced = false) {
   if (!source) return;
   clearTimeout(renderTimer);
   clearModel('Building printable parts…');
   version++;
   try {
     const previous = reset ? null : trace;
-    const next = traceArtwork(source, $('threshold').valueAsNumber, $('smooth').valueAsNumber, $('gap').valueAsNumber, $('trace-mode').value);
+    const next = traceArtwork(source, $('threshold').valueAsNumber, $('smooth').valueAsNumber,
+      $('gap').valueAsNumber, $('trace-mode').value, Number($('trace-detail').value));
     if (next.regions.length > 150) throw Error('More than 150 regions detected. Increase smoothing, close gaps, or simplify the artwork.');
     trace = next;
     assignments = matchAssignments(previous, next, assignments, defaultAssignment);
@@ -126,7 +127,8 @@ function traceSource(reset = false) {
     region.disabled = !next.regions.length;
     selectRegion(selected);
     if (!next.regions.length) $('artwork-status').textContent = 'No closed regions. Try Close gaps or use artwork with closed outlines.';
-    else $('artwork-status').textContent = sourceTitle;
+    else $('artwork-status').textContent = reduced ?
+      sourceTitle + ' · Retrying at medium detail. Check the numbered regions before exporting.' : sourceTitle;
     queueModel();
   } catch (error) {
     trace = null;
@@ -174,17 +176,30 @@ function sendModel() {
   }
 }
 
-function receiveModel({data: {id, result: built, error}}) {
+function receiveModel({data: {id, result: built, error, resetWorker}}) {
   requested = 0;
+  if (resetWorker) {
+    worker.terminate();
+    worker = null;
+  }
   if (id !== version) {
     clearTimeout(renderTimer);
     sendModel();
     return;
   }
   if (error) {
-    diagnostic([error]);
+    if (resetWorker && $('trace-detail').value === '420') {
+      $('trace-detail').value = '300';
+      traceSource(false, true);
+      recoveryVersion = version;
+      return;
+    }
+    diagnostic([resetWorker ? 'The geometry engine hit a memory error. Lower Trace detail and check the preview before exporting.' : error]);
     clearModel('Adjust the trace to build parts.');
     return;
+  }
+  if (id === recoveryVersion) {
+    $('artwork-status').textContent = sourceTitle + ' · Rebuilt at medium detail. Check the numbered regions before exporting.';
   }
   result = built;
   displayModel();
@@ -313,7 +328,7 @@ for (const [field, output, unit] of [['threshold', 'threshold-value', ''], ['smo
     traceSource();
   };
 }
-$('trace-mode').onchange = () => traceSource();
+$('trace-mode').onchange = $('trace-detail').onchange = () => traceSource();
 for (const field of dimensionFields) $(field).oninput = queueModel;
 $('region').onchange = () => selectRegion(Number($('region').value));
 $('open').onchange = () => editRegion({open: $('open').checked});

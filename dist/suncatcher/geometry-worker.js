@@ -10,25 +10,54 @@ const model = Module({locateFile: name => new URL('../vendor/' + name, import.me
 const stl = fetch('../asset-manifest.json').then(response => response.json())
   .then(manifest => import('/' + manifest.scripts['stl-geometry.js']));
 
-function tracedSections(trace, pitch) {
-  const {labels, width, height, bounds} = trace;
-  const sections = new Map();
-  let complexity = 0;
+function tracedSections({labels, width, bounds}, pitch) {
+  const stride = width + 1, edges = new Map(), sections = new Map();
+  const steps = [1, stride, -1, -stride];
+  let count = 0;
   for (let y = bounds.minY; y < bounds.maxY; y++) {
-    let x = bounds.minX;
-    while (x < bounds.maxX) {
-      const id = labels[y * width + x];
-      const left = x++;
-      while (x < bounds.maxX && labels[y * width + x] === id) x++;
+    for (let x = bounds.minX; x < bounds.maxX; x++) {
+      const pixel = y * width + x, id = labels[pixel];
       if (!id) continue;
-      if (++complexity > 17000) throw Error('This trace has too much detail. Increase smoothing or use simpler artwork.');
-      const x0 = (left - bounds.minX) * pitch, x1 = (x - bounds.minX) * pitch;
-      const y0 = (height - y - 1 - (height - bounds.maxY)) * pitch, y1 = y0 + pitch;
-      if (!sections.has(id)) sections.set(id, []);
-      sections.get(id).push([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+      if (!edges.has(id)) edges.set(id, new Set());
+      const outline = edges.get(id), corner = y * stride + x;
+      // Run counterclockwise in the exported coordinate system.
+      if (labels[pixel - 1] !== id) outline.add(corner * 4 + 1);
+      if (labels[pixel + width] !== id) outline.add((corner + stride) * 4);
+      if (labels[pixel + 1] !== id) outline.add((corner + stride + 1) * 4 + 3);
+      if (labels[pixel - width] !== id) outline.add((corner + 1) * 4 + 2);
     }
   }
+  for (const [id, outline] of edges) {
+    count += outline.size;
+    if (count > 45000) throw Error('This trace has too much detail. Reduce Trace detail or use simpler artwork.');
+    const polygons = [];
+    for (const start of outline) {
+      const polygon = [];
+      let current = start, previousDirection = -1;
+      do {
+        const vertex = current >> 2, direction = current & 3;
+        outline.delete(current);
+        if (direction !== previousDirection) {
+          polygon.push([(vertex % stride - bounds.minX) * pitch,
+            (bounds.maxY - Math.floor(vertex / stride)) * pitch]);
+        }
+        previousDirection = direction;
+        const next = (vertex + steps[direction]) * 4;
+        // At a corner shared by two pixels, follow the same four-connected region.
+        current = [(direction + 3) & 3, direction, (direction + 1) & 3]
+          .map(turn => next + turn).find(edge => edge === start || outline.has(edge));
+        if (current === undefined) throw Error('An outline could not be closed. Reduce Trace detail or adjust the trace.');
+      } while (current !== start);
+      if ((start & 3) === previousDirection) polygon.shift();
+      if (polygon.length >= 3) polygons.push(polygon);
+    }
+    sections.set(id, polygons);
+  }
   return sections;
+}
+
+function memoryFailure(error) {
+  return error instanceof WebAssembly.RuntimeError || /memory access out of bounds|out of memory/i.test(error.message);
 }
 
 function topAnchor(trace) {
@@ -60,6 +89,18 @@ async function build(trace, settings, assignments) {
   const [{CrossSection, Manifold}, {binarySTL}] = await Promise.all([model, stl]);
   const owned = [];
   const keep = value => { owned.push(value); return value; };
+  let engineFailed = false;
+  const scoped = callback => {
+    const start = owned.length;
+    try {
+      return callback();
+    } catch (error) {
+      if (memoryFailure(error)) engineFailed = true;
+      throw error;
+    } finally {
+      if (!engineFailed) while (owned.length > start) owned.pop().delete();
+    }
+  };
   const problems = [], warnings = [], dropped = [], inserts = [];
   const split = shape => shape.decompose().map(keep);
   const cross = contours => keep(new CrossSection(contours, 'NonZero'));
@@ -105,6 +146,7 @@ async function build(trace, settings, assignments) {
       return [file(frameSolid(body, keep(body.add(fit.rim))), 'fit-coupon-frame'),
         part(fit.insert, settings.insert, 'fit-coupon-insert')];
     } catch (error) {
+      if (memoryFailure(error)) throw error;
       warnings.push('Fit coupon could not be generated: ' + error.message);
       return [];
     }
@@ -136,29 +178,32 @@ async function build(trace, settings, assignments) {
       if (split(body).length > components.length) problems.push('The hanging loop did not join the frame. Close gaps, thicken the top outline, or turn the loop off.');
     }
 
-    const rims = [body];
+    const rims = [];
     for (const {id} of trace.regions) {
       const assignment = assignments[id];
       if (assignment.open) continue;
-      const region = cross(sections.get(id));
-      const fit = seat(region);
-      if (!fit) {
+      scoped(() => {
+        const region = cross(sections.get(id));
+        const fit = seat(region);
+        if (fit) {
+          const name = 'insert-' + String(id).padStart(2, '0');
+          try {
+            const printable = part(fit.insert, settings.insert, name, mirrorX);
+            const polygons = fit.insert.toPolygons();
+            rims.push(...fit.rim.toPolygons());
+            inserts.push({...printable, id, color: assignment.color, polygons});
+            return;
+          } catch (error) {
+            if (memoryFailure(error)) throw error;
+            warnings.push(`Insert ${id}: ${error.message}`);
+          }
+        }
         dropped.push({id, polygons: region.toPolygons()});
-        continue;
-      }
-      const name = 'insert-' + String(id).padStart(2, '0');
-      try {
-        const printable = part(fit.insert, settings.insert, name, mirrorX);
-        rims.push(fit.rim);
-        inserts.push({...printable, id, color: assignment.color, polygons: fit.insert.toPolygons()});
-      } catch (error) {
-        dropped.push({id, polygons: region.toPolygons()});
-        warnings.push(`Insert ${id}: ${error.message}`);
-      }
+      });
     }
     if (dropped.length) warnings.push('These inserts were too small, split, or lost their opening at this size or clearance: ' +
       dropped.map(part => part.id).join(', ') + '. They are left open in the frame.');
-    const front = keep(CrossSection.union(rims));
+    const front = rims.length ? keep(body.add(cross(rims))) : body;
     const footprint = front.bounds();
     if ([0, 1].some(axis => footprint.max[axis] - footprint.min[axis] > 256)) {
       warnings.push('The frame footprint exceeds the Bambu P1S nominal 256 mm bed. Reduce the size before printing on that printer.');
@@ -168,6 +213,7 @@ async function build(trace, settings, assignments) {
       try {
         frame = file(frameSolid(body, front), 'suncatcher-frame', mirrorX);
       } catch (error) {
+        if (memoryFailure(error)) throw error;
         problems.push('Frame cannot be exported: ' + error.message + ' Try increasing smoothing or changing the trace.');
       }
     }
@@ -176,8 +222,11 @@ async function build(trace, settings, assignments) {
       front: front.toPolygons(), detached, thin: thinParts.flatMap(shape => shape.toPolygons()),
       coupon: coupon()
     };
+  } catch (error) {
+    if (memoryFailure(error)) engineFailed = true;
+    throw error;
   } finally {
-    for (const object of owned.reverse()) object.delete();
+    if (!engineFailed) for (const object of owned.reverse()) object.delete();
   }
 }
 
@@ -187,6 +236,6 @@ self.onmessage = async ({data: {id, trace, settings, assignments}}) => {
     const parts = [result.frame, ...result.inserts, ...result.coupon].filter(Boolean);
     self.postMessage({id, result}, parts.map(part => part.buffer));
   } catch (error) {
-    self.postMessage({id, error: error.message || String(error)});
+    self.postMessage({id, error: error.message || String(error), resetWorker: memoryFailure(error)});
   }
 };

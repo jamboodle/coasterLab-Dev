@@ -9,8 +9,17 @@ import {withStatic} from '../server/static.mjs';
 const require = createRequire(import.meta.url);
 const {chromium} = require('playwright');
 const {unzipSync, strFromU8} = require('../dist/vendor/fflate.js');
-const server = createServer(withStatic((req, res) => res.writeHead(404).end(),
-  fileURLToPath(new URL('../dist/', import.meta.url))));
+const staticHandler = withStatic((req, res) => res.writeHead(404).end(),
+  fileURLToPath(new URL('../dist/', import.meta.url)));
+let failNextWorker = false;
+const server = createServer((req, res) => {
+  if (failNextWorker && req.url === '/suncatcher/geometry-worker.js') {
+    failNextWorker = false;
+    res.writeHead(200, {'Content-Type': 'text/javascript', 'Cache-Control': 'no-store'});
+    return res.end('self.onmessage = ({data}) => self.postMessage({id: data.id, error: "memory access out of bounds", resetWorker: true});');
+  }
+  return staticHandler(req, res);
+});
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 let browser;
@@ -218,6 +227,34 @@ try {
   await page.locator('#artwork').setInputFiles({name: 'gapped.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(gapped)});
   await page.waitForFunction(() => document.querySelector('#diagnostics').textContent.includes('No closed regions'));
   assert.equal(await page.getByRole('button', {name: 'Download STL ZIP'}).isDisabled(), true);
+  const dense = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="320"><rect width="360" height="320" fill="#121212"/>' +
+    Array.from({length: 88}, (_, i) => {
+      const x = 4 + (i % 11) * 32, y = 4 + Math.floor(i / 11) * 39;
+      const color = ['#de1419', '#006816', '#141398', '#ffffff'][i % 4];
+      return `<rect x="${x}" y="${y}" width="28" height="35" rx="5" fill="${color}"/>`;
+    }).join('') + '</svg>';
+  await page.locator('#size-axis').selectOption('width');
+  await page.locator('#size').fill('180');
+  await page.locator('#artwork').setInputFiles({name: '88-panes.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(dense)});
+  await page.waitForFunction(() => document.querySelector('#artwork-status').textContent === '88-panes.svg');
+  await ready();
+  assert.match(await page.locator('#part-summary').textContent(), /88 validated inserts/);
+  await page.locator('#region').selectOption('1');
+  await page.getByLabel('Leave open').check();
+  await page.locator('#trace-detail').selectOption('300');
+  await ready();
+  assert.equal(await page.getByLabel('Leave open').isChecked(), true);
+  assert.match(await page.locator('#part-summary').textContent(), /87 validated inserts/);
+
+  failNextWorker = true;
+  const recovery = await browser.newPage();
+  await recovery.goto(origin + '/suncatcher/');
+  await recovery.getByRole('button', {name: 'Try the flower sample'}).click();
+  await recovery.waitForFunction(() => !document.querySelector('#download').disabled, null, {timeout: 15000});
+  assert.equal(failNextWorker, false);
+  assert.equal(await recovery.locator('#trace-detail').inputValue(), '300');
+  assert.match(await recovery.locator('#artwork-status').textContent(), /Rebuilt at medium detail/);
+  await recovery.close();
   assert.deepEqual(errors, []);
   console.log('PASS sample, colored and monochrome PNG and SVG, region edit, watertight STL ZIP, fit coupon, and 3MF');
 } finally {

@@ -132,11 +132,11 @@ function assignSourceColors(regions, labels, data, mask) {
   }
 }
 
-export function traceArtwork(image, threshold, smooth, gap, mode = 'auto') {
+export function traceArtwork(image, threshold, smooth, gap, mode = 'auto', detail = gridLimit) {
   const maximum = Math.max(image.width, image.height);
   if (!maximum || image.width * image.height > 80_000_000) throw Error('The image dimensions are unsupported. Resize the artwork and try again.');
-  const imageWidth = Math.max(1, Math.round(image.width / maximum * gridLimit));
-  const imageHeight = Math.max(1, Math.round(image.height / maximum * gridLimit));
+  const imageWidth = Math.max(1, Math.round(image.width / maximum * detail));
+  const imageHeight = Math.max(1, Math.round(image.height / maximum * detail));
   const width = imageWidth + 2 * padding, height = imageHeight + 2 * padding;
   const canvas = Object.assign(document.createElement('canvas'), {width, height});
   const context = canvas.getContext('2d', {willReadFrequently: true});
@@ -190,14 +190,21 @@ export function traceArtwork(image, threshold, smooth, gap, mode = 'auto') {
 
 export function matchAssignments(previous, next, oldAssignments, makeDefault) {
   const assignments = new Map();
-  if (!previous || previous.width !== next.width || previous.height !== next.height) {
+  if (!previous) {
     for (const region of next.regions) assignments.set(region.id, makeDefault(region));
     return assignments;
   }
   const overlaps = next.regions.map(() => new Map());
-  for (let i = 0; i < next.labels.length; i++) {
-    const id = next.labels[i], old = previous.labels[i];
-    if (id > 0 && old > 0) overlaps[id - 1].set(old, (overlaps[id - 1].get(old) || 0) + 1);
+  const scaleX = (previous.width - 2 * padding) / (next.width - 2 * padding);
+  const scaleY = (previous.height - 2 * padding) / (next.height - 2 * padding);
+  for (let y = padding; y < next.height - padding; y++) {
+    const previousY = Math.floor((y - padding + 0.5) * scaleY) + padding;
+    for (let x = padding; x < next.width - padding; x++) {
+      const id = next.labels[y * next.width + x];
+      const previousX = Math.floor((x - padding + 0.5) * scaleX) + padding;
+      const old = previous.labels[previousY * previous.width + previousX];
+      if (id > 0 && old > 0) overlaps[id - 1].set(old, (overlaps[id - 1].get(old) || 0) + 1);
+    }
   }
   for (const region of next.regions) {
     let match, count = region.area * 0.35;
