@@ -29,9 +29,10 @@
         <label>Upload PNG, JPG or SVG <input id="artwork" type="file" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"></label>
         <button id="sample" type="button">Try the flower sample</button>
       </div>
-      <p id="artwork-status" role="status">Use dark lines on a light or transparent background. Processing stays in your browser.</p>
+      <p id="artwork-status" role="status">Use dark outlines around colored, light, or transparent panes. Processing stays in your browser.</p>
       <div class="controls">
-        <label>Threshold <output id="threshold-value">145</output><input id="threshold" type="range" min="0" max="255" value="145"></label>
+        <label>Trace mode <select id="trace-mode"><option value="auto">Auto</option><option value="color">Color artwork</option><option value="mono">Black and white</option></select></label>
+        <label>Outline threshold <output id="threshold-value">145</output><input id="threshold" type="range" min="0" max="255" value="145"></label>
         <label>Smoothing <output id="smooth-value">0.7 px</output><input id="smooth" type="range" min="0" max="3" step="0.1" value="0.7"></label>
         <label>Close gaps <output id="gap-value">0 px</output><input id="gap" type="range" min="0" max="5" value="0"></label>
       </div>

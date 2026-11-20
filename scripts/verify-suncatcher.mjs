@@ -170,6 +170,38 @@ try {
   assert.match(await page.locator('#part-summary').textContent(), /1 validated insert/);
   const coupon = await download('Download fit coupon');
   assert.deepEqual(Object.keys(coupon).sort(), ['ASSEMBLY.txt', 'fit-coupon-frame.stl', 'fit-coupon-insert.stl']);
+  const colored = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const draw = canvas.getContext('2d');
+    draw.fillStyle = '#ffffff';
+    draw.fillRect(0, 0, 320, 240);
+    draw.fillStyle = '#131313';
+    draw.fillRect(10, 10, 300, 220);
+    for (const [i, color] of ['#de1419', '#006816', '#141398', '#ffffff'].entries()) {
+      draw.fillStyle = color;
+      draw.fillRect(19 + (i % 2) * 145, 19 + Math.floor(i / 2) * 105, 137, 97);
+    }
+    return canvas.toDataURL().split(',')[1];
+  });
+  await page.locator('#artwork').setInputFiles({name: 'colored-panes.png', mimeType: 'image/png', buffer: Buffer.from(colored, 'base64')});
+  await page.waitForFunction(() => document.querySelector('#artwork-status').textContent === 'colored-panes.png');
+  await ready();
+  assert.match(await page.locator('#part-summary').textContent(), /4 validated inserts/);
+  const coloredZip = await download('Download STL ZIP');
+  for (const [index, color] of ['#de1419', '#006816', '#141398', '#ffffff'].entries()) {
+    const id = String(index + 1).padStart(2, '0');
+    assert.ok(strFromU8(coloredZip['ASSEMBLY.txt']).includes('Insert ' + id + ': ' + color));
+    inspectSTL(coloredZip['insert-' + id + '.stl']);
+  }
+  await page.locator('#trace-mode').selectOption('mono');
+  await ready();
+  assert.match(await page.locator('#part-summary').textContent(), /1 validated insert/);
+  await page.locator('#trace-mode').selectOption('auto');
+  await ready();
+  assert.match(await page.locator('#part-summary').textContent(), /4 validated inserts/);
+
   const detached = '<svg xmlns="http://www.w3.org/2000/svg" width="150" height="100"><path d="M10 10H105V85H10Z M125 25H140" fill="none" stroke="black" stroke-width="5"/></svg>';
   await page.locator('#artwork').setInputFiles({name: 'detached.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(detached)});
   await page.waitForFunction(() => document.querySelector('#diagnostics').textContent.includes('2 disconnected sections'));
@@ -187,7 +219,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#diagnostics').textContent.includes('No closed regions'));
   assert.equal(await page.getByRole('button', {name: 'Download STL ZIP'}).isDisabled(), true);
   assert.deepEqual(errors, []);
-  console.log('PASS sample, uploaded PNG and SVG, region edit, watertight dimensioned STL ZIP, fit coupon, and separate-object 3MF');
+  console.log('PASS sample, colored and monochrome PNG and SVG, region edit, watertight STL ZIP, fit coupon, and 3MF');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

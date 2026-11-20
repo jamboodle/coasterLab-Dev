@@ -99,7 +99,40 @@ function labelRegions(mask, width) {
   return {labels, regions};
 }
 
-export function traceArtwork(image, threshold, smooth, gap) {
+function hasColor(data) {
+  let count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    if (Math.max(r, g, b) - Math.min(r, g, b) >= 28) count++;
+  }
+  return count >= data.length / 4 * 0.004;
+}
+
+function assignSourceColors(regions, labels, data, mask) {
+  const bins = regions.map(() => new Map());
+  for (let i = 0; i < labels.length; i++) {
+    const id = labels[i];
+    if (id <= 0 || mask[i]) continue;
+    const offset = i * 4;
+    const r = data[offset], g = data[offset + 1], b = data[offset + 2];
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const bin = bins[id - 1].get(key);
+    if (bin) {
+      bin.count++;
+      bin.r += r;
+      bin.g += g;
+      bin.b += b;
+    } else bins[id - 1].set(key, {count: 1, r, g, b});
+  }
+  for (const [i, region] of regions.entries()) {
+    let best;
+    for (const bin of bins[i].values()) if (!best || bin.count > best.count) best = bin;
+    if (best) region.color = '#' + [best.r, best.g, best.b].map(channel =>
+      Math.round(channel / best.count).toString(16).padStart(2, '0')).join('');
+  }
+}
+
+export function traceArtwork(image, threshold, smooth, gap, mode = 'auto') {
   const maximum = Math.max(image.width, image.height);
   if (!maximum || image.width * image.height > 80_000_000) throw Error('The image dimensions are unsupported. Resize the artwork and try again.');
   const imageWidth = Math.max(1, Math.round(image.width / maximum * gridLimit));
@@ -109,18 +142,31 @@ export function traceArtwork(image, threshold, smooth, gap) {
   const context = canvas.getContext('2d', {willReadFrequently: true});
   context.fillStyle = '#fff';
   context.fillRect(0, 0, width, height);
-  if (smooth) context.filter = `blur(${smooth}px)`;
   context.drawImage(image, padding, padding, imageWidth, imageHeight);
-  const {data} = context.getImageData(0, 0, width, height);
+  const source = context.getImageData(0, 0, width, height).data;
+  const colored = mode === 'color' || (mode === 'auto' && hasColor(source));
+  let data = source;
+  if (smooth) {
+    context.fillRect(0, 0, width, height);
+    context.filter = `blur(${smooth}px)`;
+    context.drawImage(image, padding, padding, imageWidth, imageHeight);
+    data = context.getImageData(0, 0, width, height).data;
+  }
   const mask = new Uint8Array(width * height);
   for (let y = padding; y < height - padding; y++) {
     for (let i = y * width + padding; i < (y + 1) * width - padding; i++) {
       const offset = i * 4;
-      mask[i] = Number(data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722 < threshold);
+      const r = data[offset], g = data[offset + 1], b = data[offset + 2];
+      const high = Math.max(r, g, b), low = Math.min(r, g, b);
+      // Keep saturated panes even when their grayscale luminance is low.
+      const brightness = colored ? high + (high - low) * 0.85 :
+        r * 0.2126 + g * 0.7152 + b * 0.0722;
+      mask[i] = Number(brightness < threshold);
     }
   }
   const closed = gap ? closeGaps(mask, width, height, gap) : mask;
   const trace = labelRegions(closed, width);
+  if (colored && trace.regions.length <= 150) assignSourceColors(trace.regions, trace.labels, source, mask);
   const repaired = closeGaps(closed, width, height, Math.max(2, gap));
   const after = labelRegions(repaired, width);
   const leaks = new Uint8Array(mask.length);
@@ -145,7 +191,7 @@ export function traceArtwork(image, threshold, smooth, gap) {
 export function matchAssignments(previous, next, oldAssignments, makeDefault) {
   const assignments = new Map();
   if (!previous || previous.width !== next.width || previous.height !== next.height) {
-    for (const region of next.regions) assignments.set(region.id, makeDefault(region.id));
+    for (const region of next.regions) assignments.set(region.id, makeDefault(region));
     return assignments;
   }
   const overlaps = next.regions.map(() => new Map());
@@ -161,7 +207,14 @@ export function matchAssignments(previous, next, oldAssignments, makeDefault) {
         count = pixels;
       }
     }
-    assignments.set(region.id, oldAssignments.get(match) || makeDefault(region.id));
+    const previousAssignment = oldAssignments.get(match);
+    const initial = makeDefault(region);
+    if (previousAssignment?.customColor) {
+      initial.color = previousAssignment.color;
+      initial.customColor = true;
+    }
+    initial.open = previousAssignment?.open ?? initial.open;
+    assignments.set(region.id, initial);
   }
   return assignments;
 }

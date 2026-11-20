@@ -3,7 +3,7 @@ import {download, project3MF, stlZip} from './downloads.js';
 
 const $ = id => document.getElementById(id);
 const palette = ['#e3a91b', '#ed7950', '#e8b955', '#4a9b81', '#50a8b8', '#8c77bc', '#d673a0'];
-const defaultAssignment = id => ({color: palette[(id - 1) % palette.length], open: false});
+const defaultAssignment = ({id, color}) => ({color: color || palette[(id - 1) % palette.length], open: false});
 const traceCanvas = $('trace');
 const assembled = $('assembled');
 const dimensionFields = ['size-axis', 'size', 'frame', 'insert', 'clearance', 'loop'];
@@ -115,7 +115,7 @@ function traceSource(reset = false) {
   version++;
   try {
     const previous = reset ? null : trace;
-    const next = traceArtwork(source, $('threshold').valueAsNumber, $('smooth').valueAsNumber, $('gap').valueAsNumber);
+    const next = traceArtwork(source, $('threshold').valueAsNumber, $('smooth').valueAsNumber, $('gap').valueAsNumber, $('trace-mode').value);
     if (next.regions.length > 150) throw Error('More than 150 regions detected. Increase smoothing, close gaps, or simplify the artwork.');
     trace = next;
     assignments = matchAssignments(previous, next, assignments, defaultAssignment);
@@ -313,10 +313,11 @@ for (const [field, output, unit] of [['threshold', 'threshold-value', ''], ['smo
     traceSource();
   };
 }
+$('trace-mode').onchange = () => traceSource();
 for (const field of dimensionFields) $(field).oninput = queueModel;
 $('region').onchange = () => selectRegion(Number($('region').value));
 $('open').onchange = () => editRegion({open: $('open').checked});
-$('color').onchange = () => editRegion({color: $('color').value});
+$('color').onchange = () => editRegion({color: $('color').value, customColor: true});
 traceCanvas.onclick = event => {
   if (!trace) return;
   const rect = traceCanvas.getBoundingClientRect();
