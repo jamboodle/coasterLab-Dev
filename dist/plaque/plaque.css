@@ -1,3 +1,20 @@
+:root { --accent: var(--yellow); }
+header { border-bottom: 2px solid var(--paper); }
+header nav a { font-size: 13px; font-weight: 700; text-decoration: none; }
+header nav a:hover, header nav a[aria-current] { text-decoration: underline; }
+header nav a:nth-child(1) { color: var(--yellow); }
+header nav a:nth-child(2) { color: var(--red); }
+header nav a:nth-child(3) { color: var(--blue); }
+main section { background: var(--panel); border-radius: 12px; }
+main select, main input:is([type=number], [type=color]) {
+  background: var(--field);
+  border-color: var(--field-border);
+  color: var(--paper);
+}
+input[type=checkbox] { accent-color: var(--blue); }
+output { color: var(--yellow); }
+.intro, #viewer-help { color: var(--muted); }
+
 [hidden] { display: none !important; }
 .trace-controls { margin-top: .9rem; }
 .artwork-previews { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -32,12 +49,12 @@ main button, #file::file-selector-button {
   font-weight: 700;
 }
 #file::file-selector-button { padding: .35rem .65rem; margin-right: .65rem; cursor: pointer; }
-main button.primary { color: #211c08; background: #f9e064; border-color: #f9e064; }
+main button.primary { color: #211c08; background: var(--yellow); border-color: var(--yellow); }
 main button:not(:disabled):hover, #file::file-selector-button:hover { filter: brightness(1.12); }
 main button:disabled { opacity: .58; }
 .tier-heading, .tier-arrows { display: flex; align-items: center; gap: .45rem; }
 .tier-grip { padding: .25rem .4rem; color: #a8ccff; font-size: 1.35rem; cursor: grab; user-select: none; }
-.tier-position { font: .74rem system-ui, sans-serif; color: #d7d1c6; }
+.tier-position { font: .74rem system-ui, sans-serif; color: var(--muted); }
 .tier-arrows button, .viewer-controls button { color: #17233c; background: #a8ccff; border-color: #a8ccff; }
 .tier.dragging { opacity: .45; }
 .tier.drop-before { box-shadow: inset 0 3px var(--accent); }
@@ -49,8 +66,8 @@ main button:disabled { opacity: .58; }
   .tier-arrows { grid-column: 2; grid-row: 1; justify-content: flex-end; }
 }
 
-.plaque-drop { flex: 1 1 250px; gap: .4rem; padding: .9rem 1rem; border: 1px dashed #80796c; border-radius: 8px; cursor: pointer; }
-.plaque-drop.over { border-color: var(--accent); background: #3b3529; }
+.plaque-drop { flex: 1 1 250px; gap: .4rem; padding: .9rem 1rem; border: 1px dashed #6373a9; background: #10131c; border-radius: 8px; cursor: pointer; }
+.plaque-drop:is(:hover, .over) { border-color: var(--blue); background: #182344; }
 .plaque-drop input { width: 100%; }
 .trace-controls summary { cursor: pointer; color: var(--accent); }
 .trace-controls > .controls { padding: .65rem 0; }
@@ -60,16 +77,15 @@ main button:disabled { opacity: .58; }
 .viewer-controls { margin-top: .65rem; }
 #viewer-help { font-size: .88rem; }
 
-.export-credit-dialog { --yellow: #f9e064; }
 .export-credit-dialog button:not(.dialog-close) { border-radius: 7px; padding: .45rem .65rem; cursor: pointer; }
 #maker-account { margin-top: 0; font-size: .9rem; }
 
 .export-credit-dialog .dialog-actions .download-ready { background: #8de2c6; border-color: #8de2c6; }
 
-.layer-guide { padding: .8rem 1rem; border-left: 3px solid var(--accent); background: #1e1e1b; }
+.layer-guide { padding: .8rem 1rem; border-left: 3px solid var(--accent); background: var(--field); }
 .layer-guide ol { margin: .4rem 0; padding-left: 1.25rem; }
 .layer-guide li + li { margin-top: .4rem; }
 .layer-guide p { margin: .65rem 0 0; }
 
 .source-color { flex-wrap: wrap; }
-.tier-area { flex-basis: 100%; margin-left: 1.6rem; font: .74rem system-ui, sans-serif; color: #d7d1c6; }
+.tier-area { flex-basis: 100%; margin-left: 1.6rem; font: .74rem system-ui, sans-serif; color: var(--muted); }

@@ -1,0 +1,24 @@
+@font-face {
+  font-family: CoasterSans;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #080808;
+  --paper: #f4f1e8;
+  --red: #ff4b45;
+  --yellow: #ffe32b;
+  --blue: #4c77ff;
+  --muted: #b1b1ac;
+  --border: #383838;
+  --panel: #101010;
+  --field: #191919;
+  --field-border: #494949;
+  font-family: CoasterSans, Arial, Helvetica, sans-serif;
+  color: var(--paper);
+  background: var(--bg);
+}

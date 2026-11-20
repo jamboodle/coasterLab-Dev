@@ -116,7 +116,7 @@ try {
   assert.match(await page.locator('#tier-status').textContent(), /7\.5 mm/);
   const traceStyle = await page.locator('#trace-artwork').evaluate(button => getComputedStyle(button).backgroundColor);
   const sampleStyle = await page.locator('#sample').evaluate(button => getComputedStyle(button).backgroundColor);
-  assert.equal(traceStyle, 'rgb(249, 224, 100)');
+  assert.equal(traceStyle, 'rgb(255, 227, 43)');
   assert.equal(sampleStyle, 'rgb(141, 226, 198)');
   await buildPlaque();
   const viewer = page.locator('#viewer');
