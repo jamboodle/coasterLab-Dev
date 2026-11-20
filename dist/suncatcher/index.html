@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suncatcher Maker | CoasterPrint</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/assets/brand/brand.css">
+  <link rel="stylesheet" href="suncatcher.css">
+  <script src="/vendor/fflate.js" defer></script>
+  <script type="module" src="maker.js"></script>
+</head>
+<body>
+  <header class="site-header-logo">
+    <a class="brand brand--logo" href="/" aria-label="CoasterPrint home"><img src="/assets/brand/coasterprint-logo-light.png" alt="CoasterPrint"></a>
+    <nav aria-label="Main navigation">
+      <a href="/#maker">Make a coaster</a>
+      <a href="/suncatcher/" aria-current="page">Suncatcher Maker</a>
+      <a href="/#holders">Coaster holders</a>
+      <a href="/pricing/">Account &amp; credits</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Stained Glass Suncatcher Maker</h1>
+    <p class="intro">Turn closed line art into a frame and separate inserts. Print each part flat and seat the inserts from the back. No AMS required.</p>
+    <section aria-labelledby="artwork-title">
+      <h2 id="artwork-title">Artwork and trace</h2>
+      <div class="controls">
+        <label>Upload PNG, JPG or SVG <input id="artwork" type="file" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"></label>
+        <button id="sample" type="button">Try the flower sample</button>
+      </div>
+      <p id="artwork-status" role="status">Use dark lines on a light or transparent background. Processing stays in your browser.</p>
+      <div class="controls">
+        <label>Threshold <output id="threshold-value">145</output><input id="threshold" type="range" min="0" max="255" value="145"></label>
+        <label>Smoothing <output id="smooth-value">0.7 px</output><input id="smooth" type="range" min="0" max="3" step="0.1" value="0.7"></label>
+        <label>Close gaps <output id="gap-value">0 px</output><input id="gap" type="range" min="0" max="5" value="0"></label>
+      </div>
+      <div class="split">
+        <figure>
+          <canvas width="300" height="190" id="trace" aria-label="Traced artwork and numbered enclosed regions"></canvas>
+          <figcaption>Click a numbered region to select it. Amber marks possible openings in the outline.</figcaption>
+        </figure>
+        <div>
+          <h3>Assign inserts</h3>
+          <label>Region <select id="region" disabled><option>No regions yet</option></select></label>
+          <div class="controls">
+            <label>Insert color <input id="color" type="color" value="#eac15c" disabled></label>
+            <label class="check"><input id="open" type="checkbox" disabled> Leave open</label>
+          </div>
+          <p id="region-status" role="status"></p>
+        </div>
+      </div>
+    </section>
+    <section aria-labelledby="size-title">
+      <h2 id="size-title">Size and fit</h2>
+      <div class="controls">
+        <label>Size by <select id="size-axis"><option value="width">Width</option><option value="height">Height</option></select></label>
+        <label>Finished size (mm) <input id="size" type="number" min="25" max="240" step="0.1" value="110"></label>
+        <label>Frame depth (mm) <input id="frame" type="number" min="1.6" max="8" step="0.1" value="3"></label>
+        <label>Insert thickness (mm) <input id="insert" type="number" min="0.6" max="7" step="0.1" value="1.8"></label>
+        <label>Fit clearance per side (mm) <input id="clearance" type="number" min="0" max="0.8" step="0.05" value="0.2"></label>
+        <label class="check"><input id="loop" type="checkbox" checked> Add hanging loop</label>
+      </div>
+      <p>Artwork keeps its proportions. The finished size includes the loop when enabled. The front lip is 0.8 mm deep. Clearance is applied inward on every side of each insert.</p>
+      <p id="footprint"></p>
+      <div id="diagnostics" role="status"></div>
+      <div class="split previews">
+        <figure>
+          <h3>Assembled front</h3>
+          <canvas width="300" height="190" id="assembled" aria-label="Assembled design from the front"></canvas>
+          <figcaption>Red marks thin frame areas, purple marks detached frame pieces, and amber marks inserts that couldn’t be made.</figcaption>
+        </figure>
+        <div>
+          <h3>Separate parts</h3>
+          <div class="parts" id="parts"></div>
+          <p id="part-summary"></p>
+        </div>
+      </div>
+    </section>
+    <section aria-labelledby="export-title">
+      <h2 id="export-title">Download printable parts</h2>
+      <div class="controls">
+        <button id="download" type="button" disabled>Download STL ZIP</button>
+        <button id="download-3mf" type="button" disabled>Download 3MF</button>
+        <button id="coupon" type="button" disabled>Download fit coupon</button>
+      </div>
+      <p>The ZIP includes the numbered insert STLs, frame STL, assembly map, and fit coupon. The 3MF contains separate objects for slicer import.</p>
+      <p id="download-status" role="status"></p>
+    </section>
+  </main>
+</body>
+</html>

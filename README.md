@@ -55,6 +55,23 @@ for upload disclosure, credit authorization, retention and deployment settings. 
 existing three-minute geometry limit remains in place. Complex artwork can
 still exceed a phone's memory or processing budget.
 
+## Suncatcher Maker
+
+Open `/suncatcher/` or choose **Suncatcher Maker** from the main navigation.
+Try the flower sample or upload PNG, JPG, or SVG line art with closed outlines.
+Set the finished size and clearance per side, then download the numbered STL
+set or a separate-object 3MF for slicer import. Artwork, tracing, model
+generation, and downloads run in the browser.
+
+Print the fit coupon with the materials and first-layer settings you plan to use.
+Print the frame with the front lip against the build plate, print the inserts
+separately, and seat them from the back against the lip. The ZIP includes a
+numbered assembly map. The lip prevents the inserts passing through the front.
+Use a small amount of compatible adhesive if the inserts need rear retention.
+
+The static page ships with the existing development and production release
+packages. No additional service or proxy configuration is required.
+
 ## Next development
 
 See [ROADMAP.md](ROADMAP.md). The first selected priority is export credits and the

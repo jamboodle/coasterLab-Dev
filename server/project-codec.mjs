@@ -1,3 +1,4 @@
+import {stlMeshXML as batchSTLMesh} from '../dist/shared/stl-mesh.js';
 import {createRequire} from 'node:module';
 const fflate=createRequire(import.meta.url)('../dist/vendor/fflate.js');
 const MAX_BATCH_IMAGES=6;
@@ -56,6 +57,6 @@ function makeBatch3MF(coasters,template){
 }
 function batchBaseColor(result){return batchColorHex(result.baseFill||result.parts[0]?.fill||'#D0D0D0');}
 function batchColorHex(fill){const m=String(fill).match(/[\d.]+/g);return m&&m.length>=3?'#'+m.slice(0,3).map(n=>Math.round(+n).toString(16).padStart(2,'0')).join('').toUpperCase():/^#[\da-f]{6}$/i.test(fill)?fill.toUpperCase():'#808080';}
-function batchSTLMesh(buffer){const view=new DataView(buffer),count=view.getUint32(80,true),vertices=[],triangles=[],map=new Map();for(let i=0;i<count;i++){const ids=[];for(let k=0;k<3;k++){const o=84+i*50+12+k*12,p=[view.getFloat32(o,true),view.getFloat32(o+4,true),view.getFloat32(o+8,true)],key=p.join(',');if(!map.has(key)){map.set(key,vertices.length);vertices.push('<vertex x="'+p[0]+'" y="'+p[1]+'" z="'+p[2]+'"/>');}ids.push(map.get(key));}triangles.push('<triangle v1="'+ids[0]+'" v2="'+ids[1]+'" v3="'+ids[2]+'"/>');}return {count,xml:'<vertices>'+vertices.join('')+'</vertices><triangles>'+triangles.join('')+'</triangles>'};}
+
 
 export {makeBatch3MF};
