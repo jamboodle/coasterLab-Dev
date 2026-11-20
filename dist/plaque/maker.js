@@ -12,11 +12,17 @@ async function getAssets() {
   assets = await response.json();
   return assets;
 }
-let svgURL, imageLoaded = false, trace, model, busy = false, viewer;
+let svgURL, imageLoaded = false, trace, model, busy = false, viewer, draggedTier;
 
 function refresh() {
   for (const id of controls) $(id).disabled = busy;
-  for (const input of $('tiers').querySelectorAll('input')) input.disabled = busy;
+  const rows = [...$('tiers').children];
+  for (const [index, row] of rows.entries()) {
+    for (const input of row.querySelectorAll('input')) input.disabled = busy;
+    row.querySelector('.tier-grip').draggable = !busy;
+    row.querySelector('[data-move="-1"]').disabled = busy || index === 0;
+    row.querySelector('[data-move="1"]').disabled = busy || index === rows.length - 1;
+  }
   const monochrome = $('mode').value === 'bw';
   $('color-settings').hidden = monochrome;
   $('mono-settings').hidden = !monochrome;
@@ -68,7 +74,9 @@ function invalidateTrace() {
   svgURL = undefined;
   trace = null;
   $('traced').replaceChildren();
+  clearTierDrag();
   $('tiers').replaceChildren();
+  $('tier-status').textContent = '';
   invalidateModel();
 }
 
@@ -158,16 +166,96 @@ function readTrace(result, width) {
     removedEdges: result.edgeCleanup?.removedRegionsD, viewWidth: width, sourceColors};
 }
 
+const heightInput = row => row.querySelector('[data-field=top]');
+const heightError = 'Use distinct top heights at least 0.2 mm apart, from 0.2 to 50 mm.';
+
+function orderedHeights(rows) {
+  const heights = rows.map(row => heightInput(row).valueAsNumber).sort((a, b) => b - a);
+  return heights.every((height, index) => Number.isFinite(height) && height <= 50 &&
+    height - (heights[index + 1] ?? 0) >= 0.2 - 1e-6) ? heights : null;
+}
+
+function describeTierOrder() {
+  const list = $('tiers');
+  for (const [index, row] of [...list.children].entries()) {
+    row.querySelector('.tier-position').textContent = index === list.children.length - 1 ? 'Base' :
+      index === 0 ? 'Top' : String(index + 1);
+  }
+}
+
+function moveTier(row, destination, keyboardDirection) {
+  if (busy || row === destination) return;
+  const list = $('tiers'), rows = [...list.children];
+  const from = rows.indexOf(row), to = rows.indexOf(destination);
+  if (from < 0 || to < 0) return;
+  const heights = orderedHeights(rows);
+  if (!heights) {
+    $('tier-status').textContent = 'Fix the heights before reordering. ' + heightError;
+    return;
+  }
+  list.insertBefore(row, from < to ? destination.nextSibling : destination);
+  for (const [index, tier] of [...list.children].entries()) heightInput(tier).value = heights[index];
+  describeTierOrder();
+  invalidateModel();
+  $('tier-status').textContent = `${row.dataset.source.toUpperCase()} moved to ${heights[to]} mm. Heights updated.`;
+  if (keyboardDirection) {
+    const button = row.querySelector(`[data-move="${keyboardDirection}"]`);
+    (button.disabled ? row.querySelector(`[data-move="${-keyboardDirection}"]`) : button).focus();
+  }
+}
+
+function clearTierDrag() {
+  draggedTier = undefined;
+  for (const row of $('tiers').children) row.classList.remove('dragging', 'drop-before', 'drop-after');
+}
+
 function renderTiers(sourceColors) {
-  $('tiers').replaceChildren(...sourceColors.map((source, index) => {
+  const rows = sourceColors.map((source, index) => {
     const row = document.createElement('div');
     row.className = 'tier';
     row.dataset.source = source;
+    row.setAttribute('role', 'listitem');
+    const heading = document.createElement('div');
+    heading.className = 'tier-heading';
+    const grip = document.createElement('span');
+    grip.className = 'tier-grip';
+    grip.textContent = '⠿';
+    grip.title = 'Drag to reorder';
+    grip.setAttribute('aria-hidden', 'true');
     const original = document.createElement('span');
     original.className = 'source-color';
     const swatch = document.createElement('span');
     swatch.style.backgroundColor = source;
-    original.append(swatch, source.toUpperCase());
+    const position = document.createElement('small');
+    position.className = 'tier-position';
+    original.append(swatch, source.toUpperCase(), position);
+    heading.append(grip, original);
+
+    grip.ondragstart = event => {
+      if (busy) return event.preventDefault();
+      draggedTier = row;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', source);
+      row.classList.add('dragging');
+    };
+    grip.ondragend = clearTierDrag;
+    row.ondragover = event => {
+      if (!draggedTier || draggedTier === row || busy) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      row.classList.toggle('drop-before', Boolean(row.compareDocumentPosition(draggedTier) & Node.DOCUMENT_POSITION_FOLLOWING));
+      row.classList.toggle('drop-after', !row.classList.contains('drop-before'));
+    };
+    row.ondragleave = event => {
+      if (!row.contains(event.relatedTarget)) row.classList.remove('drop-before', 'drop-after');
+    };
+    row.ondrop = event => {
+      if (!draggedTier || busy) return;
+      event.preventDefault();
+      moveTier(draggedTier, row);
+      clearTierDrag();
+    };
+
     function field(text, name, properties) {
       const label = document.createElement('label');
       const input = Object.assign(document.createElement('input'), properties);
@@ -177,11 +265,39 @@ function renderTiers(sourceColors) {
       label.append(text, input);
       return label;
     }
-    row.append(original,
-      field('Top height (mm)', 'top', {type: 'number', value: (index + 1) * 2, min: 0.2, max: 50, step: 0.1}),
-      field('Print color', 'color', {type: 'color', value: source}));
+
+    const arrows = document.createElement('div');
+    arrows.className = 'tier-arrows';
+    for (const direction of [-1, 1]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.move = direction;
+      button.textContent = direction < 0 ? '↑' : '↓';
+      button.setAttribute('aria-label', 'Move ' + source + (direction < 0 ? ' higher' : ' lower'));
+      button.onclick = () => moveTier(row, direction < 0 ? row.previousElementSibling : row.nextElementSibling, direction);
+      arrows.append(button);
+    }
+
+    const height = field('Top height (mm)', 'top', {type: 'number', value: (index + 1) * 2, min: 0.2, max: 50, step: 0.1});
+    const topInput = height.querySelector('input');
+    topInput.oninput = () => {
+      $('tier-status').textContent = orderedHeights([...$('tiers').children]) ? '' : heightError;
+      invalidateModel();
+    };
+    topInput.onchange = () => {
+      const all = [...$('tiers').children];
+      if (!orderedHeights(all)) return;
+      const sorted = [...all].sort((a, b) => heightInput(b).valueAsNumber - heightInput(a).valueAsNumber);
+      if (sorted.some((tier, index) => tier !== all[index])) $('tiers').append(...sorted);
+      $('tier-status').textContent = '';
+      describeTierOrder();
+      refresh();
+    };
+    row.append(heading, height, field('Print color', 'color', {type: 'color', value: source}), arrows);
     return row;
-  }));
+  });
+  $('tiers').replaceChildren(...rows.reverse());
+  describeTierOrder();
 }
 
 async function traceSource() {
@@ -227,18 +343,13 @@ async function traceSource() {
 function heightSettings() {
   const width = $('width').valueAsNumber;
   if (!Number.isFinite(width) || width < 25 || width > 250) throw Error('Enter a finished width between 25 and 250 mm.');
-  const tiers = [...$('tiers').children].map(row => ({
+  const rows = [...$('tiers').children];
+  if (!orderedHeights(rows)) throw Error(heightError);
+  const tiers = rows.map(row => ({
     source: row.dataset.source,
     top: row.querySelector('[data-field=top]').valueAsNumber,
     color: row.querySelector('[data-field=color]').value
   }));
-  let previous = 0;
-  for (const tier of [...tiers].sort((a, b) => a.top - b.top)) {
-    if (!Number.isFinite(tier.top) || tier.top > 50 || tier.top - previous < 0.2 - 1e-6) {
-      throw Error('Use distinct top heights at least 0.2 mm apart, from 0.2 to 50 mm.');
-    }
-    previous = tier.top;
-  }
   return {width, tiers, largest: $('largest').checked, cleanRelief: $('clean-relief').checked};
 }
 
@@ -372,6 +483,7 @@ async function loadFile(file) {
 $('file').onchange = event => void loadFile(event.target.files[0]);
 const drop = $('drop');
 drop.ondragover = event => {
+  if (!event.dataTransfer.types.includes('Files')) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = busy ? 'none' : 'copy';
   drop.classList.toggle('over', !busy);

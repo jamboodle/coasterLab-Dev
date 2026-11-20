@@ -44,7 +44,7 @@ try {
   await page.getByRole('button', {name: 'Build plaque'}).click();
   await page.waitForFunction(() => document.querySelector('#model-status').textContent.includes('Use distinct top heights'));
   await heights.nth(1).fill('5');
-  await heights.nth(2).fill('7.5');
+  await heights.nth(0).fill('7.5');
   const build = page.getByRole('button', {name: 'Build plaque'});
   const project = page.getByRole('button', {name: 'Download 3MF'});
   async function buildPlaque() {
@@ -57,6 +57,29 @@ try {
   }
   await buildPlaque();
   assert.match(await page.locator('#model-status').textContent(), /3 watertight tiers · 220 × [\d.]+ × 7\.5 mm/);
+  const stack = page.locator('.tier');
+  const order = () => stack.evaluateAll(rows => rows.map(row => row.dataset.source));
+  const values = () => heights.evaluateAll(inputs => inputs.map(input => input.valueAsNumber));
+  assert.deepEqual(await values(), [7.5, 5, 2]);
+  const colorsBefore = await order();
+  const colorInput = stack.first().locator('[data-field=color]');
+  await colorInput.fill('#a42b70');
+  await stack.first().locator('.tier-grip').dragTo(stack.last());
+  assert.deepEqual(await order(), [colorsBefore[1], colorsBefore[2], colorsBefore[0]]);
+  assert.deepEqual(await values(), [7.5, 5, 2]);
+  assert.equal(await stack.last().locator('[data-field=color]').inputValue(), '#a42b70');
+  assert.equal(await project.isDisabled(), true);
+  const up = page.getByRole('button', {name: 'Move ' + colorsBefore[0] + ' higher'});
+  await up.press('Enter');
+  await up.press('Enter');
+  assert.deepEqual(await order(), colorsBefore);
+  assert.deepEqual(await values(), [7.5, 5, 2]);
+  assert.match(await page.locator('#tier-status').textContent(), /7\.5 mm/);
+  const traceStyle = await page.locator('#trace-artwork').evaluate(button => getComputedStyle(button).backgroundColor);
+  const sampleStyle = await page.locator('#sample').evaluate(button => getComputedStyle(button).backgroundColor);
+  assert.equal(traceStyle, 'rgb(249, 224, 100)');
+  assert.equal(sampleStyle, 'rgb(141, 226, 198)');
+  await buildPlaque();
   const viewer = page.locator('#viewer');
   await viewer.waitFor({state: 'visible'});
   const initial = await viewer.screenshot();
@@ -107,7 +130,7 @@ try {
   }, upload);
   await page.locator('#drop').dispatchEvent('drop', {dataTransfer: files});
   await page.waitForFunction(() => document.querySelectorAll('.tier').length === 6);
-  assert.equal(await page.locator('.tier').first().getAttribute('data-source'), '#ffff00');
+  assert.equal(await page.locator('.tier').last().getAttribute('data-source'), '#ffff00');
   await page.locator('#width').fill('220');
   await buildPlaque();
   assert.match(await page.locator('#model-status').textContent(), /6 watertight tiers/);
@@ -137,7 +160,7 @@ try {
   assert.equal(await page.locator('.tier[data-source="#ffff00"]').count(), 0, 'yellow edge background removed');
   const colors = page.locator('[data-field=color]');
   await colors.nth(2).fill('#dc83bd');
-  await colors.nth(4).fill('#dc83bd');
+  await colors.nth(0).fill('#dc83bd');
   await page.locator('#width').fill('220');
   await buildPlaque();
   assert.match(await page.locator('#model-status').textContent(), /5 watertight tiers · 220 × 220 × 10 mm/);
@@ -217,7 +240,7 @@ try {
   }));
   assert.ok(recovery.repair > 0 && recovery.tiers === 2, 'base-tier validation failure retries with contour repair');
   assert.deepEqual(failures, []);
-  console.log('PASS plaque orbit controls, base mesh recovery, drag/drop, trace controls, and STL/3MF exports');
+  console.log('PASS plaque tier drag, automatic heights, keyboard ordering, orbit controls, and STL/3MF exports');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
