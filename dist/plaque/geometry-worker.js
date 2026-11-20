@@ -51,11 +51,14 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     if (largest) silhouette = components[0];
     else if (components.length > 1) throw Error('The artwork has disconnected outlines. Enable Keep only the largest outline, or connect the artwork before importing.');
     const original = silhouette.bounds();
-    const scale = width / (original.max[0] - original.min[0]);
+    const artworkWidth = original.max[0] - original.min[0];
+    const artworkHeight = original.max[1] - original.min[1];
+    const requestedScale = width / artworkWidth;
+    const scale = Math.min(requestedScale, 250 / artworkHeight);
+    const scaledToHeight = scale < requestedScale;
     const normal = shape => keep(keep(shape.translate([-original.min[0], -original.min[1]])).scale(scale));
     const base = normal(silhouette);
     const dimensions = base.bounds().max;
-    if (dimensions[1] > 250) throw Error('The finished height exceeds 250 mm. Reduce finished width.');
     const detail = new Map();
     let covered;
     // CoasterPrint's trace paints later paths over earlier ones.
@@ -142,7 +145,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     for (const [inset, repair] of [[0, 0], [0.008, 0.004], [0.02, 0.012], [0.045, 0.028], [0.08, 0.065], [0.12, 0.12]]) {
       try {
         return {parts: meshTiers(inset, repair), inset, repair, omitted, filtered, cleaned: cleanRelief,
-          trimmed: largest ? components.length - 1 : 0, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
+          trimmed: largest ? components.length - 1 : 0, scaledToHeight, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
       } catch (error) {
         if (error instanceof WebAssembly.RuntimeError) throw Error('The geometry engine hit a memory error. Try fewer colors or Smooth detail.');
         lastError = error;

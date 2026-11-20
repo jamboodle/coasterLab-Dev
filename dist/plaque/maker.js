@@ -451,6 +451,7 @@ async function build() {
     const dims = [result.width, result.height, result.depth].map(value => Number(value.toFixed(2))).join(' × ');
     $('model-status').textContent = [
       `${result.parts.length} watertight tiers · ${dims} mm`,
+      result.scaledToHeight ? 'Resized proportionally to fit the 250 mm height limit.' : '',
       result.cleaned ? 'Smoothed relief edges and cleaned small stray details.' : '',
       result.filtered ? `${result.filtered} detached raised detail(s) removed.` : '',
       result.repair ? `Used a ${result.repair} mm contour cleanup to make the mesh watertight.` : '',

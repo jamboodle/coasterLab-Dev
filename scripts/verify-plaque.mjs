@@ -282,6 +282,39 @@ try {
     assert.match(await page.locator('#model-status').textContent(), /4 watertight tiers/);
     await readArchive(await getProject(1));
   }
+  const portrait = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 120;
+    canvas.height = 340;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#134a35';
+    ctx.fillRect(10, 20, 100, 300);
+    ctx.fillStyle = '#f6cb37';
+    ctx.fillRect(30, 60, 60, 100);
+    return canvas.toDataURL().split(',')[1];
+  });
+  await page.locator('#color-count').fill('2');
+  await page.locator('#width').fill('220');
+  await page.locator('#file').setInputFiles({name: 'tall-plaque.png', mimeType: 'image/png', buffer: Buffer.from(portrait, 'base64')});
+  await page.waitForFunction(() => document.querySelectorAll('.tier').length === 2);
+  await buildPlaque();
+  const tallStatus = await page.locator('#model-status').textContent();
+  assert.match(tallStatus, /Resized proportionally to fit the 250 mm height limit/);
+  const dimensions = /· ([\d.]+) × ([\d.]+) × ([\d.]+) mm/.exec(tallStatus);
+  assert.ok(dimensions);
+  assert.equal(Number(dimensions[2]), 250);
+  assert.ok(Math.abs(Number(dimensions[1]) - 250 / 3) < 1, 'artwork aspect ratio is preserved');
+  assert.equal(Number(dimensions[3]), 4, 'tier heights are preserved');
+  const [portraitSTL] = await Promise.all([
+    page.waitForEvent('download'), page.getByRole('button', {name: 'Download STL tiers'}).click()
+  ]);
+  const portraitZip = unzipSync(new Uint8Array(await readFile(await portraitSTL.path())));
+  const base = Buffer.from(portraitZip['tier-01.stl']);
+  let maxY = 0;
+  for (let i = 0; i < base.readUInt32LE(80); i++) {
+    for (let j = 0; j < 3; j++) maxY = Math.max(maxY, base.readFloatLE(100 + 50 * i + 12 * j));
+  }
+  assert.ok(maxY <= 250 && maxY > 249.99, 'the exported STL observes the height limit');
   const recovery = await page.evaluate(() => new Promise((resolve, reject) => {
     const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
     worker.onmessage = ({data}) => {
