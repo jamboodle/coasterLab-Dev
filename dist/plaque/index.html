@@ -73,7 +73,15 @@
     </section>
     <section aria-labelledby="model-title">
       <h2 id="model-title">Plaque preview</h2>
-      <canvas id="model" width="640" height="340" aria-label="Angled preview of the stacked plaque"></canvas>
+      <canvas id="viewer" width="640" height="340" tabindex="0" aria-label="Rotatable 3D preview of printable plaque" aria-describedby="viewer-help" hidden></canvas>
+      <canvas id="model" width="640" height="340" aria-label="Static preview of the stacked plaque"></canvas>
+      <div id="viewer-controls" class="controls viewer-controls" hidden>
+        <button id="zoom-in" type="button">Zoom in</button>
+        <button id="zoom-out" type="button">Zoom out</button>
+        <button id="view-reset" type="button">Reset view</button>
+      </div>
+      <p id="viewer-help" hidden>Drag or use the arrow keys to rotate. Scroll or use + and − to zoom.</p>
+      <p id="viewer-fallback" hidden>3D is unavailable in this browser. Showing a static preview.</p>
       <p id="model-status" role="status">Trace your artwork, set the heights, then build the plaque.</p>
       <div class="controls">
         <button class="primary" id="project" type="button" disabled>Download 3MF</button>

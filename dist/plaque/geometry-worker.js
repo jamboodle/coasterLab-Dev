@@ -100,18 +100,26 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     }
     const omitted = sorted.length - printable.length;
 
-    function meshTiers(inset) {
+    function meshTiers(inset, repair) {
       const start = owned.length, parts = [];
+      let support;
       try {
         for (const [index, tier] of printable.entries()) {
           const source = sections[index];
           // Increasing the inset with tier height keeps the modified footprints nested.
           const reliefInset = inset * index / Math.max(1, sections.length - 1);
-          const section = reliefInset ? keep(source.offset(-reliefInset, 'Round', 2, 12)) : source;
+          let section = reliefInset ? keep(source.offset(-reliefInset, 'Round', 2, 12)) : source;
+          if (repair) {
+            // Remove near-coincident contour vertices before triangulation, including the base.
+            if (repair >= 0.025) section = offset(offset(section, -repair), repair);
+            section = keep(section.simplify(repair));
+            if (support) section = keep(section.intersect(support));
+          }
+          support = section;
           if (section.isEmpty()) throw Error('Tier ' + (index + 1) + ' is too small to preserve.');
           const bottom = index ? printable[index - 1].top : 0;
           const solid = keep(keep(section.extrude(tier.top - bottom)).translate([0, 0, bottom]));
-          const cleaned = keep(keep(solid.asOriginal()).setTolerance(0.0001));
+          const cleaned = repair === 0.004 ? solid : keep(keep(solid.asOriginal()).setTolerance(0.0001));
           const name = 'tier-' + String(index + 1).padStart(2, '0');
           try {
             const {buffer} = binarySTL(cleaned, 'CoasterPrint plaque ' + name + '; units mm');
@@ -130,11 +138,11 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     }
 
     let lastError;
-    // Sub-pixel relief insets can resolve coincident edge contacts at export precision.
-    for (const inset of [0, 0.008, 0.02, 0.045, 0.08]) {
+    // Retry the geometry before extrusion; STL validation stays enabled on every attempt.
+    for (const [inset, repair] of [[0, 0], [0.008, 0.004], [0.02, 0.012], [0.045, 0.028], [0.08, 0.065], [0.12, 0.12]]) {
       try {
-        return {parts: meshTiers(inset), inset, omitted, filtered, cleaned: cleanRelief, trimmed: largest ? components.length - 1 : 0,
-          width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
+        return {parts: meshTiers(inset, repair), inset, repair, omitted, filtered, cleaned: cleanRelief,
+          trimmed: largest ? components.length - 1 : 0, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
       } catch (error) {
         if (error instanceof WebAssembly.RuntimeError) throw Error('The geometry engine hit a memory error. Try fewer colors or Smooth detail.');
         lastError = error;

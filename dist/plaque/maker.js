@@ -1,3 +1,4 @@
+import {createViewer} from './viewer.js';
 import {bambuPlacement, downloadFile, plaque3MF, plaqueSTLs} from './export.js';
 
 const $ = id => document.getElementById(id);
@@ -11,7 +12,7 @@ async function getAssets() {
   assets = await response.json();
   return assets;
 }
-let svgURL, imageLoaded = false, trace, model, busy = false;
+let svgURL, imageLoaded = false, trace, model, busy = false, viewer;
 
 function refresh() {
   for (const id of controls) $(id).disabled = busy;
@@ -44,8 +45,16 @@ function runWorker(url, options, payload, transfer = []) {
   });
 }
 
+function toggleViewer(visible) {
+  for (const id of ['viewer', 'viewer-controls', 'viewer-help']) $(id).hidden = !visible;
+  $('model').hidden = visible;
+  $('viewer-fallback').hidden = visible || !model;
+}
+
 function invalidateModel() {
   model = null;
+  viewer?.clear();
+  toggleViewer(false);
   const canvas = $('model');
   canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
   $('model-status').textContent = trace ? 'Build the plaque to preview the current heights.' :
@@ -269,6 +278,27 @@ function paintModel(result) {
   }
 }
 
+function showModel(result) {
+  try {
+    viewer ??= createViewer($('viewer'), () => {
+      toggleViewer(false);
+      if (model) paintModel(model);
+    });
+    if (viewer?.show(result)) {
+      toggleViewer(true);
+      return;
+    }
+  } catch {
+    // The downloadable model and static view are usable on browsers without WebGL.
+  }
+  toggleViewer(false);
+  paintModel(result);
+}
+
+$('zoom-in').onclick = () => viewer?.zoomBy(1.2);
+$('zoom-out').onclick = () => viewer?.zoomBy(1 / 1.2);
+$('view-reset').onclick = () => viewer?.reset();
+
 async function build() {
   if (busy || !trace) return;
   invalidateModel();
@@ -281,14 +311,14 @@ async function build() {
     const {result} = await runWorker(new URL('./geometry-worker.js', import.meta.url), {type: 'module'}, {
       ...trace, ...settings, geometryScript: scripts['stl-geometry.js']
     });
-    paintModel(result);
     model = result;
+    showModel(result);
     const dims = [result.width, result.height, result.depth].map(value => Number(value.toFixed(2))).join(' × ');
     $('model-status').textContent = [
       `${result.parts.length} watertight tiers · ${dims} mm`,
       result.cleaned ? 'Smoothed relief edges and cleaned small stray details.' : '',
       result.filtered ? `${result.filtered} detached raised detail(s) removed.` : '',
-      result.inset ? `Relief edges inset by up to ${result.inset} mm for a watertight export.` : '',
+      result.repair ? `Used a ${result.repair} mm contour cleanup to make the mesh watertight.` : '',
       result.trimmed ? `${result.trimmed} detached outline(s) removed.` : '',
       result.omitted ? `${result.omitted} color(s) had no printable area after tracing and cleanup.` : '',
       bambuPlacement(result).checkExclusion ? 'Check clearance around the P1S front-left exclusion in the slicer, or reduce the width.' : ''

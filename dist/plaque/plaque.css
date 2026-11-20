@@ -35,3 +35,8 @@ button.primary { color: #191919; background: var(--accent); border-color: var(--
 .plaque-drop input { width: 100%; }
 .trace-controls summary { cursor: pointer; color: var(--accent); }
 .trace-controls > .controls { padding: .65rem 0; }
+
+#viewer { max-width: 720px; aspect-ratio: 640 / 340; margin: 0 auto; cursor: grab; touch-action: none; }
+#viewer:active { cursor: grabbing; }
+.viewer-controls { margin-top: .65rem; }
+#viewer-help { font-size: .88rem; }

@@ -9,13 +9,28 @@ import {withStatic} from '../server/static.mjs';
 const require = createRequire(import.meta.url);
 const {chromium} = require('playwright');
 const {unzipSync, strFromU8} = require('../dist/vendor/fflate.js');
-const server = createServer(withStatic((req, res) => res.writeHead(404).end(),
-  fileURLToPath(new URL('../dist/', import.meta.url))));
+const root = fileURLToPath(new URL('../dist/', import.meta.url));
+const manifest = JSON.parse(await readFile(join(root, 'asset-manifest.json'), 'utf8'));
+const serve = withStatic((req, res) => res.writeHead(404).end(), root);
+const server = createServer((req, res) => {
+  if (req.url === '/plaque/test-mesh.js') {
+    const source = '/' + manifest.scripts['stl-geometry.js'];
+    res.writeHead(200, {'Content-Type': 'text/javascript'});
+    return res.end(`export {pathContours, signedArea} from '${source}';
+      import {binarySTL as validate} from '${source}';
+      let first = true;
+      export function binarySTL(solid, name) {
+        if (first) { first = false; throw Error('An export triangle has zero area.'); }
+        return validate(solid, name);
+      }`);
+  }
+  return serve(req, res);
+});
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 let browser;
 try {
-  browser = await chromium.launch({executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox']});
+  browser = await chromium.launch({executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox', '--enable-unsafe-swiftshader']});
   const page = await browser.newPage({acceptDownloads: true});
   const failures = [];
   page.on('pageerror', error => failures.push(error.message));
@@ -42,9 +57,24 @@ try {
   }
   await buildPlaque();
   assert.match(await page.locator('#model-status').textContent(), /3 watertight tiers · 220 × [\d.]+ × 7\.5 mm/);
-  const rendered = await page.locator('#model').evaluate(canvas =>
-    canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value > 0));
-  assert.equal(rendered, true);
+  const viewer = page.locator('#viewer');
+  await viewer.waitFor({state: 'visible'});
+  const initial = await viewer.screenshot();
+  const box = await viewer.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 100, box.y + box.height / 2 + 40, {steps: 6});
+  await page.mouse.up();
+  const rotated = await viewer.screenshot();
+  assert.equal(initial.equals(rotated), false);
+  await page.getByRole('button', {name: 'Zoom in'}).click();
+  const zoomed = await viewer.screenshot();
+  assert.equal(rotated.equals(zoomed), false);
+  await page.getByRole('button', {name: 'Reset view'}).click();
+  const reset = await viewer.screenshot();
+  assert.equal(zoomed.equals(reset), false);
+  await viewer.press('ArrowUp');
+  assert.equal(reset.equals(await viewer.screenshot()), false);
   await page.locator('#width').fill('170');
   assert.equal(await project.isDisabled(), true);
   await buildPlaque();
@@ -169,8 +199,25 @@ try {
     assert.match(await page.locator('#model-status').textContent(), /4 watertight tiers/);
     await getArchive(project);
   }
+  const recovery = await page.evaluate(() => new Promise((resolve, reject) => {
+    const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
+    worker.onmessage = ({data}) => {
+      worker.terminate();
+      if (data.error) reject(Error(data.error));
+      else resolve({repair: data.result.repair, tiers: data.result.parts.length});
+    };
+    worker.onerror = () => reject(Error('The test geometry worker failed.'));
+    worker.postMessage({
+      geometryScript: 'plaque/test-mesh.js', viewWidth: 100, width: 100, largest: true, cleanRelief: true,
+      paths: [{color: '#ffff00', d: 'M0 0L40 0L40.004 0.0004L70 0L100 0L100 100L0 100Z'},
+        {color: '#008000', d: 'M10 10L90 10L90 90L10 90Z'}],
+      tiers: [{source: '#ffff00', color: '#ffff00', top: 2},
+        {source: '#008000', color: '#008000', top: 4}]
+    });
+  }));
+  assert.ok(recovery.repair > 0 && recovery.tiers === 2, 'base-tier validation failure retries with contour repair');
   assert.deepEqual(failures, []);
-  console.log('PASS plaque upload and drop, preserved border, cleaned raised specks, coaster trace controls, and printable STL/3MF exports');
+  console.log('PASS plaque orbit controls, base mesh recovery, drag/drop, trace controls, and STL/3MF exports');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

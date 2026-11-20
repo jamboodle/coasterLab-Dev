@@ -76,7 +76,8 @@ packages. No additional service or proxy configuration is required.
 
 Open `/plaque/` from the main navigation. Choose or drop a PNG or JPG and trace it into
 solid colors. Set each color’s top height above the bed and choose its print
-color, then build the stacked relief. Higher sections sit on the lower tiers.
+color, then build the stacked relief. Drag the 3D preview to inspect the actual
+export mesh. Higher sections sit on the lower tiers.
 Background colors are kept by default. Enable edge-background removal to discard
 a plain exterior color. Advanced tracing uses the coaster maker’s controls.
 Relief cleanup smooths narrow edges and removes small disconnected raised details.
