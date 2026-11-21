@@ -307,6 +307,7 @@ function present(result) {
     $('stamp-status').textContent = (result.stamp.embossed
       ? 'Stamp and ring ready. Select Show stamp to see the matching marks on your artwork.'
       : 'Plain stamp and ring ready. The stamp has no raised artwork.') +
+      (result.stamp.removedSpecks ? ' Tiny traced fragments were removed.' : '') +
       (result.stamp.imprinted ? '' : ' There wasn’t room for the CoasterPrint.Com imprint beside the socket.');
   } else {
     const reason = result.stampError || ($('stamp-mode').value === 'color'

@@ -1,4 +1,5 @@
 import {makeImprint} from '../shared/imprint.js';
+import {removeReliefSpecks} from '../shared/relief-cleanup.js';
 import Module from '../vendor/manifold.js';
 
 async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSeal, removedEdges,
@@ -84,20 +85,17 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     if (cleanRelief && sections.length > 1) {
       // Opening removes thin towers; closing rounds notches from raster tracing.
       // Each layer is intersected with its support so the stepped relief stays nested.
-      const radius = 0.18;
+      const radius = 0.32;
       for (let index = 1; index < sections.length; index++) {
         const opened = offset(offset(sections[index], -radius), radius);
         const rounded = opened.isEmpty() ? opened : offset(offset(opened, radius), -radius);
-        let section = keep(rounded.intersect(sections[index - 1]));
-        const parts = section.decompose().map(keep);
-        if (parts.length > 1) {
-          const largestArea = Math.max(...parts.map(part => part.area()));
-          const minimum = index === 1 ? Math.max(0.5, Math.min(55, largestArea * 0.004)) : 0.5;
-          const retained = parts.filter(part => part.area() >= minimum);
-          filtered += parts.length - retained.length;
-          if (retained.length !== parts.length) section = union(retained);
-        }
-        sections[index] = section;
+        const section = keep(rounded.intersect(sections[index - 1]));
+        const minimum = index === 1
+          ? largest => Math.max(1.25, Math.min(55, largest * 0.004))
+          : 1.25;
+        const cleaned = removeReliefSpecks(CrossSection, keep, section, minimum);
+        filtered += cleaned.removed;
+        sections[index] = cleaned.shape;
       }
       printable = printable.filter((_, index) => !sections[index].isEmpty());
       sections = sections.filter(section => !section.isEmpty());

@@ -334,6 +334,8 @@ try {
     ctx.fillRect(70, 78, 50, 64);
     ctx.fillStyle = '#93a7ed';
     ctx.fillRect(120, 78, 50, 64);
+    ctx.fillRect(159, 54, 3, 4);
+    ctx.fillRect(170, 105, 14, 1);
     return canvas.toDataURL().split(',')[1];
   });
   await page.locator('#file').setInputFiles({name: 'flat-colors.png', mimeType: 'image/png', buffer: Buffer.from(colored, 'base64')});
@@ -349,10 +351,10 @@ try {
   await checkStamp('flat-colors-stamp');
   await page.locator('#view-stamp').click();
   const marks = await page.locator('.stamp-mark').evaluate(path =>
-    [[70, 110], [120, 110], [170, 110], [93, 110], [145, 110], [120, 46]].map(([x, y]) =>
+    [[70, 110], [120, 110], [170, 110], [93, 110], [145, 110], [120, 46], [160, 55], [181, 105.5]].map(([x, y]) =>
       path.isPointInFill(new DOMPoint(x, y))));
-  assert.deepEqual(marks, [true, true, true, false, false, false],
-    'color tracing embosses both outer edges and the shared border, with clear interiors');
+  assert.deepEqual(marks, [true, true, true, false, false, false, false, false],
+    'embossed borders keep the main shapes and omit stray dots and hairline spurs');
   assert.deepEqual(errors, []);
   console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, handling lip, STL and 3MF parity, invalid-mesh block, threaded stamp and ring STLs, mating clearance, color-region embossing, and 3D previews');
 } finally {

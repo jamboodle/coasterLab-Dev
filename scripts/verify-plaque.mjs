@@ -211,6 +211,33 @@ try {
       assert.ok(raised.readFloatLE(offset) > 8 && raised.readFloatLE(offset + 4) < 213, 'detached corner speck is absent');
     }
   }
+  const speckCleanup = await page.evaluate(async geometryScript => {
+    async function trace(cleanRelief) {
+      const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
+      try {
+        const {result, error} = await new Promise((resolve, reject) => {
+          worker.onmessage = event => resolve(event.data);
+          worker.onerror = reject;
+          worker.postMessage({
+            paths: [
+              {color: '#111111', d: 'M0 0 L40 0 L40 40 L0 40 Z'},
+              {color: '#ffffff', d: 'M10 10 L18 10 L18 13 L23 13 L23 13.5 L18 13.5 L18 18 L10 18 Z M32 8 L32.96 8 L32.96 8.96 L32 8.96 Z'}
+            ],
+            viewWidth: 40, width: 40, largest: true, cleanRelief, geometryScript,
+            tiers: [{source: '#111111', top: 2}, {source: '#ffffff', top: 4}]
+          });
+        });
+        if (error) throw Error(error);
+        const {polygons} = result.parts[1];
+        return {parts: polygons.length, rightmost: Math.max(...polygons.flat().map(point => point[0]))};
+      } finally { worker.terminate(); }
+    }
+    return [await trace(false), await trace(true)];
+  }, manifest.scripts['stl-geometry.js']);
+  assert.equal(speckCleanup[0].parts, 2);
+  assert.ok(speckCleanup[0].rightmost > 32);
+  assert.equal(speckCleanup[1].parts, 1);
+  assert.ok(speckCleanup[1].rightmost < 18.5, 'cleanup removes the raised speck and attached hairline spur');
   if (process.env.PLAQUE_VERIFY_OUTPUT) {
     const borderProject = await getProject(1);
     const output = process.env.PLAQUE_VERIFY_OUTPUT;

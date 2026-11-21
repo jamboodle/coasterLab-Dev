@@ -1,3 +1,4 @@
+import {removeReliefSpecks} from '../shared/relief-cleanup.js';
 import Module from '../vendor/manifold.js';
 import {makeImprint} from '../shared/imprint.js';
 import {backingHeight, stampHandle, stampSocket} from './stamp-handle.js';
@@ -105,15 +106,23 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       }
       if (stampMode !== 'plain' && !stampPaths?.length) return;
       const paths = (stampPaths || []).map(path => path.map(([x, y]) => [(x - minX) * scale, (maxY - y) * scale]));
-      let details;
+      let details, removedSpecks = 0;
       if (stampMode === 'color') {
         const strokeRadius = 0.48;
         const lines = [];
         for (const path of paths) {
-          if (Math.abs(signedArea(path)) < 0.35) continue;
+          if (Math.abs(signedArea(path)) < 2.5) {
+            removedSpecks++;
+            continue;
+          }
           const region = keep(new CrossSection([path], 'EvenOdd'));
-          if (region.isEmpty()) continue;
-          lines.push(keep(offset(region, strokeRadius).subtract(offset(region, -strokeRadius))));
+          // Remove hairline spurs before outlining, which would otherwise widen them.
+          const cleaned = offset(offset(region, -0.32), 0.32);
+          if (cleaned.isEmpty()) {
+            removedSpecks++;
+            continue;
+          }
+          lines.push(keep(offset(cleaned, strokeRadius).subtract(offset(cleaned, -strokeRadius))));
         }
         details = keep(CrossSection.union(lines));
       } else if (stampMode !== 'plain') {
@@ -127,8 +136,10 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       let relief;
       if (details) {
         const clipped = keep(details.intersect(clip));
-        const opened = offset(offset(clipped, -0.28), 0.28);
-        relief = keep(opened.intersect(clip));
+        const opened = offset(offset(clipped, -0.34), 0.34);
+        const cleaned = removeReliefSpecks(CrossSection, keep, keep(opened.intersect(clip)), 1.25);
+        removedSpecks += cleaned.removed;
+        relief = cleaned.shape;
         if (relief.isEmpty()) return;
       }
 
@@ -165,7 +176,7 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       }
       if (!stampMesh) throw meshError || Error('The stamp details are too small to print.');
       const {solid: handle, ...handleDimensions} = stampHandle(kernel, keep);
-      return {...stampMesh, imprinted: Boolean(imprint), embossed: Boolean(printedRelief),
+      return {...stampMesh, removedSpecks, imprinted: Boolean(imprint), embossed: Boolean(printedRelief),
         depth: backingHeight + (printedRelief ? stampDepth : 0),
         handle: {...mesh(handle, 'stamp handle'), ...handleDimensions},
         width: bounds.max[0] - bounds.min[0], height: bounds.max[1] - bounds.min[1],
