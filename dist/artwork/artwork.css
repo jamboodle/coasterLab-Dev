@@ -51,3 +51,5 @@ summary { cursor: pointer; }
 .text-controls + .text-controls { border-top: 1px solid #666; }
 #add-text { margin-top: .6rem; }
 #feedback { color: var(--accent); }
+
+.artwork-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem 1rem; margin-bottom: 1rem; }
