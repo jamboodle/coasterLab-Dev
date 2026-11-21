@@ -144,6 +144,7 @@ try {
   assert.equal(await page.locator('#stamp-mode').inputValue(), 'color');
   await page.locator('#stamp-mode').selectOption('lines');
   await page.locator('#sample').click();
+  assert.equal(await page.locator('#smoothing').inputValue(), '3');
   await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('1 detected shape'));
   await build('sample-star', {axis: 'width', size: 80});
   assert.equal(await page.locator('#stamp-depth').inputValue(), '3');
@@ -292,7 +293,7 @@ try {
   assert.match(await traceStatus.textContent(), /brightness threshold/);
   await page.locator('#threshold').fill('180');
   await page.locator('#invert').check();
-  await page.locator('#smoothing').selectOption('3');
+  await page.locator('#smoothing').selectOption({label: 'High'});
   await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('2 detected shapes'));
   await page.locator('#width').fill('60');
   await build('inverted-jpg-circle', {axis: 'width', size: 60});
