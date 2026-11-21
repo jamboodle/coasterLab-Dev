@@ -31,7 +31,7 @@ const runtime = Module({locateFile: name => new URL('../vendor/' + name, import.
   return kernel;
 });
 
-async function build({points, axis, size, height, wall, stampDepth, stampPaths, stampMode, geometryScript}) {
+async function build({points, axis, size, height, wall, stampDepth, stampPaths, stampMode, strongCleanup, geometryScript}) {
   for (const [value, low, high, name] of [
     [size, 10, 240, 'Cookie size'], [height, 6, 30, 'Cutter height'],
     [wall, 0.65, 2, 'Wall thickness']
@@ -109,15 +109,17 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       let details, removedSpecks = 0;
       if (stampMode === 'color') {
         const strokeRadius = 0.48;
+        const sourceRadius = strongCleanup ? 0.55 : 0.32;
+        const sourceArea = strongCleanup ? 6 : 2.5;
         const lines = [];
         for (const path of paths) {
-          if (Math.abs(signedArea(path)) < 2.5) {
+          if (Math.abs(signedArea(path)) < sourceArea) {
             removedSpecks++;
             continue;
           }
           const region = keep(new CrossSection([path], 'EvenOdd'));
           // Remove hairline spurs before outlining, which would otherwise widen them.
-          const cleaned = offset(offset(region, -0.32), 0.32);
+          const cleaned = offset(offset(region, -sourceRadius), sourceRadius);
           if (cleaned.isEmpty()) {
             removedSpecks++;
             continue;
@@ -136,8 +138,10 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       let relief;
       if (details) {
         const clipped = keep(details.intersect(clip));
-        const opened = offset(offset(clipped, -0.34), 0.34);
-        const cleaned = removeReliefSpecks(CrossSection, keep, keep(opened.intersect(clip)), 1.25);
+        // Keep the opening radius below the 0.48 mm half-width of color outlines.
+        const radius = strongCleanup ? (stampMode === 'color' ? 0.41 : 0.55) : 0.34;
+        const opened = offset(offset(clipped, -radius), radius);
+        const cleaned = removeReliefSpecks(CrossSection, keep, keep(opened.intersect(clip)), strongCleanup ? 4 : 1.25);
         removedSpecks += cleaned.removed;
         relief = cleaned.shape;
         if (relief.isEmpty()) return;

@@ -3,7 +3,7 @@ import {removeReliefSpecks} from '../shared/relief-cleanup.js';
 import Module from '../vendor/manifold.js';
 
 async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSeal, removedEdges,
-    viewWidth, width, largest, cleanRelief, tiers, geometryScript}) {
+    viewWidth, width, largest, cleanRelief, strongCleanup, tiers, geometryScript}) {
   const [kernel, {pathContours, signedArea, binarySTL}] = await Promise.all([
     Module({locateFile: name => new URL('../vendor/' + name, import.meta.url).href}),
     import('/' + geometryScript)
@@ -85,14 +85,15 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     if (cleanRelief && sections.length > 1) {
       // Opening removes thin towers; closing rounds notches from raster tracing.
       // Each layer is intersected with its support so the stepped relief stays nested.
-      const radius = 0.32;
+      const radius = strongCleanup ? 0.55 : 0.32;
+      const minimumArea = strongCleanup ? 4 : 1.25;
       for (let index = 1; index < sections.length; index++) {
         const opened = offset(offset(sections[index], -radius), radius);
         const rounded = opened.isEmpty() ? opened : offset(offset(opened, radius), -radius);
         const section = keep(rounded.intersect(sections[index - 1]));
         const minimum = index === 1
-          ? largest => Math.max(1.25, Math.min(55, largest * 0.004))
-          : 1.25;
+          ? largest => Math.max(minimumArea, Math.min(55, largest * 0.004))
+          : minimumArea;
         const cleaned = removeReliefSpecks(CrossSection, keep, section, minimum);
         filtered += cleaned.removed;
         sections[index] = cleaned.shape;

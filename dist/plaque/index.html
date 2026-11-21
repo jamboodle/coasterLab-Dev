@@ -84,7 +84,7 @@
       <div class="controls">
         <label>Requested width (mm) <input aria-describedby="fit-height-note" id="width" type="number" min="25" max="250" step="0.1" value="220"></label>
         <label class="check"><input id="largest" type="checkbox" checked> Keep only the largest outline</label>
-        <label class="check"><input id="clean-relief" type="checkbox" checked> Smooth relief edges and clean stray details</label>
+        <label>Relief cleanup <select id="clean-relief"><option value="off">Off</option><option value="standard" selected>Standard</option><option value="strong">Strong</option></select></label>
         <button class="primary" id="build" type="button" disabled>Build plaque</button>
       </div>
       <p id="fit-height-note">Tall artwork scales down proportionally to fit within 240 mm high.</p>

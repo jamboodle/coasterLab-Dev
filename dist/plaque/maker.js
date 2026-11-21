@@ -348,7 +348,7 @@ function heightSettings() {
     top: row.querySelector('[data-field=top]').valueAsNumber,
     color: row.querySelector('[data-field=color]').value
   }));
-  return {width, tiers, largest: $('largest').checked, cleanRelief: $('clean-relief').checked};
+  return {width, tiers, largest: $('largest').checked, cleanRelief: $('clean-relief').value !== 'off', strongCleanup: $('clean-relief').value === 'strong'};
 }
 
 function paintModel(result) {

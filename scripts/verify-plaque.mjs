@@ -212,7 +212,7 @@ try {
     }
   }
   const speckCleanup = await page.evaluate(async geometryScript => {
-    async function trace(cleanRelief) {
+    async function trace(cleanRelief, strongCleanup = false) {
       const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
       try {
         const {result, error} = await new Promise((resolve, reject) => {
@@ -221,9 +221,9 @@ try {
           worker.postMessage({
             paths: [
               {color: '#111111', d: 'M0 0 L40 0 L40 40 L0 40 Z'},
-              {color: '#ffffff', d: 'M10 10 L18 10 L18 13 L23 13 L23 13.5 L18 13.5 L18 18 L10 18 Z M32 8 L32.96 8 L32.96 8.96 L32 8.96 Z'}
+              {color: '#ffffff', d: 'M10 10 L18 10 L18 13 L23 13 L23 13.5 L18 13.5 L18 15 L25 15 L25 15.85 L18 15.85 L18 18 L10 18 Z M32 8 L32.96 8 L32.96 8.96 L32 8.96 Z M28 25 L29.6 25 L29.6 26.6 L28 26.6 Z'}
             ],
-            viewWidth: 40, width: 40, largest: true, cleanRelief, geometryScript,
+            viewWidth: 40, width: 40, largest: true, cleanRelief, strongCleanup, geometryScript,
             tiers: [{source: '#111111', top: 2}, {source: '#ffffff', top: 4}]
           });
         });
@@ -232,12 +232,14 @@ try {
         return {parts: polygons.length, rightmost: Math.max(...polygons.flat().map(point => point[0]))};
       } finally { worker.terminate(); }
     }
-    return [await trace(false), await trace(true)];
+    return [await trace(false), await trace(true), await trace(true, true)];
   }, manifest.scripts['stl-geometry.js']);
-  assert.equal(speckCleanup[0].parts, 2);
+  assert.equal(speckCleanup[0].parts, 3);
   assert.ok(speckCleanup[0].rightmost > 32);
-  assert.equal(speckCleanup[1].parts, 1);
-  assert.ok(speckCleanup[1].rightmost < 18.5, 'cleanup removes the raised speck and attached hairline spur');
+  assert.equal(speckCleanup[1].parts, 2);
+  assert.ok(speckCleanup[1].rightmost < 30);
+  assert.equal(speckCleanup[2].parts, 1);
+  assert.ok(speckCleanup[2].rightmost < 18.7, 'strong cleanup removes the remaining speck and attached spur');
   if (process.env.PLAQUE_VERIFY_OUTPUT) {
     const borderProject = await getProject(1);
     const output = process.env.PLAQUE_VERIFY_OUTPUT;

@@ -352,7 +352,7 @@ $('build').onclick = async () => {
     stampError = error.message;
   }
   if (worker !== current) return;
-  current.postMessage({points, stampPaths, stampMode, axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
+  current.postMessage({points, stampPaths, stampMode, strongCleanup: $('stamp-cleanup').value === 'strong', axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
     height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, stampDepth: $('stamp-depth').valueAsNumber});
 };
 
@@ -396,7 +396,7 @@ $('stamp-mode').onchange = () => {
   $('stamp-colors-control').hidden = !color;
   const plain = $('stamp-mode').value === 'plain';
   $('stamp-threshold-control').hidden = $('stamp-invert-control').hidden = color || plain;
-  $('stamp-depth-control').hidden = plain;
+  $('stamp-depth-control').hidden = $('stamp-cleanup-control').hidden = plain;
   invalidate();
   renderOutline();
 };
@@ -405,7 +405,7 @@ $('build-plain-stamp').onclick = () => {
   $('stamp-mode').onchange();
   $('build').click();
 };
-for (const id of ['width', 'height', 'cutter-height', 'wall', 'stamp-threshold', 'stamp-invert', 'stamp-depth', 'stamp-colors']) $(id).oninput = () => {
+for (const id of ['width', 'height', 'cutter-height', 'wall', 'stamp-threshold', 'stamp-invert', 'stamp-depth', 'stamp-colors', 'stamp-cleanup']) $(id).oninput = () => {
   if (id === 'width' || id === 'height') {
     sizingAxis = id;
     syncSize();

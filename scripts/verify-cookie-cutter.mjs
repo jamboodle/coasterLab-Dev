@@ -335,6 +335,7 @@ try {
     ctx.fillStyle = '#93a7ed';
     ctx.fillRect(120, 78, 50, 64);
     ctx.fillRect(159, 54, 3, 4);
+    ctx.fillRect(145, 58, 5, 5);
     ctx.fillRect(170, 105, 14, 1);
     return canvas.toDataURL().split(',')[1];
   });
@@ -355,6 +356,16 @@ try {
       path.isPointInFill(new DOMPoint(x, y))));
   assert.deepEqual(marks, [true, true, true, false, false, false, false, false],
     'embossed borders keep the main shapes and omit stray dots and hairline spurs');
+  const leftover = () => page.locator('.stamp-mark').evaluate(path => path.isPointInFill(new DOMPoint(145.2, 60)));
+  assert.equal(await leftover(), true, 'standard keeps the larger speck');
+  await page.locator('#stamp-cleanup').selectOption('strong');
+  const strongCutter = await build('strong-cleanup-cutter', {axis: 'width', size: 80});
+  assert.ok(originalCutter.equals(strongCutter));
+  await checkStamp('strong-cleanup-stamp');
+  await page.locator('#view-stamp').click();
+  assert.equal(await leftover(), false, 'strong cleanup removes the remaining speck');
+  assert.equal(await page.locator('.stamp-mark').evaluate(path => path.isPointInFill(new DOMPoint(120, 110))), true,
+    'strong cleanup preserves the main shared boundary');
   assert.deepEqual(errors, []);
   console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, handling lip, STL and 3MF parity, invalid-mesh block, threaded stamp and ring STLs, mating clearance, color-region embossing, and 3D previews');
 } finally {
