@@ -1,7 +1,7 @@
 import {decodeArtwork} from '../suncatcher/trace.js';
 import {createViewer} from '../plaque/viewer.js';
 import {downloadFile} from '../plaque/export.js';
-import {project3MF} from '../suncatcher/downloads.js';
+import {cookieProject} from './project.js';
 import {detectOutlines, detectStamp, starSample, usesTransparency} from './trace.js';
 
 const $ = id => document.getElementById(id);
@@ -80,7 +80,7 @@ function invalidate() {
   invalid = false;
   viewer?.clear();
   $('viewer').hidden = $('viewer-controls').hidden = true;
-  $('download').disabled = $('download-stamp').disabled = $('download-handle').disabled = true;
+  $('download').disabled = $('download-stamp').disabled = $('download-handle').disabled = $('download-project').disabled = true;
   $('preview-parts').hidden = true;
   $('stamp-status').textContent = '';
   $('download-status').textContent = '';
@@ -361,52 +361,45 @@ $('zoom-in').onclick = () => viewer?.zoomBy(1.2);
 $('zoom-out').onclick = () => viewer?.zoomBy(1 / 1.2);
 $('reset').onclick = () => viewer?.reset();
 const exportsByPart = {
-  cutter: {id: 'download', title: 'cutter', filename: 'coasterprint-cookie-cutter'},
-  stamp: {id: 'download-stamp', title: 'stamp', filename: 'coasterprint-cookie-stamp'},
-  handle: {id: 'download-handle', title: 'ring handle', filename: 'coasterprint-stamp-ring-handle'}
+  cutter: {id: 'download', filename: 'coasterprint-cookie-cutter'},
+  stamp: {id: 'download-stamp', filename: 'coasterprint-cookie-stamp'},
+  handle: {id: 'download-handle', filename: 'coasterprint-stamp-ring-handle'}
 };
 let exporting = false;
 
 function refreshDownloads() {
-  const label = $('export-format').value.toUpperCase();
-  for (const [part, {id, title}] of Object.entries(exportsByPart)) {
-    $(id).textContent = `Download ${title} ${label}`;
-    $(id).disabled = exporting || !(part === 'cutter' ? model : model?.stamp);
-  }
+  $('download-project').disabled = exporting || !model;
+  $('download').disabled = !model;
+  $('download-stamp').disabled = $('download-handle').disabled = !model?.stamp;
 }
 
-$('export-format').onchange = refreshDownloads;
-for (const [part, {id, title, filename}] of Object.entries(exportsByPart)) {
+for (const [part, {id, filename}] of Object.entries(exportsByPart)) {
   $('view-' + part).onclick = () => {
     if (part === 'cutter' ? model : model?.stamp) showPart(part);
   };
-  $(id).onclick = async () => {
+  $(id).onclick = () => {
     const selected = {cutter: model, stamp: model?.stamp, handle: model?.stamp?.handle}[part];
-    if (!selected || exporting) return;
-    const status = $('download-status');
-    status.textContent = '';
-    if ($('export-format').value === 'stl') {
-      downloadFile(filename + '.stl', selected.buffer, 'model/stl');
-      return;
-    }
-    const current = model;
-    exporting = true;
-    refreshDownloads();
-    status.textContent = 'Preparing 3MF…';
-    try {
-      const {bytes} = await project3MF([{name: 'CoasterPrint ' + title, buffer: selected.buffer,
-        bounds: {min: [0, 0], max: [selected.width, selected.height]}}], {
-        application: 'CoasterPrint Cookie Cutter Maker', centerSingle: true
-      });
-      if (model === current) {
-        downloadFile(filename + '.3mf', bytes, 'model/3mf');
-        status.textContent = '';
-      }
-    } catch {
-      if (model === current) status.textContent = 'Could not create the 3MF. Try again or choose STL.';
-    } finally {
-      exporting = false;
-      refreshDownloads();
-    }
+    if (selected) downloadFile(filename + '.stl', selected.buffer, 'model/stl');
   };
 }
+
+$('download-project').onclick = async () => {
+  const current = model;
+  if (!current || exporting) return;
+  const status = $('download-status');
+  exporting = true;
+  refreshDownloads();
+  status.textContent = 'Preparing the Bambu Studio project…';
+  try {
+    const bytes = await cookieProject(current);
+    if (model === current) {
+      downloadFile('coasterprint-cookie-cutter-set.3mf', bytes, 'model/3mf');
+      status.textContent = '';
+    }
+  } catch (error) {
+    if (model === current) status.textContent = error.message || 'Could not create the 3MF. Try again or download the individual STLs.';
+  } finally {
+    exporting = false;
+    refreshDownloads();
+  }
+};

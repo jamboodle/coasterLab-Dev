@@ -1,10 +1,10 @@
-export const backingHeight = 11;
-const pitch = 2.4;
-const rootRadius = 3.8;
-const threadHeight = 0.85;
+export const backingHeight = 5.6;
+const pitch = 1.8;
+const rootRadius = 3.4;
+const threadHeight = 0.65;
 const clearance = 0.35;
-const postHeight = 7.2;
-const socketDepth = 8.4;
+const postHeight = 3.8;
+const socketDepth = 4.4;
 const socketRadius = rootRadius + threadHeight + clearance;
 const circle = 2 * Math.PI;
 
@@ -65,20 +65,20 @@ export function stampSocket(kernel, keep, backing) {
 
 export function stampHandle(kernel, keep) {
   const {CrossSection, Manifold} = kernel;
-  const outline = keep(keep(CrossSection.circle(17, 80)).translate([0, 14.5]));
-  const floor = keep(keep(CrossSection.square([36, 33])).translate([-18, 0]));
+  const outline = keep(keep(CrossSection.circle(15, 80)).translate([0, 13]));
+  const floor = keep(keep(CrossSection.square([32, 30])).translate([-16, 0]));
   // A pointed top on the finger opening gives it a printable roof.
   const opening = Array.from({length: 37}, (_, index) => {
     const angle = circle * (135 + 270 * index / 36) / 360;
-    return [11 * Math.cos(angle), 14 + 11 * Math.sin(angle)];
+    return [10 * Math.cos(angle), 12 + 10 * Math.sin(angle)];
   });
-  opening.push([0, 29.5]);
+  opening.push([0, 25.5]);
   const hole = keep(new CrossSection([opening], 'Positive'));
   const profile = keep(keep(outline.intersect(floor)).subtract(hole));
-  const ring = keep(keep(profile.extrude(10)).rotate([90, 0, 0]));
-  const collarHeight = 2.4, postStart = 32.4;
-  const collar = keep(keep(Manifold.cylinder(collarHeight, 5.5, 5.5, 64)).translate([0, -5, postStart - collarHeight]));
-  const post = keep(thread(kernel, keep, false).translate([0, -5, postStart]));
+  const ring = keep(keep(profile.extrude(8)).rotate([90, 0, 0]));
+  const collarHeight = 2, postStart = 29;
+  const collar = keep(keep(Manifold.cylinder(collarHeight, 4.8, 4.8, 64)).translate([0, -4, postStart - collarHeight]));
+  const post = keep(thread(kernel, keep, false).translate([0, -4, postStart]));
   const combined = keep(Manifold.union([ring, collar, post]));
   const {min, max} = combined.boundingBox();
   return {solid: keep(combined.translate(min.map(value => -value))),

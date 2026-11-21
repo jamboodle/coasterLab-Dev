@@ -54,9 +54,9 @@ function inspect(bytes, expected) {
   assert.equal(Math.min(...heights), 0);
   near(Math.max(...heights), expected.depth);
   if (expected.stamp) {
-    assert.ok([...heights].some(z => z > 8 && z < 8.5), 'blind socket is recessed into the backing');
-    assert.ok([...heights].some(z => z > 1 && z < 8), 'socket contains helical thread geometry');
-    const relief = [...vertices.values()].filter(point => point[2] > 11);
+    assert.ok([...heights].some(z => z > 4.35 && z < 4.45), 'blind socket is recessed into the backing');
+    assert.ok([...heights].some(z => z > 1 && z < 4.35), 'socket contains helical thread geometry');
+    const relief = [...vertices.values()].filter(point => point[2] > 5.61);
     assert.ok(relief.length > 3, 'raised stamp detail is present');
     if (expected.markOnRight) {
       const width = Math.max(...[...vertices.values()].map(point => point[0]));
@@ -65,7 +65,7 @@ function inspect(bytes, expected) {
     return;
   }
   if (expected.handle) {
-    assert.ok([...heights].filter(z => z > 33).length >= 60, 'post contains helical thread geometry');
+    assert.ok([...heights].filter(z => z > 29.1).length >= 45, 'post contains helical thread geometry');
     return;
   }
   assert.deepEqual([...heights].sort((a, b) => a - b), [0, Math.fround(1.6), expected.depth], 'lip is only at the handling end');
@@ -135,28 +135,29 @@ try {
   await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('1 detected shape'));
   await build('sample-star', {axis: 'width', size: 80});
   assert.equal(await page.locator('#stamp-depth').inputValue(), '3');
-  for (const [id, filename] of [
-    ['download', 'coasterprint-cookie-cutter'],
-    ['download-stamp', 'coasterprint-cookie-stamp'],
-    ['download-handle', 'coasterprint-stamp-ring-handle']
-  ]) {
-    await page.locator('#export-format').selectOption('stl');
-    const button = page.locator('#' + id);
-    const [stl] = await Promise.all([page.waitForEvent('download'), button.click()]);
+  const meshes = [];
+  for (const id of ['download', 'download-stamp', 'download-handle']) {
+    const [stl] = await Promise.all([page.waitForEvent('download'), page.locator('#' + id).click()]);
     const solid = await readFile(await stl.path());
-    await page.locator('#export-format').selectOption('3mf');
-    assert.match(await button.textContent(), /3MF$/);
-    const [project] = await Promise.all([page.waitForEvent('download'), button.click()]);
-    assert.equal(project.suggestedFilename(), filename + '.3mf');
-    const bytes = await readFile(await project.path());
-    const files = unzipSync(new Uint8Array(bytes));
-    const xml = Buffer.from(files['3D/3dmodel.model']).toString();
-    assert.match(xml, /unit="millimeter"/);
-    assert.match(xml, /CoasterPrint Cookie Cutter Maker/);
-    assert.ok(xml.includes(stlMeshXML(Uint8Array.from(solid).buffer).xml), '3MF uses the matching STL mesh');
-    if (output) await writeFile(join(output, filename + '.3mf'), bytes);
+    meshes.push(stlMeshXML(Uint8Array.from(solid).buffer).xml);
   }
-  await page.locator('#export-format').selectOption('stl');
+  const [project] = await Promise.all([page.waitForEvent('download'), page.locator('#download-project').click()]);
+  assert.equal(project.suggestedFilename(), 'coasterprint-cookie-cutter-set.3mf');
+  const bytes = await readFile(await project.path());
+  const projectFiles = unzipSync(new Uint8Array(bytes));
+  const xml = Buffer.from(projectFiles['3D/3dmodel.model']).toString();
+  const metadata = Buffer.from(projectFiles['Metadata/model_settings.config']).toString();
+  const preset = JSON.parse(Buffer.from(projectFiles['Metadata/project_settings.config']).toString());
+  assert.match(xml, /unit="millimeter"/);
+  assert.match(xml, /CoasterPrint Cookie Cutter Maker/);
+  assert.equal((xml.match(/<item objectid=/g) || []).length, 3);
+  assert.equal((metadata.match(/<plate>/g) || []).length, 1);
+  assert.equal((metadata.match(/<model_instance>/g) || []).length, 3);
+  assert.equal(preset.printer_model, 'Bambu Lab P1S');
+  assert.equal(Number(preset.layer_height), 0.2);
+  assert.equal(preset.filament_colour.length, 1);
+  for (const mesh of meshes) assert.ok(xml.includes(mesh), 'plate includes each unmodified STL mesh');
+  if (output) await writeFile(join(output, 'cookie-cutter-set.3mf'), bytes);
   async function checkStamp(name) {
     assert.equal(await page.locator('#download-stamp').isEnabled(), true, await page.locator('#stamp-status').textContent());
     await page.locator('#view-stamp').click();
@@ -165,7 +166,7 @@ try {
     const [file] = await Promise.all([page.waitForEvent('download'), page.locator('#download-stamp').click()]);
     assert.equal(file.suggestedFilename(), 'coasterprint-cookie-stamp.stl');
     const bytes = await readFile(await file.path());
-    inspect(bytes, {stamp: true, depth: 14, markOnRight: name === 'transparent-circle-stamp'});
+    inspect(bytes, {stamp: true, depth: 8.6, markOnRight: name === 'transparent-circle-stamp'});
     if (output) await writeFile(join(output, name + '.stl'), bytes);
     if (name === 'transparent-circle-stamp') {
       const [center, border, fineLine] = await page.locator('.stamp-mark').evaluate(path =>
@@ -182,7 +183,7 @@ try {
   const [handle] = await Promise.all([page.waitForEvent('download'), page.locator('#download-handle').click()]);
   assert.equal(handle.suggestedFilename(), 'coasterprint-stamp-ring-handle.stl');
   const handleBytes = await readFile(await handle.path());
-  inspect(handleBytes, {handle: true, depth: 39.6});
+  inspect(handleBytes, {handle: true, depth: 32.8});
   const fit = await page.evaluate(async () => {
     const [{default: Module}, {backingHeight, stampHandle, stampSocket}] = await Promise.all([
       import('/vendor/manifold.js'), import('/cookie-cutter/stamp-handle.js')
@@ -196,10 +197,10 @@ try {
       const socket = stampSocket(kernel, keep, backing);
       const plate = keep(keep(backing.extrude(backingHeight)).subtract(socket));
       const {solid, width, height} = stampHandle(kernel, keep);
-      const centered = keep(solid.translate([-width / 2, -height / 2, -32.4]));
-      const partlyInserted = keep(keep(centered.rotate([0, 0, -180])).translate([0, 0, -1.2]));
+      const centered = keep(solid.translate([-width / 2, -height / 2, -29]));
+      const partlyInserted = keep(keep(centered.rotate([0, 0, -180])).translate([0, 0, -0.9]));
       const finger = keep(keep(keep(kernel.Manifold.cylinder(14, 9.5, 9.5, 40))
-        .rotate([90, 0, 0])).translate([0, 7, -18.4]));
+        .rotate([90, 0, 0])).translate([0, 7, -17]));
       return [centered, partlyInserted].map(handle => keep(plate.intersect(handle)).volume())
         .concat(keep(finger.intersect(centered)).volume());
     } finally {
@@ -255,6 +256,17 @@ try {
   await page.locator('#width').fill('60');
   await build('inverted-jpg-circle', {axis: 'width', size: 60});
   assert.equal(await page.locator('#download-stamp').isDisabled(), true, 'plain silhouettes export only the cutter');
+  const [cutterProject] = await Promise.all([page.waitForEvent('download'), page.locator('#download-project').click()]);
+  const cutterFiles = unzipSync(new Uint8Array(await readFile(await cutterProject.path())));
+  assert.equal((Buffer.from(cutterFiles['3D/3dmodel.model']).toString().match(/<item objectid=/g) || []).length, 1);
+  const oversizeMessage = await page.evaluate(async () => {
+    const {cookieProject} = await import('/cookie-cutter/project.js');
+    try {
+      await cookieProject({width: 220, height: 220,
+        stamp: {width: 216, height: 216, handle: {width: 30, height: 9.6}}});
+    } catch (error) { return error.message; }
+  });
+  assert.match(oversizeMessage, /one P1S plate/);
   await page.locator('#edit').click();
   await page.locator('[data-point="0"]').press('ArrowRight');
   await page.locator('#undo').click();
