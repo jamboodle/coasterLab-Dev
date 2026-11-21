@@ -1,7 +1,7 @@
 (() => {
   if (location.protocol !== 'https:' || location.hostname !== 'coasterprint.com') return;
 
-  const measurementId = 'G-F58HSJ6SHB';
+  const measurementId = 'G-WYDETGQ0J5';
   window.dataLayer = window.dataLayer || [];
   function gtag() { window.dataLayer.push(arguments); }
 
