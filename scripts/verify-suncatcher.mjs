@@ -80,8 +80,8 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin);
-  await page.getByRole('link', {name: 'Suncatcher Maker'}).click();
-  await page.waitForURL(origin + '/suncatcher/');
+  assert.equal(await page.getByRole('link', {name: 'Suncatcher Maker'}).count(), 0);
+  await page.goto(origin + '/suncatcher/');
   assert.match(await page.title(), /Suncatcher Maker/);
   async function ready() {
     try {
