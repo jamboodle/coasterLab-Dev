@@ -102,7 +102,12 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       // Discard a whole silhouette or background fill. The stamp needs interior marks.
       const marks = keep(traced.intersect(clip));
       if (marks.area() / clip.area() > 0.88) return;
-      const opened = offset(offset(marks, -0.28), 0.28);
+      // Remove the cores of broad fills, leaving an approximately 0.9 mm border.
+      // Work before clipping so the stamp margin cannot become an artificial line.
+      const broadCores = offset(traced, -1.8);
+      const details = broadCores.isEmpty() ? traced : keep(traced.subtract(offset(broadCores, 0.9)));
+      const clipped = keep(details.intersect(clip));
+      const opened = offset(offset(clipped, -0.28), 0.28);
       const relief = keep(opened.intersect(clip));
       if (relief.isEmpty()) return;
       const plateHeight = 3;

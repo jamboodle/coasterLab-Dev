@@ -135,6 +135,13 @@ try {
     const bytes = await readFile(await file.path());
     inspect(bytes, {stamp: true, depth: 4.4, markOnRight: name === 'transparent-circle-stamp'});
     if (output) await writeFile(join(output, name + '.stl'), bytes);
+    if (name === 'transparent-circle-stamp') {
+      const [center, border, fineLine] = await page.locator('.stamp-mark').evaluate(path =>
+        [[84, 118], [79.5, 118], [65.5, 118]].map(([x, y]) => path.isPointInFill(new DOMPoint(x, y))));
+      assert.equal(center, false, 'broad fill center does not emboss');
+      assert.equal(border, true, 'the broad fill keeps an embossable contour');
+      assert.equal(fineLine, true, 'thin marks keep their original fill');
+    }
     await page.locator('#view-cutter').click();
   }
   await checkStamp('sample-star-stamp');
@@ -153,7 +160,11 @@ try {
       ctx.arc(108, 120, 82, 0, 2 * Math.PI);
       ctx.fill();
       ctx.fillRect(214, 92, 40, 57);
-      if (!jpg) { ctx.fillStyle = '#242424'; ctx.fillRect(78, 100, 13, 35); }
+      if (!jpg) {
+        ctx.fillStyle = '#242424';
+        ctx.fillRect(78, 100, 13, 35);
+        ctx.fillRect(64, 103, 3, 28);
+      }
       return canvas.toDataURL(jpg ? 'image/jpeg' : 'image/png', .92).split(',')[1];
     }, jpg);
     await page.locator('#file').setInputFiles({name: jpg ? 'circle.jpg' : 'circle.png',
