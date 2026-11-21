@@ -52,7 +52,6 @@ summary { cursor: pointer; }
 #add-text { margin-top: .6rem; }
 #feedback { color: var(--accent); }
 
-.artwork-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem 1rem; margin-bottom: 1rem; }
 
 #resource-preview { width: min(660px, calc(100% - 32px)); max-height: 90vh; overflow: auto; }
 #resource-preview::backdrop { background: #000b; }

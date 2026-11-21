@@ -1,10 +1,4 @@
 :root { --accent: var(--yellow); }
-header { border-bottom: 2px solid var(--paper); }
-header nav a { font-size: 13px; font-weight: 700; text-decoration: none; }
-header nav a:hover, header nav a[aria-current] { text-decoration: underline; }
-header nav a:nth-child(1) { color: var(--yellow); }
-header nav a:nth-child(2) { color: var(--red); }
-header nav a:nth-child(3) { color: var(--blue); }
 main section { background: var(--panel); border-radius: 12px; }
 main select, main input:is([type=number], [type=color]) {
   background: var(--field);
@@ -69,6 +63,7 @@ main button:disabled { opacity: .58; }
 .plaque-drop { flex: 1 1 250px; gap: .4rem; padding: .9rem 1rem; border: 1px dashed #6373a9; background: #10131c; border-radius: 8px; cursor: pointer; }
 .plaque-drop:is(:hover, .over) { border-color: var(--blue); background: #182344; }
 .plaque-drop input { width: 100%; }
+.upload-library-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--yellow); font-size: .9rem; font-weight: 700; text-underline-offset: .2em; }
 .trace-controls summary { cursor: pointer; color: var(--accent); }
 .trace-controls > .controls { padding: .65rem 0; }
 

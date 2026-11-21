@@ -1,5 +1,23 @@
 /* Transparent artwork uses a warm-white wordmark for the dark site theme. */
-.site-header-logo{height:auto;flex-wrap:wrap}
+@font-face{font-family:CoasterHeader;src:url("/fonts/inter-latin.woff2") format("woff2");font-weight:100 900;font-display:swap}
+body > header.site-header-logo{
+  box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  height:auto;min-height:0;max-width:none;margin:0;
+  gap:.75rem 2rem;padding:.75rem max(1rem, calc((100% - 1130px) / 2));
+  border-bottom:2px solid #f4f1e8;color:#f4f1e8
+}
+body > header.site-header-logo nav{
+  display:flex;flex-wrap:wrap;width:auto;align-items:center;gap:.75rem 1rem
+}
+body > header.site-header-logo nav a{
+  display:inline-block;color:inherit;font:700 13px/1.55 CoasterHeader,Arial,sans-serif;text-decoration:none
+}
+body > header.site-header-logo nav a:nth-child(1){color:#ffe32b}
+body > header.site-header-logo nav a:nth-child(2){color:#ff4b45}
+body > header.site-header-logo nav a:nth-child(3){color:#4c77ff}
+body > header.site-header-logo nav a:hover,
+body > header.site-header-logo nav a[aria-current="page"]{text-decoration:underline;text-underline-offset:.2em}
+
 a.brand--logo{display:block;flex:0 0 auto;max-width:100%;line-height:1}
 a.brand--logo img{display:block;width:100%}
 .site-header-logo a.brand--logo{width:510px}
@@ -8,5 +26,3 @@ a.brand--footer{width:210px;height:48px;overflow:hidden}
 a.brand--footer img{height:100%;object-fit:cover;object-position:center}
 .footer-brand:has(.brand--footer){display:flex;align-items:center;gap:8px}
 @media(max-width:600px){.site-header-logo a.brand--logo{width:408px}a.brand--footer{width:190px;height:44px}}
-
-.site-page-links{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem}
