@@ -49,8 +49,18 @@ function inspect(bytes, expected) {
   for (const id of connected) for (const child of graph.get(id)) connected.add(child);
   assert.equal(connected.size, graph.size, 'only one mesh component');
   assert.equal(Math.min(...heights), 0);
-  assert.equal(Math.max(...heights), expected.depth);
-  assert.ok([...heights].some(z => Math.abs(z - 2.4) < .0001), 'grip starts at Z=0 and ends at 2.4 mm');
+  near(Math.max(...heights), expected.depth);
+  if (expected.stamp) {
+    assert.deepEqual([...heights].sort((a, b) => a - b), [0, 3, Math.fround(expected.depth)]);
+    const relief = [...vertices.values()].filter(point => point[2] > 3);
+    assert.ok(relief.length > 3, 'raised stamp detail is present');
+    if (expected.markOnRight) {
+      const width = Math.max(...[...vertices.values()].map(point => point[0]));
+      assert.ok(relief.every(point => point[0] > width / 2), 'left-side artwork is mirrored on the stamp');
+    }
+    return;
+  }
+  assert.deepEqual([...heights].sort((a, b) => a - b), [0, expected.depth], 'straight-sided cutter has no height steps');
   const rim = new Map();
   for (const [edge, count] of topEdges) {
     if (count !== 1) continue;
@@ -115,6 +125,19 @@ try {
   await page.locator('#sample').click();
   await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('1 detected shape'));
   await build('sample-star', {axis: 'width', size: 80});
+  async function checkStamp(name) {
+    assert.equal(await page.locator('#download-stamp').isEnabled(), true, await page.locator('#stamp-status').textContent());
+    await page.locator('#view-stamp').click();
+    assert.equal(await page.locator('#viewer').getAttribute('aria-label'), 'Rotatable stamp preview');
+    assert.equal(await page.locator('#overlay .stamp-mark').count(), 1);
+    const [file] = await Promise.all([page.waitForEvent('download'), page.locator('#download-stamp').click()]);
+    assert.equal(file.suggestedFilename(), 'coasterprint-cookie-stamp.stl');
+    const bytes = await readFile(await file.path());
+    inspect(bytes, {stamp: true, depth: 4.4, markOnRight: name === 'transparent-circle-stamp'});
+    if (output) await writeFile(join(output, name + '.stl'), bytes);
+    await page.locator('#view-cutter').click();
+  }
+  await checkStamp('sample-star-stamp');
   const viewer = page.locator('#viewer');
   const before = await viewer.screenshot();
   await viewer.press('ArrowRight');
@@ -130,6 +153,7 @@ try {
       ctx.arc(108, 120, 82, 0, 2 * Math.PI);
       ctx.fill();
       ctx.fillRect(214, 92, 40, 57);
+      if (!jpg) { ctx.fillStyle = '#242424'; ctx.fillRect(78, 100, 13, 35); }
       return canvas.toDataURL(jpg ? 'image/jpeg' : 'image/png', .92).split(',')[1];
     }, jpg);
     await page.locator('#file').setInputFiles({name: jpg ? 'circle.jpg' : 'circle.png',
@@ -144,6 +168,7 @@ try {
   await page.locator('#shape').selectOption('0');
   await page.locator('#height').fill('65');
   await build('transparent-circle', {axis: 'height', size: 65});
+  await checkStamp('transparent-circle-stamp');
 
   await upload(true);
   await page.locator('#invert').waitFor({state: 'visible'});
@@ -154,6 +179,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('2 detected shapes'));
   await page.locator('#width').fill('60');
   await build('inverted-jpg-circle', {axis: 'width', size: 60});
+  assert.equal(await page.locator('#download-stamp').isDisabled(), true, 'plain silhouettes export only the cutter');
   await page.locator('#edit').click();
   await page.locator('[data-point="0"]').press('ArrowRight');
   await page.locator('#undo').click();
@@ -175,7 +201,7 @@ try {
   await draw([[.25,.2],[.65,.2],[.62,.38],[.75,.63],[.44,.8],[.25,.6]]);
   await build('drawn-outline', {axis: 'width', size: 60});
   assert.deepEqual(errors, []);
-  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, invalid-mesh block, STL and 3D preview');
+  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, straight wall, invalid-mesh block, separate stamp STL and 3D previews');
 } finally {
   await browser?.close();
   server.close();

@@ -1,7 +1,7 @@
 import {decodeArtwork} from '../suncatcher/trace.js';
 import {createViewer} from '../plaque/viewer.js';
 import {downloadFile} from '../plaque/export.js';
-import {detectOutlines, starSample, usesTransparency} from './trace.js';
+import {detectOutlines, detectStamp, starSample, usesTransparency} from './trace.js';
 
 const $ = id => document.getElementById(id);
 const overlay = $('overlay');
@@ -9,7 +9,7 @@ const source = $('artwork');
 const namespace = 'http://www.w3.org/2000/svg';
 let assets, pathContours, image, transparent, traces = [], manual, draft, history = [], dragging;
 let sizingAxis = 'width', worker, model, viewer, viewerAvailable = true, diagnostics, invalid = false, loadVersion = 0;
-let timer, loading = false;
+let timer, loading = false, previewPart = 'cutter';
 
 async function geometryAssets() {
   if (assets) return assets;
@@ -33,6 +33,13 @@ function addPath(points, type, closed = true) {
 
 function renderOutline(focus) {
   overlay.replaceChildren();
+  if (previewPart === 'stamp' && model?.stamp) {
+    const marks = document.createElementNS(namespace, 'path');
+    marks.setAttribute('class', 'stamp-mark');
+    marks.setAttribute('d', model.stamp.preview.map(points =>
+      'M' + points.map(pair => pair.join(',')).join(' L') + ' Z').join(' '));
+    overlay.append(marks);
+  }
   overlay.dataset.mode = draft ? (draft.closed ? 'edit' : 'draw') : 'trace';
   for (const polygon of diagnostics?.issues || []) addPath(polygon, 'issue');
   addPath(draft?.points || activeOutline(), 'outline' + (invalid ? ' invalid' : ''), !draft || draft.closed);
@@ -72,7 +79,10 @@ function invalidate() {
   invalid = false;
   viewer?.clear();
   $('viewer').hidden = $('viewer-controls').hidden = true;
-  $('download').disabled = true;
+  $('download').disabled = $('download-stamp').disabled = true;
+  $('preview-parts').hidden = true;
+  $('stamp-status').textContent = '';
+  previewPart = 'cutter';
   $('model-status').textContent = 'Confirm an outline to build the cutter.';
 }
 
@@ -233,6 +243,17 @@ overlay.onkeydown = event => {
   }
 };
 
+function showPart(part) {
+  previewPart = part;
+  const selected = part === 'stamp' ? model.stamp : model;
+  $('view-cutter').setAttribute('aria-pressed', String(part === 'cutter'));
+  $('view-stamp').setAttribute('aria-pressed', String(part === 'stamp'));
+  $('viewer').setAttribute('aria-label', 'Rotatable ' + part + ' preview');
+  $('viewer').hidden = $('viewer-controls').hidden = !viewer?.show({...selected,
+    parts: [{buffer: selected.buffer, color: part === 'stamp' ? '#6baad5' : '#ca537d'}]});
+  renderOutline();
+}
+
 function present(result) {
   if (!result.buffer) {
     invalid = Boolean(result.segments);
@@ -249,13 +270,18 @@ function present(result) {
     }); } catch { /* The validated STL remains downloadable. */ }
     viewerAvailable = Boolean(viewer);
   }
-  $('viewer').hidden = $('viewer-controls').hidden = !viewer?.show({...result, parts: [{buffer: result.buffer, color: '#ca537d'}]});
+  showPart('cutter');
+  $('preview-parts').hidden = !result.stamp || $('viewer').hidden;
   const format = value => +value.toFixed(2);
   $('model-status').textContent =
     `Cookie ${format(result.cookieWidth)} × ${format(result.cookieHeight)} mm · Cutter footprint ${format(result.width)} × ${format(result.height)} mm · Cutter height ${format(result.depth)} mm.` +
     (result.issues.length ? ' Amber areas show tight details or rounded corners. Increase the cookie size or smooth the outline if those details matter.' : '') +
     ($('viewer').hidden ? ' 3D preview unavailable on this device.' : '');
   $('download').disabled = false;
+  $('download-stamp').disabled = !result.stamp;
+  $('stamp-status').textContent = result.stamp
+    ? 'Stamp ready. Select Show stamp to see the print and the matching marks on your artwork.'
+    : result.stampError || 'No printable interior details found. Adjust the stamp threshold or try light details.';
 }
 
 $('build').onclick = () => {
@@ -269,15 +295,22 @@ $('build').onclick = () => {
     current.terminate();
     worker = undefined;
     clearTimeout(timer);
-    present(result);
+    present({...result, stampError: stampError || result.stampError});
     renderOutline();
   };
   worker.onmessage = ({data}) => finish(data);
   worker.onerror = () => finish({error: 'The geometry engine could not start.'});
   worker.onmessageerror = () => finish({error: 'The browser could not read the cutter mesh.'});
   timer = setTimeout(() => finish({error: 'The cutter took too long to build. Try more smoothing.'}), 90000);
-  worker.postMessage({points, axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
-    height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, edge: $('edge').valueAsNumber, grip: $('grip').valueAsNumber});
+  let stampPaths, stampError;
+  try {
+    stampPaths = detectStamp(image, $('stamp-threshold').valueAsNumber, $('stamp-invert').checked,
+      Number($('smoothing').value), pathContours);
+  } catch (error) {
+    stampError = error.message;
+  }
+  worker.postMessage({points, stampPaths, axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
+    height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, stampDepth: $('stamp-depth').valueAsNumber});
   $('model-status').textContent = 'Building and checking the cutter…';
   renderOutline();
 };
@@ -316,7 +349,7 @@ $('close').onclick = () => {
   syncSize();
   renderOutline();
 };
-for (const id of ['width', 'height', 'cutter-height', 'wall', 'edge', 'grip']) $(id).oninput = () => {
+for (const id of ['width', 'height', 'cutter-height', 'wall', 'stamp-threshold', 'stamp-invert', 'stamp-depth']) $(id).oninput = () => {
   if (id === 'width' || id === 'height') {
     sizingAxis = id;
     syncSize();
@@ -329,4 +362,10 @@ $('zoom-out').onclick = () => viewer?.zoomBy(1 / 1.2);
 $('reset').onclick = () => viewer?.reset();
 $('download').onclick = () => {
   if (model) downloadFile('coasterprint-cookie-cutter.stl', model.buffer, 'model/stl');
+};
+
+$('view-cutter').onclick = () => { if (model) showPart('cutter'); };
+$('view-stamp').onclick = () => { if (model?.stamp) showPart('stamp'); };
+$('download-stamp').onclick = () => {
+  if (model?.stamp) downloadFile('coasterprint-cookie-stamp.stl', model.stamp.buffer, 'model/stl');
 };

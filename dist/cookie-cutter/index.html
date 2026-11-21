@@ -26,7 +26,7 @@
   </header>
   <main>
     <h1>Cookie Cutter Maker</h1>
-    <p class="intro">Turn an image into a single hollow cutter and download a free STL for Bambu Studio. Your image stays in this browser.</p>
+    <p class="intro">Cut the cookie outline first, then press the matching stamp to emboss the details. Your image stays in this browser.</p>
     <section aria-labelledby="outline-title">
       <h2 id="outline-title">Artwork and cut line</h2>
       <div class="controls">
@@ -65,20 +65,32 @@
         <label>Cookie height (mm) <input id="height" type="number" min="10" max="240" step="0.1"></label>
         <button id="build" type="button" class="primary" disabled>Confirm outline and preview</button>
       </div>
-      <p>The cookie size follows the inside of the cutting edge. The grip makes the cutter larger.</p>
+      <p>Cookie size is measured from the inside of the cutter wall.</p>
       <details class="trace-controls">
         <summary>Advanced cutter settings</summary>
         <div class="controls">
           <label>Cutter height (mm) <input id="cutter-height" type="number" min="6" max="30" step="0.1" value="14"></label>
-          <label>Wall thickness (mm) <input id="wall" type="number" min="0.8" max="4" step="0.05" value="1.6"></label>
-          <label>Cutting-edge thickness (mm) <input id="edge" type="number" min="0.45" max="2" step="0.05" value="0.65"></label>
-          <label>Extra grip width per side (mm) <input id="grip" type="number" min="1" max="8" step="0.1" value="3"></label>
+          <label>Wall thickness (mm) <input id="wall" type="number" min="0.65" max="2" step="0.05" value="1"></label>
         </div>
       </details>
     </section>
+    <section aria-labelledby="stamp-title">
+      <h2 id="stamp-title">Embossing stamp</h2>
+      <p>Choose which interior details to emboss. Adjust the threshold or switch to light details if the stamp misses them.</p>
+      <div class="controls">
+        <label>Stamp threshold <input id="stamp-threshold" type="range" min="1" max="254" value="90"></label>
+        <label class="check"><input id="stamp-invert" type="checkbox"> Use light details</label>
+        <label>Emboss depth (mm) <input id="stamp-depth" type="number" min="0.6" max="3" step="0.1" value="1.4"></label>
+      </div>
+      <p id="stamp-status" role="status"></p>
+    </section>
     <section aria-labelledby="preview-title">
-      <h2 id="preview-title">Cutter preview</h2>
+      <h2 id="preview-title">Cutter and stamp preview</h2>
       <p id="model-status" role="status">Confirm an outline to build the cutter.</p>
+      <div id="preview-parts" class="controls viewer-controls" hidden>
+        <button id="view-cutter" type="button" aria-pressed="true">Show cutter</button>
+        <button id="view-stamp" type="button" aria-pressed="false">Show stamp</button>
+      </div>
       <canvas id="viewer" tabindex="0" aria-label="Rotatable cutter preview" hidden></canvas>
       <div id="viewer-controls" class="controls viewer-controls" hidden>
         <button id="zoom-in" type="button">Zoom in</button>
@@ -86,8 +98,9 @@
         <button id="reset" type="button">Reset view</button>
         <span id="viewer-help">Drag or use the arrow keys to rotate.</span>
       </div>
-      <button id="download" type="button" disabled>Download STL</button>
-      <p>Import in millimeters with the grip flat on the build plate and the cutting edge pointing up.</p>
+      <button id="download" type="button" disabled>Download cutter STL</button>
+      <button id="download-stamp" type="button" disabled>Download stamp STL</button>
+      <p>Print the cutter flat and the stamp with its details facing up. Flip the stamp over to press the cut dough.</p>
     </section>
   </main>
 </body>

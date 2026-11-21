@@ -8,8 +8,19 @@ export function starSample() {
     context.lineTo(170 + radius * Math.cos(angle), 177 + radius * Math.sin(angle));
   }
   context.closePath();
-  context.fillStyle = '#9d3c63';
+  context.fillStyle = '#ed9aba';
   context.fill();
+  context.fillStyle = '#522840';
+  context.beginPath();
+  context.arc(151, 156, 12, 0, 2 * Math.PI);
+  context.fill();
+  context.strokeStyle = context.fillStyle;
+  context.lineWidth = 9;
+  context.lineCap = 'round';
+  context.beginPath();
+  context.moveTo(154, 195);
+  context.quadraticCurveTo(176, 216, 199, 181);
+  context.stroke();
   return canvas;
 }
 
@@ -17,12 +28,12 @@ export function usesTransparency({data}) {
   return data.some((value, index) => index % 4 === 3 && value < 128);
 }
 
-export function detectOutlines(image, transparent, threshold, invert, smoothing, pathContours) {
+function traceMask(image, useAlpha, threshold, invert, smoothing, pathContours, includeHoles) {
   const {width, height, data} = image;
   const binary = new Uint8ClampedArray(data.length);
   for (let i = 0; i < data.length; i += 4) {
     const brightness = (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
-    const foreground = transparent ? data[i + 3] >= 128 : (invert ? brightness > threshold : brightness <= threshold);
+    const foreground = data[i + 3] >= 128 && (useAlpha || (invert ? brightness > threshold : brightness <= threshold));
     binary[i] = binary[i + 1] = binary[i + 2] = foreground ? 0 : 255;
     binary[i + 3] = 255;
   }
@@ -30,12 +41,25 @@ export function detectOutlines(image, transparent, threshold, invert, smoothing,
     pal: [{r: 0, g: 0, b: 0, a: 255}, {r: 255, g: 255, b: 255, a: 255}],
     colorquantcycles: 1, pathomit: 12, ltres: smoothing, qtres: smoothing, rightangleenhance: smoothing < 1
   });
-  return layers[0].filter(path => !path.isholepath && path.segments.length).map(({segments}) => {
+  return layers[0].filter(path => (includeHoles || !path.isholepath) && path.segments.length).map(({segments}) => {
     const start = segments[0];
     const svg = 'M ' + start.x1 + ' ' + start.y1 + ' ' + segments.map(s =>
       s.type + ' ' + s.x2 + ' ' + s.y2 + (s.type === 'Q' ? ' ' + s.x3 + ' ' + s.y3 : '')).join(' ') + ' Z';
     return pathContours(svg, 1, 0.16)[0]?.map(([x, y]) => [x, -y]);
-  }).filter(points => points?.length >= 3).sort((a, b) => area(b) - area(a)).slice(0, 80);
+  }).filter(points => points?.length >= 3);
+}
+
+export function detectOutlines(image, transparent, threshold, invert, smoothing, pathContours) {
+  return traceMask(image, transparent, threshold, invert, smoothing, pathContours, false)
+    .sort((a, b) => area(b) - area(a)).slice(0, 80);
+}
+
+export function detectStamp(image, threshold, invert, smoothing, pathContours) {
+  const detail = traceMask(image, false, threshold, invert, smoothing, pathContours, true);
+  if (detail.reduce((count, points) => count + points.length, 0) > 15000) {
+    throw Error('The stamp has too much detail. Adjust the stamp threshold or increase trace smoothing.');
+  }
+  return detail;
 }
 
 export function area(points) {

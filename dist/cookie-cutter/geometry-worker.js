@@ -28,14 +28,13 @@ const runtime = Module({locateFile: name => new URL('../vendor/' + name, import.
   return kernel;
 });
 
-async function build({points, axis, size, height, wall, edge, grip, geometryScript}) {
+async function build({points, axis, size, height, wall, stampDepth, stampPaths, geometryScript}) {
   for (const [value, low, high, name] of [
     [size, 10, 240, 'Cookie size'], [height, 6, 30, 'Cutter height'],
-    [wall, 0.8, 4, 'Wall thickness'], [edge, 0.45, 2, 'Cutting-edge thickness'], [grip, 1, 8, 'Grip width']
+    [wall, 0.65, 2, 'Wall thickness']
   ]) {
     if (!(value >= low && value <= high)) throw Error(name + ' must be between ' + low + ' and ' + high + ' mm.');
   }
-  if (edge >= wall) throw Error('Set the cutting-edge thickness below the supporting wall thickness.');
   if (points.length < 3 || points.length > 2500) throw Error('Use a closed outline with 3–2,500 points. Try more trace smoothing.');
 
   const minX = Math.min(...points.map(p => p[0]));
@@ -68,29 +67,64 @@ async function build({points, axis, size, height, wall, edge, grip, geometryScri
       if (exterior.length !== 1) throw Error('A wall offset collapsed. Increase the cookie size or smooth the outline.');
       return cross(exterior);
     }
-    const tip = envelope(edge), support = envelope(wall), handle = envelope(wall + grip);
-    const {min, max} = handle.bounds();
+    const outer = envelope(wall);
+    const {min, max} = outer.bounds();
     const [width, footprintHeight] = max.map((value, index) => value - min[index]);
-    if (Math.max(width, footprintHeight) > 250) throw Error('The grip makes the footprint larger than 250 mm. Reduce cookie size or grip width.');
+    if (Math.max(width, footprintHeight) > 250) throw Error('The cutter footprint exceeds 250 mm. Reduce the cookie size or wall thickness.');
     const thin = offset(inner, -0.4);
     if (thin.isEmpty()) throw Error('The opening is too narrow to print at this size. Increase the size or widen the outline.');
     const tips = keep(inner.subtract(offset(thin, 0.4)));
-    const pinches = keep(offset(tip, -edge).subtract(inner));
+    const pinches = keep(offset(outer, -wall).subtract(inner));
     const issues = [tips, pinches].flatMap(shape => shape.toPolygons())
       .filter(polygon => signedArea(polygon) > 0.075)
       .map(polygon => polygon.map(([x, y]) => [minX + x / scale, maxY - y / scale]));
-    const ring = outline => keep(outline.subtract(inner));
-    const gripHeight = 2.4, edgeHeight = 2.0;
-    const layers = [[handle, 0, gripHeight], [support, gripHeight, height - edgeHeight], [tip, height - edgeHeight, height]];
-    const solids = layers.map(([outline, bottom, top]) =>
-      keep(keep(ring(outline).extrude(top - bottom)).translate([-min[0], -min[1], bottom])));
-    const solid = keep(Manifold.union(solids));
-    const pieces = solid.decompose().map(keep);
-    if (pieces.length !== 1 || !(solid.volume() > 0)) {
-      throw Error('The grip, wall, and cutting edge could not join. Increase the size or smooth the outline.');
+    function mesh(solid, name) {
+      if (solid.decompose().map(keep).length !== 1 || !(solid.volume() > 0)) {
+        throw Error('The ' + name + ' must be one connected solid. Increase the size or smooth the outline.');
+      }
+      return binarySTL(solid, 'CoasterPrint cookie ' + name + '; units mm');
     }
-    const {buffer, triangles} = binarySTL(solid, 'CoasterPrint cookie cutter; units mm');
-    return {buffer, triangles, issues, width, height: footprintHeight, depth: height,
+
+    const ring = keep(outer.subtract(inner));
+    const solid = keep(keep(ring.extrude(height)).translate([-min[0], -min[1], 0]));
+    const cutter = mesh(solid, 'cutter');
+
+    function makeStamp() {
+      if (!(stampDepth >= 0.6 && stampDepth <= 3)) throw Error('Set stamp depth between 0.6 and 3 mm.');
+      const backing = offset(inner, -0.75);
+      const clip = offset(backing, -0.65);
+      if (clip.isEmpty() || backing.decompose().map(keep).length !== 1) {
+        throw Error('The outline is too narrow for a one-piece stamp. Increase the cookie size.');
+      }
+      if (!stampPaths?.length) return;
+      const traced = keep(new CrossSection(stampPaths.map(path =>
+        path.map(([x, y]) => [(x - minX) * scale, (maxY - y) * scale])), 'EvenOdd'));
+      // Discard a whole silhouette or background fill. The stamp needs interior marks.
+      const marks = keep(traced.intersect(clip));
+      if (marks.area() / clip.area() > 0.88) return;
+      const opened = offset(offset(marks, -0.28), 0.28);
+      const relief = keep(opened.intersect(clip));
+      if (relief.isEmpty()) return;
+      const plateHeight = 3;
+      const bounds = backing.bounds();
+      const stampOrigin = [bounds.max[0], -bounds.min[1]];
+      // Mirror across X so the impression reads correctly when the stamp turns face down.
+      const orient = shape => keep(keep(shape.mirror([1, 0])).translate(stampOrigin));
+      const plate = keep(orient(backing).extrude(plateHeight));
+      const detail = keep(keep(orient(relief).extrude(stampDepth)).translate([0, 0, plateHeight]));
+      const stamp = keep(Manifold.union([plate, detail]));
+      return {...mesh(stamp, 'stamp'), depth: plateHeight + stampDepth,
+        width: bounds.max[0] - bounds.min[0], height: bounds.max[1] - bounds.min[1],
+        preview: relief.toPolygons().map(polygon => polygon.map(([x, y]) => [minX + x / scale, maxY - y / scale]))};
+    }
+    let stamp, stampError;
+    try {
+      stamp = makeStamp();
+    } catch (error) {
+      if (error instanceof WebAssembly.RuntimeError) throw error;
+      stampError = error.message;
+    }
+    return {...cutter, stamp, stampError, issues, width, height: footprintHeight, depth: height,
       cookieWidth: spanX * scale, cookieHeight: spanY * scale};
   } finally {
     for (const object of owned.reverse()) object.delete();
@@ -100,7 +134,7 @@ async function build({points, axis, size, height, wall, edge, grip, geometryScri
 self.onmessage = async ({data}) => {
   try {
     const result = await build(data);
-    self.postMessage(result, result.buffer ? [result.buffer] : []);
+    self.postMessage(result, [result.buffer, result.stamp?.buffer].filter(Boolean));
   } catch (error) {
     self.postMessage({error: error.message || 'The cutter could not be built. Try more smoothing.'});
   }
