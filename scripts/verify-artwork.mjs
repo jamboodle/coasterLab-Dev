@@ -143,6 +143,21 @@ try {
       const canvas = document.querySelector(selector);
       return canvas.width === width && canvas.height === height;
     }, {selector: source, width: useEditor ? 80 : 120, height: useEditor ? 120 : 80});
+    if (useEditor) {
+      await maker.locator('#stamp-mode').selectOption('lines');
+      await maker.locator('#build').click();
+      await maker.locator('#stamp-status').getByText(/Stamp and ring unavailable/).waitFor();
+      assert.equal(await maker.getByRole('button', {name: 'Show stamp'}).isDisabled(), true);
+      assert.equal(await maker.getByRole('button', {name: 'Show ring handle'}).isDisabled(), true);
+      await maker.getByRole('button', {name: 'Build plain stamp and ring'}).click();
+      await maker.locator('#stamp-status').getByText(/Plain stamp and ring ready/).waitFor();
+      for (const [name, part] of [['Show stamp', 'stamp'], ['Show ring handle', 'handle']]) {
+        await maker.getByRole('button', {name, exact: true}).click();
+        assert.equal(await maker.locator('#viewer').getAttribute('aria-label'), 'Rotatable ' + part + ' preview');
+      }
+      assert.equal(await maker.locator('#download-stamp').isEnabled(), true);
+      assert.equal(await maker.locator('#download-handle').isEnabled(), true);
+    }
     await maker.close();
   }
   await setup.close();

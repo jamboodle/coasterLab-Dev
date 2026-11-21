@@ -54,7 +54,7 @@ function addPath(points, type, closed = true) {
 
 function renderOutline(focus) {
   overlay.replaceChildren();
-  if (previewPart === 'stamp' && model?.stamp) {
+  if (previewPart === 'stamp' && model?.stamp?.embossed) {
     const marks = document.createElementNS(namespace, 'path');
     marks.setAttribute('class', 'stamp-mark');
     marks.setAttribute('d', model.stamp.preview.map(points =>
@@ -102,6 +102,7 @@ function invalidate() {
   $('viewer').hidden = $('viewer-controls').hidden = true;
   $('download').disabled = $('download-stamp').disabled = $('download-handle').disabled = $('download-project').disabled = true;
   $('preview-parts').hidden = true;
+  $('stamp-recovery').hidden = true;
   $('stamp-status').textContent = '';
   $('download-status').textContent = '';
   previewPart = 'cutter';
@@ -293,19 +294,27 @@ function present(result) {
     viewerAvailable = Boolean(viewer);
   }
   showPart('cutter');
-  $('preview-parts').hidden = !result.stamp || $('viewer').hidden;
+  $('preview-parts').hidden = $('viewer').hidden;
+  $('view-stamp').disabled = $('view-handle').disabled = !result.stamp;
+  $('stamp-recovery').hidden = Boolean(result.stamp);
   const format = value => +value.toFixed(2);
   $('model-status').textContent =
     `Cookie ${format(result.cookieWidth)} × ${format(result.cookieHeight)} mm · Cutter footprint ${format(result.width)} × ${format(result.height)} mm · Cutter height ${format(result.depth)} mm.` +
     (result.issues.length ? ' Amber areas show tight details or rounded corners. Increase the cookie size or smooth the outline if those details matter.' : '') +
     ($('viewer').hidden ? ' 3D preview unavailable on this device.' : '');
   refreshDownloads();
-  $('stamp-status').textContent = result.stamp
-    ? 'Stamp ready. Select Show stamp to see the print and the matching marks on your artwork.' +
-      (result.stamp.imprinted ? '' : ' There wasn’t room for the CoasterPrint.Com imprint beside the socket.')
-    : result.stampError || ($('stamp-mode').value === 'color'
+  if (result.stamp) {
+    $('stamp-status').textContent = (result.stamp.embossed
+      ? 'Stamp and ring ready. Select Show stamp to see the matching marks on your artwork.'
+      : 'Plain stamp and ring ready. The stamp has no raised artwork.') +
+      (result.stamp.imprinted ? '' : ' There wasn’t room for the CoasterPrint.Com imprint beside the socket.');
+  } else {
+    const reason = result.stampError || ($('stamp-mode').value === 'color'
       ? 'No printable interior boundaries found. Try more outline colors or switch to Bold lines.'
       : 'No printable interior details found. Adjust the stamp threshold or try light details.');
+    $('stamp-status').textContent = 'Cutter ready. Stamp and ring unavailable. ' + reason;
+    $('build-plain-stamp').hidden = $('stamp-mode').value === 'plain';
+  }
 }
 
 $('build').onclick = async () => {
@@ -336,7 +345,7 @@ $('build').onclick = async () => {
       await loadPaletteScripts();
       if (worker !== current) return;
       stampPaths = detectColorBoundaries(image, Number($('stamp-colors').value), smoothing, pathContours);
-    } else stampPaths = detectStamp(image, $('stamp-threshold').valueAsNumber, $('stamp-invert').checked,
+    } else if (stampMode === 'lines') stampPaths = detectStamp(image, $('stamp-threshold').valueAsNumber, $('stamp-invert').checked,
       smoothing, pathContours);
   } catch (error) {
     stampError = error.message;
@@ -384,9 +393,16 @@ $('close').onclick = () => {
 $('stamp-mode').onchange = () => {
   const color = $('stamp-mode').value === 'color';
   $('stamp-colors-control').hidden = !color;
-  $('stamp-threshold-control').hidden = $('stamp-invert-control').hidden = color;
+  const plain = $('stamp-mode').value === 'plain';
+  $('stamp-threshold-control').hidden = $('stamp-invert-control').hidden = color || plain;
+  $('stamp-depth-control').hidden = plain;
   invalidate();
   renderOutline();
+};
+$('build-plain-stamp').onclick = () => {
+  $('stamp-mode').value = 'plain';
+  $('stamp-mode').onchange();
+  $('build').click();
 };
 for (const id of ['width', 'height', 'cutter-height', 'wall', 'stamp-threshold', 'stamp-invert', 'stamp-depth', 'stamp-colors']) $(id).oninput = () => {
   if (id === 'width' || id === 'height') {

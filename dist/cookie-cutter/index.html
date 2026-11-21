@@ -82,17 +82,21 @@
       <h2 id="stamp-title">Embossing stamp</h2>
       <p>Color outlines traces the borders between shades, like a coloring book. Use Bold lines for artwork that already has clear marks.</p>
       <div class="controls">
-        <label>Stamp style <select id="stamp-mode"><option value="color">Color outlines</option><option value="lines">Bold lines</option></select></label>
+        <label>Stamp style <select id="stamp-mode"><option value="color">Color outlines</option><option value="lines">Bold lines</option><option value="plain">Plain stamp</option></select></label>
         <label id="stamp-colors-control">Outline colors <select id="stamp-colors"><option value="4">4 · simpler</option><option value="8" selected>8 · balanced</option><option value="12">12 · more detail</option></select></label>
         <label id="stamp-threshold-control" hidden>Stamp threshold <input id="stamp-threshold" type="range" min="1" max="254" value="90"></label>
         <label id="stamp-invert-control" class="check" hidden><input id="stamp-invert" type="checkbox"> Use light details</label>
-        <label>Emboss depth (mm) <input id="stamp-depth" type="number" min="0.6" max="3" step="0.1" value="3"></label>
+        <label id="stamp-depth-control">Emboss depth (mm) <input id="stamp-depth" type="number" min="0.6" max="3" step="0.1" value="3"></label>
       </div>
-      <p id="stamp-status" role="status"></p>
     </section>
     <section aria-labelledby="preview-title">
       <h2 id="preview-title">Cutter and stamp preview</h2>
       <p id="model-status" role="status">Confirm an outline to build the cutter.</p>
+      <p id="stamp-status" role="status"></p>
+      <div class="controls" id="stamp-recovery" hidden>
+        <a href="#stamp-title">Adjust stamp settings</a>
+        <button id="build-plain-stamp" type="button">Build plain stamp and ring</button>
+      </div>
       <div id="preview-parts" class="controls viewer-controls" hidden>
         <button id="view-cutter" type="button" aria-pressed="true">Show cutter</button>
         <button id="view-stamp" type="button" aria-pressed="false">Show stamp</button>

@@ -97,14 +97,14 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
     const cutter = mesh(solid, 'cutter');
 
     function makeStamp() {
-      if (!(stampDepth >= 0.6 && stampDepth <= 3)) throw Error('Set stamp depth between 0.6 and 3 mm.');
+      if (stampMode !== 'plain' && !(stampDepth >= 0.6 && stampDepth <= 3)) throw Error('Set stamp depth between 0.6 and 3 mm.');
       const backing = offset(inner, -0.75);
       const clip = offset(backing, -0.65);
       if (clip.isEmpty() || backing.decompose().map(keep).length !== 1) {
         throw Error('The outline is too narrow for a one-piece stamp. Increase the cookie size.');
       }
-      if (!stampPaths?.length) return;
-      const paths = stampPaths.map(path => path.map(([x, y]) => [(x - minX) * scale, (maxY - y) * scale]));
+      if (stampMode !== 'plain' && !stampPaths?.length) return;
+      const paths = (stampPaths || []).map(path => path.map(([x, y]) => [(x - minX) * scale, (maxY - y) * scale]));
       let details;
       if (stampMode === 'color') {
         const strokeRadius = 0.48;
@@ -116,7 +116,7 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
           lines.push(keep(offset(region, strokeRadius).subtract(offset(region, -strokeRadius))));
         }
         details = keep(CrossSection.union(lines));
-      } else {
+      } else if (stampMode !== 'plain') {
         const traced = keep(new CrossSection(paths, 'EvenOdd'));
         // Discard a whole silhouette or background fill. The stamp needs interior marks.
         if (keep(traced.intersect(clip)).area() / clip.area() > 0.88) return;
@@ -124,10 +124,13 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
         details = broadCores.isEmpty() ? traced : keep(traced.subtract(offset(broadCores, 0.9)));
       }
       // Clip after stroking so the clearance margin cannot become an artificial line.
-      const clipped = keep(details.intersect(clip));
-      const opened = offset(offset(clipped, -0.28), 0.28);
-      const relief = keep(opened.intersect(clip));
-      if (relief.isEmpty()) return;
+      let relief;
+      if (details) {
+        const clipped = keep(details.intersect(clip));
+        const opened = offset(offset(clipped, -0.28), 0.28);
+        relief = keep(opened.intersect(clip));
+        if (relief.isEmpty()) return;
+      }
 
       const bounds = backing.bounds();
       const stampOrigin = [bounds.max[0], -bounds.min[1]];
@@ -141,13 +144,33 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       const imprint = makeImprint(CrossSection, keep, keep(printBacking.subtract(keepout)), backingHeight, {compact: true});
       const solidBacking = keep(keep(printBacking.extrude(backingHeight)).subtract(socket));
       const plate = imprint ? keep(solidBacking.subtract(imprint)) : solidBacking;
-      const detail = keep(keep(orient(relief).extrude(stampDepth)).translate([0, 0, backingHeight]));
-      const stamp = keep(Manifold.union([plate, detail]));
+      let stampMesh, printedRelief, meshError;
+      for (const tolerance of relief ? [0, 0.008, 0.035] : [0]) {
+        try {
+          const shape = tolerance ? keep(keep(relief.simplify(tolerance)).intersect(clip)) : relief;
+          if (shape?.isEmpty()) continue;
+          let stamp = plate;
+          if (shape) {
+            const detail = keep(keep(orient(shape).extrude(stampDepth)).translate([0, 0, backingHeight]));
+            stamp = keep(Manifold.union([plate, detail]));
+            if (tolerance) stamp = keep(keep(stamp.asOriginal()).setTolerance(0.0001));
+          }
+          stampMesh = mesh(stamp, 'stamp');
+          printedRelief = shape;
+          break;
+        } catch (error) {
+          if (error instanceof WebAssembly.RuntimeError) throw error;
+          meshError = error;
+        }
+      }
+      if (!stampMesh) throw meshError || Error('The stamp details are too small to print.');
       const {solid: handle, ...handleDimensions} = stampHandle(kernel, keep);
-      return {...mesh(stamp, 'stamp'), imprinted: Boolean(imprint), depth: backingHeight + stampDepth,
+      return {...stampMesh, imprinted: Boolean(imprint), embossed: Boolean(printedRelief),
+        depth: backingHeight + (printedRelief ? stampDepth : 0),
         handle: {...mesh(handle, 'stamp handle'), ...handleDimensions},
         width: bounds.max[0] - bounds.min[0], height: bounds.max[1] - bounds.min[1],
-        preview: relief.toPolygons().map(polygon => polygon.map(([x, y]) => [minX + x / scale, maxY - y / scale]))};
+        preview: printedRelief?.toPolygons().map(polygon =>
+          polygon.map(([x, y]) => [minX + x / scale, maxY - y / scale])) || []};
     }
     let stamp, stampError;
     try {
