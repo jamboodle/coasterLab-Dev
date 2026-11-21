@@ -1,5 +1,8 @@
+import {designLibraryDestination} from '../shared/design-library.js';
+
 const $ = id => document.getElementById(id);
 const resources = document.documentElement.dataset.library === 'resources';
+const destination = resources ? designLibraryDestination() : null;
 const desktop = matchMedia('(hover: hover) and (pointer: fine)');
 const mobile = navigator.userAgentData?.mobile || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -66,6 +69,23 @@ function resourceFilename(item) {
   return (item.title.replace(/[\x00-\x1f\\/:]/g, '-') || 'coasterprint-resource') + '.png';
 }
 
+async function sendResource(blob, item) {
+  if (!window.opener || window.opener.closed || !designLibraryDestination()) {
+    throw Error('The maker is no longer open. Reopen Design Library from the maker or download the PNG.');
+  }
+  const file = new File([blob], resourceFilename(item), {type: blob.type});
+  const error = await window.opener.coasterPrintImportDesign(window, file);
+  if (error) throw Error(error);
+  window.opener.focus();
+  window.close();
+}
+
+async function fetchDesign(item) {
+  const response = await fetch(item.url);
+  if (!response.ok) throw Error('This design is unavailable. Choose another design or try again later.');
+  return response.blob();
+}
+
 function previewResource(item, button) {
   const dialog = $('resource-preview');
   $('resource-title').textContent = item.title;
@@ -77,6 +97,26 @@ function previewResource(item, button) {
     dialog.close();
     void choose(item, button);
   };
+  const status = $('resource-preview-status');
+  status.textContent = '';
+  const proceed = $('resource-continue');
+  proceed.hidden = !destination;
+  if (destination) {
+    proceed.textContent = 'Continue in ' + destination;
+    proceed.onclick = async function sendSelectedDesign() {
+      if (pending) return;
+      pending = proceed.disabled = true;
+      status.textContent = 'Sending artwork…';
+      try {
+        const blob = await fetchDesign(item);
+        if (dialog.open && proceed.onclick === sendSelectedDesign) await sendResource(blob, item);
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        pending = proceed.disabled = false;
+      }
+    };
+  }
   dialog.showModal();
 }
 
@@ -95,9 +135,7 @@ async function choose(item, button) {
   button.disabled = true;
   $('feedback').textContent = 'Loading artwork…';
   try {
-    const response = await fetch(item.url);
-    if (!response.ok) throw Error('This design is unavailable. Choose another design or try again later.');
-    const blob = await response.blob();
+    const blob = await fetchDesign(item);
     if (!canEdit()) {
       await transfer(blob, item);
       return;
@@ -140,17 +178,20 @@ function back() {
 
 $('back').onclick = back;
 desktop.addEventListener('change', () => { if (editor && !canEdit()) back(); });
-$('build').onclick = async () => {
+async function exportArtwork(continueToMaker = false) {
   if (!editor || pending || !canEdit()) return;
   const active = editor;
   const {item} = selected;
   pending = true;
+  const proceed = $('editor-continue');
+  if (proceed) proceed.disabled = true;
   $('build').disabled = true;
-  $('feedback').textContent = resources ? 'Preparing your PNG…' : 'Sending artwork to the maker…';
+  $('feedback').textContent = resources && !continueToMaker ? 'Preparing your PNG…' : 'Sending artwork to the maker…';
   try {
     const blob = await active.export();
     if (editor !== active || !canEdit()) return;
-    if (resources) {
+    if (continueToMaker) await sendResource(blob, item);
+    else if (resources) {
       downloadResource(blob, item);
       $('feedback').textContent = '';
     } else await transfer(blob, item);
@@ -159,8 +200,16 @@ $('build').onclick = async () => {
   } finally {
     pending = false;
     $('build').disabled = false;
+    if (proceed) proceed.disabled = false;
   }
-};
+}
+$('build').onclick = () => void exportArtwork();
+if (destination) {
+  const proceed = $('editor-continue');
+  proceed.hidden = false;
+  proceed.textContent = 'Continue in ' + destination;
+  proceed.onclick = () => void exportArtwork(true);
+}
 $('search').addEventListener('input', showResults);
 $('category').addEventListener('change', showResults);
 $('results').textContent = 'Loading artwork…';

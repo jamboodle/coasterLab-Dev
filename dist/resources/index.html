@@ -37,8 +37,10 @@
       <img id="resource-image" alt="">
       <div class="tools">
         <a id="resource-download" download>Download PNG</a>
+        <button id="resource-continue" type="button" class="primary" hidden></button>
         <button id="resource-edit" type="button" class="primary">Open in editor</button>
       </div>
+      <p id="resource-preview-status" role="status"></p>
     </dialog>
     <section id="editor" aria-labelledby="editor-title" hidden>
       <button id="back" type="button">Back to Design Library</button>
@@ -61,7 +63,10 @@
         <div id="text-blocks"></div>
         <button id="add-text" type="button">Add text block</button>
       </details>
-      <button class="primary" id="build" type="button">Download edited PNG</button>
+      <div class="tools">
+        <button class="primary" id="build" type="button">Download edited PNG</button>
+        <button class="primary" id="editor-continue" type="button" hidden></button>
+      </div>
     </section>
   </main>
 </body>

@@ -1,3 +1,4 @@
+import {connectDesignLibrary} from '../shared/design-library.js';
 import {decodeArtwork} from '../suncatcher/trace.js';
 import {createViewer} from '../plaque/viewer.js';
 import {downloadFile} from '../plaque/export.js';
@@ -159,7 +160,7 @@ async function load(file) {
     try {
       assets = await geometryAssets();
       ({pathContours} = await import('/' + assets['stl-geometry.js']));
-      if (version !== loadVersion) return;
+      if (version !== loadVersion) return 'Cookie Cutter Maker is loading a different image. Try again.';
       const scale = Math.min(1, 600 / Math.max(artwork.width, artwork.height));
       source.width = Math.max(1, Math.round(artwork.width * scale));
       source.height = Math.max(1, Math.round(artwork.height * scale));
@@ -180,6 +181,7 @@ async function load(file) {
     refreshTrace(true);
   } catch (error) {
     if (version === loadVersion) $('trace-status').textContent = error.message;
+    return error.message;
   } finally {
     if (version === loadVersion) {
       loading = false;
@@ -344,6 +346,7 @@ $('build').onclick = async () => {
     height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, stampDepth: $('stamp-depth').valueAsNumber});
 };
 
+connectDesignLibrary('cookie-cutter', file => loading ? 'Cookie Cutter Maker is loading an image. Try again shortly.' : load(file));
 $('sample').onclick = () => void load();
 $('file').onchange = event => { if (event.target.files[0]) void load(event.target.files[0]); };
 $('drop').ondragover = event => {

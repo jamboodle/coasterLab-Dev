@@ -106,6 +106,7 @@ try {
   await guest.getByRole('button', {name: 'Hidden Format'}).click();
   const preview = guest.getByRole('dialog');
   await preview.getByRole('img', {name: 'Hidden Format'}).waitFor();
+  assert.equal(await preview.locator('#resource-continue').isHidden(), true);
   await preview.getByRole('button', {name: 'Open in editor'}).click();
   await guest.getByRole('button', {name: 'Rotate 90°'}).click();
   const [download] = await Promise.all([
@@ -117,6 +118,33 @@ try {
   assert.equal(edited.readUInt32BE(16), 80);
   assert.equal(edited.readUInt32BE(20), 120);
   await guest.close();
+  for (const [route, name, source, useEditor] of [
+    ['plaque', 'Plaque Maker', '#original', false],
+    ['cookie-cutter', 'Cookie Cutter Maker', '#artwork', true]
+  ]) {
+    const maker = await browser.newPage();
+    await maker.goto(origin + '/' + route + '/');
+    const link = useEditor ? maker.getByRole('navigation', {name: 'Main navigation'}).getByRole('link', {name: 'Design Library'})
+      : maker.getByRole('link', {name: 'Browse Design Library'});
+    const [designs] = await Promise.all([maker.waitForEvent('popup'), link.click()]);
+    await designs.getByRole('button', {name: 'Hidden Format'}).click();
+    const preview = designs.getByRole('dialog');
+    const button = {name: 'Continue in ' + name, exact: true};
+    await preview.getByRole('button', button).waitFor();
+    if (useEditor) {
+      await preview.getByRole('button', {name: 'Open in editor'}).click();
+      await designs.getByRole('button', {name: 'Rotate 90°'}).click();
+    }
+    await Promise.all([
+      designs.waitForEvent('close'),
+      (useEditor ? designs.locator('#editor') : preview).getByRole('button', button).click()
+    ]);
+    await maker.waitForFunction(({selector, width, height}) => {
+      const canvas = document.querySelector(selector);
+      return canvas.width === width && canvas.height === height;
+    }, {selector: source, width: useEditor ? 80 : 120, height: useEditor ? 120 : 80});
+    await maker.close();
+  }
   await setup.close();
 
   const errors = [];

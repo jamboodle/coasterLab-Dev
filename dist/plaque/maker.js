@@ -1,3 +1,4 @@
+import {connectDesignLibrary} from '../shared/design-library.js';
 import {createViewer} from './viewer.js';
 import {downloadFile, plaqueSTLs, preparePlaqueUpload} from './export.js';
 import {bambuPlacement} from '../shared/plaque-layout.js';
@@ -458,7 +459,8 @@ async function exportSTL() {
 }
 
 async function loadFile(file, {sample = false} = {}) {
-  if (busy || (!file && !sample)) return;
+  if (busy) return 'Plaque Maker is working. Try again when it finishes.';
+  if (!file && !sample) return 'No image was selected.';
   busy = true;
   refresh();
   try {
@@ -481,7 +483,7 @@ async function loadFile(file, {sample = false} = {}) {
     } finally { image.close(); }
   } catch (error) {
     $('trace-status').textContent = error.message;
-    return;
+    return error.message;
   } finally {
     busy = false;
     $('file').value = '';
@@ -489,6 +491,7 @@ async function loadFile(file, {sample = false} = {}) {
   }
   await traceSource();
 }
+connectDesignLibrary('plaque', loadFile);
 $('file').onchange = event => void loadFile(event.target.files[0]);
 const drop = $('drop');
 drop.ondragover = event => {
