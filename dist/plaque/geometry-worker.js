@@ -124,7 +124,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
           const bottom = index ? printable[index - 1].top : 0;
           let solid = keep(keep(section.extrude(tier.top - bottom)).translate([0, 0, bottom]));
           if (index === 0) {
-            const imprint = makeImprint(CrossSection, keep, section, bottom, tier.top - bottom, true);
+            const imprint = makeImprint(CrossSection, keep, section, tier.top - bottom);
             if (imprint) {
               solid = keep(solid.subtract(imprint));
               imprinted = true;

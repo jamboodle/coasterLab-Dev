@@ -8,13 +8,13 @@
     "edge-artifacts.js": "edge-artifacts.f23987ebdf16.js",
     "stl-geometry.js": "stl-geometry.f8a893bdde00.js",
     "worker.js": "worker.74127e14aef2.js",
-    "stl-worker.js": "stl-worker.7981f4f3699d.js",
+    "stl-worker.js": "stl-worker.c49183876b33.js",
     "app.js": "app.bdd4e68d5645.js",
-    "stl.js": "stl.a27ea0fac8bd.js",
+    "stl.js": "stl.f17af6555325.js",
     "batch-3mf.js": "batch-3mf.77d2b5d6fcaa.js",
     "export-codec.js": "export-codec.68d94e592daf.js",
     "export-packing.js": "export-packing.633d8ab0ee95.js",
-    "export-credit-trial.js": "export-credit-trial.78ea66a6c68b.js",
+    "export-credit-trial.js": "export-credit-trial.12a1ca480536.js",
     "export-packing-worker.js": "export-packing-worker.3a5293c7a30b.js"
   }
 }

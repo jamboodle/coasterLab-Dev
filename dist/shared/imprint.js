@@ -14,19 +14,20 @@ const glyphs = {
   m: ['0,0 0,5', '0,4 1,5 2,5 3,4 3,0', '3,4 4,5 5,5 6,4 6,0']
 };
 
-export const imprintDepth = 0.2;
+export const imprintDepth = 0.28;
 
 const lettering = [];
 let advance = 0;
+const letterSpacing = 2.65;
 for (const letter of 'CoasterPrint.Com') {
   const strokes = glyphs[letter].map(stroke => stroke.split(' ').map(point => point.split(',').map(Number)));
   const width = Math.max(...strokes.flat().map(([x]) => x));
   lettering.push(...strokes.map(stroke => stroke.map(([x, y]) => [x + advance, y])));
-  advance += width + 2;
+  advance += width + letterSpacing;
 }
 
-const textWidth = advance - 2;
-const radius = 0.54;
+const textWidth = advance - letterSpacing;
+const radius = 0.70;
 const round = Array.from({length: 12}, (_, index) => {
   const angle = 2 * Math.PI * index / 12;
   return [radius * Math.cos(angle), radius * Math.sin(angle)];
@@ -40,7 +41,7 @@ const outlines = lettering.flatMap(stroke => stroke.flatMap(([x, y], index) => {
   return [cap, [[px + dx, py + dy], [px - dx, py - dy], [x - dx, y - dy], [x + dx, y + dy]]];
 }));
 
-export function makeImprint(CrossSection, keep, surface, z, thickness, underside = false) {
+export function makeImprint(CrossSection, keep, surface, thickness) {
   const {min, max} = surface.bounds();
   const [width, height] = max.map((value, index) => value - min[index]);
   // Leave a margin around the whole lettering so a cut cannot open the perimeter.
@@ -56,17 +57,18 @@ export function makeImprint(CrossSection, keep, surface, z, thickness, underside
         const y = min[1] + h / 2 + (height - h) * row;
         const positioned = keep(rect.translate([x, y]));
         if (!keep(positioned.subtract(surface)).isEmpty()) continue;
+        // Mirror XY lettering so it reads correctly when viewed from below.
         const paths = outlines.map(outline => {
           const vertices = outline.map(([u, v]) => [
-            x + (u - textWidth / 2) * scale * (underside ? -1 : 1),
+            x - (u - textWidth / 2) * scale,
             y + (v - 3.5) * scale
           ]);
-          return underside ? vertices.reverse() : vertices;
+          return vertices.reverse();
         });
         const glyph = keep(new CrossSection(paths, 'Positive'));
         const depth = Math.min(imprintDepth, thickness / 2);
         const cutter = keep(glyph.extrude(depth + 0.05));
-        return keep(cutter.translate([0, 0, underside ? z - 0.05 : z - depth]));
+        return keep(cutter.translate([0, 0, -0.05]));
       }
     }
   }
