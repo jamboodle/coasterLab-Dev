@@ -7,3 +7,4 @@ test-results/
 .data/
 __pycache__/
 .deployed-commit
+dist/resource-images/

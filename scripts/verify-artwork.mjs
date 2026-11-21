@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
-import {mkdtemp, mkdir, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -27,8 +27,19 @@ const artwork = artworkLibrary({
     return Response.json({choices: [{message: {content: '{"tags":["woodland","gold"]}'}}]});
   }
 });
+const resourceRoot = join(dataDir, 'resource-images');
+const resourceFolder = join(resourceRoot, 'Animals', 'Woodland');
+let resourceRequests = 0;
+const resources = artworkLibrary({dataDir, resourceRoot, key: 'fixture-key', fetchImpl: async (url, options) => {
+  resourceRequests++;
+  for (const file of ['Hidden Format.png', 'Renamed.png']) {
+    assert.equal((await readFile(join(resourceFolder, file))).subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  }
+  assert.match(JSON.parse(options.body).messages[0].content[1].image_url.url, /^data:image\/png;base64,/);
+  return Response.json({choices: [{message: {content: '{"tags":["amber fox"]}'}}]});
+}});
 let origin;
-const server = createServer(withStatic((req, res) => handler({ledger, origin, artwork})(req, res), dist));
+const server = createServer(withStatic((req, res) => handler({ledger, origin, artwork, resources})(req, res), dist));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 origin = 'http://127.0.0.1:' + server.address().port;
 let browser;
@@ -69,6 +80,43 @@ try {
   await page.waitForFunction(() => document.querySelector('#artwork-status').textContent.includes('2 with tags.'));
   assert.equal(await page.locator('#artwork-progress').isHidden(), true);
   assert.equal(await page.getByRole('button', {name: 'Reindex'}).isEnabled(), true);
+  await mkdir(resourceFolder, {recursive: true});
+  const resourceWebp = Buffer.from(webpUrl.split(',')[1], 'base64');
+  await writeFile(join(resourceFolder, 'Hidden Format.png'), resourceWebp);
+  await writeFile(join(resourceFolder, 'Renamed.webp'), resourceWebp);
+  await writeFile(join(resourceFolder, 'Corrupt.png'), Buffer.from('89504e470d0a1a0a', 'hex'));
+  await page.getByRole('tab', {name: 'Resources', exact: true}).click();
+  await page.getByRole('button', {name: 'Validate, convert and reindex'}).click();
+  const result = page.locator('#resources-status');
+  await result.getByText(/2 WebP files converted to PNG/).waitFor();
+  assert.match(await result.textContent(), /2 with tags/);
+  assert.match(await result.textContent(), /Corrupt.png/);
+  await assert.rejects(readFile(join(resourceFolder, 'Renamed.webp')), {code: 'ENOENT'});
+  assert.equal(resourceRequests, 1, 'identical resources share a tag request');
+  await page.getByRole('button', {name: 'Validate, convert and reindex'}).click();
+  await page.getByRole('button', {name: 'Validate, convert and reindex'}).waitFor({state: 'visible'});
+  await page.waitForFunction(() => !document.querySelector('#reindex-resources').disabled);
+  assert.equal(resourceRequests, 1, 'tags are reused on reindex');
+
+  const guest = await browser.newPage({acceptDownloads: true});
+  await guest.goto(origin);
+  await guest.getByRole('link', {name: 'Resources', exact: true}).click();
+  await guest.getByRole('searchbox').fill('amber fox');
+  await guest.getByLabel('Category').selectOption('Animals / Woodland');
+  await guest.getByRole('button', {name: 'Hidden Format'}).click();
+  const preview = guest.getByRole('dialog');
+  await preview.getByRole('img', {name: 'Hidden Format'}).waitFor();
+  await preview.getByRole('button', {name: 'Open in editor'}).click();
+  await guest.getByRole('button', {name: 'Rotate 90°'}).click();
+  const [download] = await Promise.all([
+    guest.waitForEvent('download'), guest.getByRole('button', {name: 'Download edited PNG'}).click()
+  ]);
+  assert.equal(download.suggestedFilename(), 'Hidden Format.png');
+  const edited = await readFile(await download.path());
+  assert.equal(edited.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(edited.readUInt32BE(16), 80);
+  assert.equal(edited.readUInt32BE(20), 120);
+  await guest.close();
   await setup.close();
 
   const errors = [];
@@ -199,7 +247,7 @@ try {
   });
   assert.deepEqual(converted, ['image/png', 120, 80, [137, 80, 78, 71, 13, 10, 26, 10]]);
   assert.deepEqual(errors, []);
-  console.log('PASS artwork reindex, search, desktop editor, maker import limit, and unedited mobile handoff');
+  console.log('PASS Resources validation, conversion, cached tags, preview and edited PNG download; artwork reindex, search, desktop editor, maker import limit, and unedited mobile handoff');
 } finally {
   resolveTags();
   await browser?.close();

@@ -118,3 +118,17 @@ Test development with the normal `coasterlab-update` workflow. Confirm
 the maker opens the library, and that desktop and mobile selections land
 in the maker preview. Publish the tested revision with `coasterprint-publish`.
 Configure and index production's own artwork there.
+
+## Resources
+
+Create the production upload directory from the server root terminal:
+
+```sh
+install -d -o coasterprint -g coasterprint -m 0755 /home/coasterprint/public_html/resource-images
+```
+
+Upload PNG or WebP images there as the `coasterprint` account. Nested folders become searchable categories. On development with the default static root, use `/home/jamboodle/coasterlab-dev/dist/resource-images/` and upload as `jamboodle`. Git ignores that folder and the deployment sync preserves uploaded files.
+
+The server's `python3` needs Pillow with WebP support. On Debian or Ubuntu, install `python3-pil` through the system package manager. The Node service uses its existing `OPENAI_API_KEY` setting. Upload files before starting the scan and leave them in place until it finishes.
+
+In Admin, open **Resources** and click **Validate, convert and reindex**. The scan validates PNGs, replaces valid single-frame WebP files with PNGs, and then sends the valid images to OpenAI for visual search tags. A WebP with a `.png` suffix is fixed in place. A `.webp` file is replaced by a same-named `.png` after conversion, provided the destination is free. Keep an original copy if you need WebP metadata or compression. Invalid files, animation, and filename collisions are listed as skipped. The private index caches tags by image content and is separate from the Artwork Library. Existing tagged images use cached tags on later runs.

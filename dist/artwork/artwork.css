@@ -53,3 +53,8 @@ summary { cursor: pointer; }
 #feedback { color: var(--accent); }
 
 .artwork-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem 1rem; margin-bottom: 1rem; }
+
+#resource-preview { width: min(660px, calc(100% - 32px)); max-height: 90vh; overflow: auto; }
+#resource-preview::backdrop { background: #000b; }
+#resource-preview form { display: flex; justify-content: end; }
+#resource-image { display: block; max-width: 100%; max-height: 55vh; margin: 0 auto 1rem; object-fit: contain; }

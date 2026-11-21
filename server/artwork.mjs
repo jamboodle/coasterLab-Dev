@@ -2,6 +2,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {constants} from 'node:fs';
 import {mkdir, open, readFile, readdir, realpath, rename, rm, writeFile} from 'node:fs/promises';
 import {dirname, extname, join, resolve, sep} from 'node:path';
+import {checkResourceDecoder, normalizeResource} from './resource-images.mjs';
 
 const maxBytes = 20 * 1024 * 1024;
 const artworkExtensions = new Set(['.png', '.jpg', '.jpeg', '.webp']);
@@ -66,9 +67,13 @@ async function generateTags(bytes, type, key, fetchImpl) {
   return cleaned;
 }
 
-export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {}) {
-  const root = resolve(dataDir, 'artwork');
-  const cachePath = resolve(dataDir, 'artwork-index.json');
+export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch, resourceRoot} = {}) {
+  const resources = Boolean(resourceRoot);
+  const name = resources ? 'resources' : 'artwork';
+  const publicPath = '/api/' + name;
+  const adminPath = '/api/admin/' + name;
+  const root = resources ? resolve(resourceRoot) : resolve(dataDir, 'artwork');
+  const cachePath = resolve(dataDir, name + '-index.json');
   let current = {entries: [], updatedAt: null, failed: 0, skipped: 0};
   let progress = null;
   let error = '';
@@ -80,7 +85,7 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
   });
   const status = () => ({
     running: progress !== null, progress, keyConfigured: Boolean(key), updatedAt: current.updatedAt, indexed: current.entries.length,
-    tagged: current.entries.filter(entry => entry.tags.length).length, failed: current.failed, skipped: current.skipped, error
+    tagged: current.entries.filter(entry => entry.tags.length).length, failed: current.failed, skipped: current.skipped, converted: current.converted || 0, skippedFiles: current.skippedFiles || [], error
   });
 
   async function index(job) {
@@ -91,26 +96,53 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
     async function scan(folder, category) {
       for (const item of await readdir(join(root, folder), {withFileTypes: true})) {
         if (item.name.startsWith('.')) continue;
-        if (!folder && item.isDirectory()) {
-          await scan(item.name, title(item.name));
+        if (item.isDirectory() && (resources || !folder)) {
+          await scan(join(folder, item.name), folder ? category + ' / ' + title(item.name) : title(item.name));
           continue;
         }
         const extension = extname(item.name).toLowerCase();
-        if (!item.isFile() || !artworkExtensions.has(extension)) continue;
+        if (!item.isFile() || !(resources ? ['.png', '.webp'].includes(extension) : artworkExtensions.has(extension))) continue;
         const relative = join(folder, item.name);
         candidates.push({relative, title: title(item.name.slice(0, -extension.length)), category});
       }
     }
 
-    await mkdir(root, {recursive: true, mode: 0o750});
+    if (resources) {
+      try { await checkResourceDecoder(); }
+      catch { throw Error('Install Python Pillow with WebP support on the server before scanning resources.'); }
+    }
+    await mkdir(root, {recursive: true, mode: resources ? 0o755 : 0o750});
+    if (await realpath(root) !== root) throw Error('Use a real resources folder without symbolic links.');
     await scan('', 'General');
     job.total = candidates.length;
-    for (const candidate of candidates) {
+    let indexable = candidates;
+    if (resources) {
+      job.phase = 'validating';
+      indexable = [];
+      for (const candidate of candidates) {
+        try {
+          const image = await readImage(root, candidate.relative);
+          const normalized = await normalizeResource(root, candidate.relative, image, readImage);
+          if (normalized.converted) job.converted++;
+          indexable.push({...candidate, relative: normalized.relative, digest: hash(normalized.bytes)});
+        } catch {
+          job.skipped++;
+          if (job.skippedFiles.length < 12) job.skippedFiles.push(candidate.relative);
+        }
+        job.processed++;
+      }
+      job.phase = 'tagging';
+      job.total = indexable.length;
+      job.processed = 0;
+    }
+    for (const candidate of indexable) {
       let image;
       try {
         image = await readImage(root, candidate.relative);
+        if (resources && (image.type !== 'image/png' || hash(image.bytes) !== candidate.digest)) throw Error('Resource changed during indexing.');
       } catch {
         job.skipped++;
+        if (resources && job.skippedFiles.length < 12) job.skippedFiles.push(candidate.relative);
         job.processed++;
         continue;
       }
@@ -130,8 +162,8 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
     }
 
     entries.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
-    const next = {version: 1, entries, updatedAt: new Date().toISOString(), failed: job.failed, skipped: job.skipped};
-    const temp = join(dirname(cachePath), '.artwork-index-' + randomUUID());
+    const next = {version: 1, entries, updatedAt: new Date().toISOString(), failed: job.failed, skipped: job.skipped, converted: job.converted, skippedFiles: job.skippedFiles};
+    const temp = join(dirname(cachePath), '.' + name + '-index-' + randomUUID());
     try {
       await writeFile(temp, JSON.stringify(next), {mode: 0o600, flag: 'wx'});
       await rename(temp, cachePath);
@@ -144,26 +176,28 @@ export function artworkLibrary({dataDir = '.data', key, fetchImpl = fetch} = {})
   return {
     async admin(req, path, send) {
       await ready;
-      if (req.method === 'GET' && path === '/api/admin/artwork') return send(200, status());
-      if (req.method !== 'POST' || path !== '/api/admin/artwork/reindex') return send(404, {error: 'Not found'});
+      if (req.method === 'GET' && path === adminPath) return send(200, status());
+      if (req.method !== 'POST' || path !== adminPath + '/reindex') return send(404, {error: 'Not found'});
       if (progress) return send(409, {error: 'Artwork indexing is already running.'});
       if (!key) return send(503, {error: 'Configure OPENAI_API_KEY on the server before reindexing.'});
-      progress = {total: null, processed: 0, failed: 0, skipped: 0};
+      progress = {total: null, processed: 0, failed: 0, skipped: 0, converted: 0, skippedFiles: []};
       error = '';
-      void index(progress).catch(() => {
-        error = 'Reindexing could not finish. Check artwork folder and index file permissions.';
+      void index(progress).catch(failure => {
+        error = resources && (failure.message.startsWith('Install Python Pillow') || failure.message.startsWith('Use a real resources folder'))
+          ? failure.message : 'Reindexing could not finish. Check folder and index file permissions.';
       }).finally(() => { progress = null; });
       return send(202, status());
     },
     async public(req, res, path, send) {
       if (!['GET', 'HEAD'].includes(req.method)) return send(405, {error: 'Method not allowed'});
       await ready;
-      if (path === '/api/artwork' && req.method === 'GET') {
+      if (path === publicPath && req.method === 'GET') {
         return send(200, {artwork: current.entries.map(({id, title, category, tags}) => ({
-          id, title, category, tags, url: '/api/artwork/' + id
+          id, title, category, tags, url: publicPath + '/' + id
         }))});
       }
-      const id = /^\/api\/artwork\/([a-f0-9]{64})$/.exec(path)?.[1];
+      const id = path.startsWith(publicPath + '/') && /^[a-f0-9]{64}$/.test(path.slice(publicPath.length + 1))
+        ? path.slice(publicPath.length + 1) : undefined;
       const entry = id && current.entries.find(item => item.id === id);
       if (!entry) return send(404, {error: 'Artwork not found.'});
       let image;

@@ -7,9 +7,10 @@ export function creditPacks(settings){return [{id:'starter',amount:settings.amou
 export function publicSettings(settings){
  return {welcomeCredits:settings.welcomeCredits,billingEnabled:settings.billingEnabled,amount:settings.amount,credits:settings.credits,currency:settings.currency,packs:creditPacks(settings)};
 }
-export async function adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork}){
+export async function adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork,resources}){
  if(!ledger.control(account).admin || !ledger.identityForAccount(account))return send(403,{error:'Administrator access required.'});
  if(req.method==='POST' && req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
+ if(resources && (path==='/api/admin/resources' || path.startsWith('/api/admin/resources/'))) return resources.admin(req,path,send);
  if(artwork && (path==='/api/admin/artwork' || path.startsWith('/api/admin/artwork/'))) return artwork.admin(req,path,send);
  if(req.method==='GET' && path==='/api/admin/users'){
   const params=new URL(req.url,'http://localhost').searchParams;

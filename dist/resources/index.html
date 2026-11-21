@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" data-library="resources">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resources | CoasterPrint</title>
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="stylesheet" href="/assets/brand/brand.css">
+  <link rel="stylesheet" href="/artwork/artwork.css">
+  <script type="module" src="/artwork/library.js"></script>
+</head>
+<body>
+  <main>
+    <header class="site-header-logo artwork-header">
+      <a class="brand brand--logo" href="/" aria-label="CoasterPrint home"><img src="/assets/brand/coasterprint-logo-light.png" alt="CoasterPrint" width="2172" height="724"></a>
+      <nav class="site-page-links" aria-label="Main navigation"><a href="/#maker">Make a coaster</a><a class="back-link" href="/cookie-cutter/">Cookie Cutter Maker</a></nav>
+    </header>
+    <section id="library">
+      <h1>Resources</h1>
+      <div class="filters">
+        <label>Search resources <input id="search" type="search" maxlength="120" placeholder="Search titles or tags"></label>
+        <label>Category <select id="category"><option value="">All categories</option></select></label>
+      </div>
+      <p id="results" role="status"></p>
+      <p id="feedback" role="status"></p>
+      <div id="gallery"></div>
+    </section>
+    <dialog id="resource-preview" aria-labelledby="resource-title">
+      <form method="dialog"><button type="submit">Close preview</button></form>
+      <h2 id="resource-title"></h2>
+      <img id="resource-image" alt="">
+      <div class="tools">
+        <a id="resource-download" download>Download PNG</a>
+        <button id="resource-edit" type="button" class="primary">Open in editor</button>
+      </div>
+    </dialog>
+    <section id="editor" aria-labelledby="editor-title" hidden>
+      <button id="back" type="button">Back to resources</button>
+      <h1 id="editor-title" tabindex="-1"></h1>
+      <div class="tools" aria-label="Editing tools">
+        <button type="button" data-tool="paint" aria-pressed="true">Paint</button>
+        <button type="button" data-tool="fill" aria-pressed="false">Fill</button>
+        <button type="button" data-tool="erase" aria-pressed="false">Erase</button>
+        <label>Image color <select id="ink" aria-label="Image color"></select></label>
+        <label>Brush size <input id="brush" type="range" min="2" max="100" value="20"></label>
+        <button id="undo" type="button">Undo</button>
+        <button id="redo" type="button">Redo</button>
+        <button id="rotate" type="button">Rotate 90°</button>
+        <button id="flip" type="button">Flip horizontal</button>
+        <button id="flip-vertical" type="button">Flip vertical</button>
+      </div>
+      <canvas id="preview" aria-label="Artwork preview"></canvas>
+      <details>
+        <summary>Text blocks</summary>
+        <div id="text-blocks"></div>
+        <button id="add-text" type="button">Add text block</button>
+      </details>
+      <button class="primary" id="build" type="button">Download edited PNG</button>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,8 +1,9 @@
 const $ = id => document.getElementById(id);
+const resources = document.documentElement.dataset.library === 'resources';
 const desktop = matchMedia('(hover: hover) and (pointer: fine)');
 const mobile = navigator.userAgentData?.mobile || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const canEdit = () => desktop.matches && !mobile;
+const canEdit = () => resources || (desktop.matches && !mobile);
 let artwork = [];
 let selected;
 let editor;
@@ -28,7 +29,7 @@ function showResults() {
     const label = document.createElement('span');
     label.textContent = item.title;
     button.append(image, label);
-    button.onclick = () => void choose(item, button);
+    button.onclick = () => resources ? previewResource(item, button) : void choose(item, button);
     return button;
   }));
 }
@@ -59,6 +60,33 @@ async function transfer(blob, item) {
   if (error) throw Error(error);
   window.opener.focus();
   window.close();
+}
+
+function resourceFilename(item) {
+  return (item.title.replace(/[\x00-\x1f\\/:]/g, '-') || 'coasterprint-resource') + '.png';
+}
+
+function previewResource(item, button) {
+  const dialog = $('resource-preview');
+  $('resource-title').textContent = item.title;
+  $('resource-image').src = item.url;
+  $('resource-image').alt = item.title;
+  $('resource-download').href = item.url;
+  $('resource-download').download = resourceFilename(item);
+  $('resource-edit').onclick = () => {
+    dialog.close();
+    void choose(item, button);
+  };
+  dialog.showModal();
+}
+
+function downloadResource(blob, item) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = resourceFilename(item);
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 async function choose(item, button) {
@@ -118,11 +146,14 @@ $('build').onclick = async () => {
   const {item} = selected;
   pending = true;
   $('build').disabled = true;
-  $('feedback').textContent = 'Sending artwork to the maker…';
+  $('feedback').textContent = resources ? 'Preparing your PNG…' : 'Sending artwork to the maker…';
   try {
     const blob = await active.export();
     if (editor !== active || !canEdit()) return;
-    await transfer(blob, item);
+    if (resources) {
+      downloadResource(blob, item);
+      $('feedback').textContent = '';
+    } else await transfer(blob, item);
   } catch (error) {
     $('feedback').textContent = error.message;
   } finally {
@@ -134,7 +165,7 @@ $('search').addEventListener('input', showResults);
 $('category').addEventListener('change', showResults);
 $('results').textContent = 'Loading artwork…';
 try {
-  const response = await fetch('/api/artwork');
+  const response = await fetch(resources ? '/api/resources' : '/api/artwork');
   if (!response.ok) throw Error();
   ({artwork} = await response.json());
   const categories = [...new Set(artwork.map(item => item.category))].sort((a, b) => a.localeCompare(b));
