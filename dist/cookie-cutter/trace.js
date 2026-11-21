@@ -41,12 +41,36 @@ function traceMask(image, useAlpha, threshold, invert, smoothing, pathContours, 
     pal: [{r: 0, g: 0, b: 0, a: 255}, {r: 255, g: 255, b: 255, a: 255}],
     colorquantcycles: 1, pathomit: 12, ltres: smoothing, qtres: smoothing, rightangleenhance: smoothing < 1
   });
-  return layers[0].filter(path => (includeHoles || !path.isholepath) && path.segments.length).map(({segments}) => {
+  return flattenPaths(layers[0], pathContours, includeHoles);
+}
+
+function flattenPaths(paths, pathContours, includeHoles) {
+  return paths.filter(path => (includeHoles || !path.isholepath) && path.segments.length).map(({segments}) => {
     const start = segments[0];
     const svg = 'M ' + start.x1 + ' ' + start.y1 + ' ' + segments.map(s =>
       s.type + ' ' + s.x2 + ' ' + s.y2 + (s.type === 'Q' ? ' ' + s.x3 + ' ' + s.y3 : '')).join(' ') + ' Z';
     return pathContours(svg, 1, 0.16)[0]?.map(([x, y]) => [x, -y]);
   }).filter(points => points?.length >= 3);
+}
+
+export function detectColorBoundaries(image, colors, smoothing, pathContours) {
+  const {width, height, data} = image;
+  const {palette, labels, transparent} = window.alphaPalette(data, 'color', colors, 0);
+  const cleaned = window.cleanLabels(labels, width, height);
+  const pixels = new Uint8ClampedArray(data.length);
+  // Encode the labels as exact opaque colors for ImageTracer, including the transparent label.
+  const tracePalette = palette.map((_, index) => ({r: index * 16, g: 0, b: 0, a: 255}));
+  for (let i = 0; i < labels.length; i++) {
+    const label = labels[i] === transparent || cleaned[i] === transparent ? labels[i] : cleaned[i];
+    pixels[i * 4] = tracePalette[label].r;
+    pixels[i * 4 + 3] = 255;
+  }
+  const {layers} = window.ImageTracer.imagedataToTracedata({width, height, data: pixels}, {
+    pal: tracePalette, colorquantcycles: 1, pathomit: 14, ltres: smoothing,
+    qtres: smoothing, rightangleenhance: smoothing < 1
+  });
+  const paths = layers.flatMap((layer, index) => index === transparent ? [] : flattenPaths(layer, pathContours, true));
+  return limitDetail(paths, 'Choose fewer outline colors or increase trace smoothing.');
 }
 
 export function detectOutlines(image, transparent, threshold, invert, smoothing, pathContours) {
@@ -56,10 +80,14 @@ export function detectOutlines(image, transparent, threshold, invert, smoothing,
 
 export function detectStamp(image, threshold, invert, smoothing, pathContours) {
   const detail = traceMask(image, false, threshold, invert, smoothing, pathContours, true);
-  if (detail.reduce((count, points) => count + points.length, 0) > 15000) {
-    throw Error('The stamp has too much detail. Adjust the stamp threshold or increase trace smoothing.');
+  return limitDetail(detail, 'Adjust the stamp threshold or increase trace smoothing.');
+}
+
+function limitDetail(paths, hint) {
+  if (paths.reduce((count, points) => count + points.length, 0) > 15000) {
+    throw Error('The stamp has too much detail. ' + hint);
   }
-  return detail;
+  return paths;
 }
 
 export function area(points) {

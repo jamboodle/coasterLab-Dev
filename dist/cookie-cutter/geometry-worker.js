@@ -30,7 +30,7 @@ const runtime = Module({locateFile: name => new URL('../vendor/' + name, import.
   return kernel;
 });
 
-async function build({points, axis, size, height, wall, stampDepth, stampPaths, geometryScript}) {
+async function build({points, axis, size, height, wall, stampDepth, stampPaths, stampMode, geometryScript}) {
   for (const [value, low, high, name] of [
     [size, 10, 240, 'Cookie size'], [height, 6, 30, 'Cutter height'],
     [wall, 0.65, 2, 'Wall thickness']
@@ -104,15 +104,26 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
         throw Error('The outline is too narrow for a one-piece stamp. Increase the cookie size.');
       }
       if (!stampPaths?.length) return;
-      const traced = keep(new CrossSection(stampPaths.map(path =>
-        path.map(([x, y]) => [(x - minX) * scale, (maxY - y) * scale])), 'EvenOdd'));
-      // Discard a whole silhouette or background fill. The stamp needs interior marks.
-      const marks = keep(traced.intersect(clip));
-      if (marks.area() / clip.area() > 0.88) return;
-      // Remove the cores of broad fills, leaving an approximately 0.9 mm border.
-      // Work before clipping so the stamp margin cannot become an artificial line.
-      const broadCores = offset(traced, -1.8);
-      const details = broadCores.isEmpty() ? traced : keep(traced.subtract(offset(broadCores, 0.9)));
+      const paths = stampPaths.map(path => path.map(([x, y]) => [(x - minX) * scale, (maxY - y) * scale]));
+      let details;
+      if (stampMode === 'color') {
+        const strokeRadius = 0.48;
+        const lines = [];
+        for (const path of paths) {
+          if (Math.abs(signedArea(path)) < 0.35) continue;
+          const region = keep(new CrossSection([path], 'EvenOdd'));
+          if (region.isEmpty()) continue;
+          lines.push(keep(offset(region, strokeRadius).subtract(offset(region, -strokeRadius))));
+        }
+        details = keep(CrossSection.union(lines));
+      } else {
+        const traced = keep(new CrossSection(paths, 'EvenOdd'));
+        // Discard a whole silhouette or background fill. The stamp needs interior marks.
+        if (keep(traced.intersect(clip)).area() / clip.area() > 0.88) return;
+        const broadCores = offset(traced, -1.8);
+        details = broadCores.isEmpty() ? traced : keep(traced.subtract(offset(broadCores, 0.9)));
+      }
+      // Clip after stroking so the clearance margin cannot become an artificial line.
       const clipped = keep(details.intersect(clip));
       const opened = offset(offset(clipped, -0.28), 0.28);
       const relief = keep(opened.intersect(clip));

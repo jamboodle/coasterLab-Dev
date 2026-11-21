@@ -79,10 +79,12 @@
     </section>
     <section aria-labelledby="stamp-title">
       <h2 id="stamp-title">Embossing stamp</h2>
-      <p>Fine marks stay solid and broad fills become outlines. Adjust the threshold or switch to light details if the stamp misses them.</p>
+      <p>Color outlines traces the borders between shades, like a coloring book. Use Bold lines for artwork that already has clear marks.</p>
       <div class="controls">
-        <label>Stamp threshold <input id="stamp-threshold" type="range" min="1" max="254" value="90"></label>
-        <label class="check"><input id="stamp-invert" type="checkbox"> Use light details</label>
+        <label>Stamp style <select id="stamp-mode"><option value="color">Color outlines</option><option value="lines">Bold lines</option></select></label>
+        <label id="stamp-colors-control">Outline colors <select id="stamp-colors"><option value="4">4 · simpler</option><option value="8" selected>8 · balanced</option><option value="12">12 · more detail</option></select></label>
+        <label id="stamp-threshold-control" hidden>Stamp threshold <input id="stamp-threshold" type="range" min="1" max="254" value="90"></label>
+        <label id="stamp-invert-control" class="check" hidden><input id="stamp-invert" type="checkbox"> Use light details</label>
         <label>Emboss depth (mm) <input id="stamp-depth" type="number" min="0.6" max="3" step="0.1" value="3"></label>
       </div>
       <p id="stamp-status" role="status"></p>

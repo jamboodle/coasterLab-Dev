@@ -139,7 +139,10 @@ try {
     const bytes = await readFile(await file.path());
     inspect(bytes, {cookieWidth, cookieHeight, width, height, depth});
     if (output) await writeFile(join(output, name + '.stl'), bytes);
+    return bytes;
   }
+  assert.equal(await page.locator('#stamp-mode').inputValue(), 'color');
+  await page.locator('#stamp-mode').selectOption('lines');
   await page.locator('#sample').click();
   await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('1 detected shape'));
   await build('sample-star', {axis: 'width', size: 80});
@@ -318,8 +321,39 @@ try {
   assert.equal(await page.locator('#overlay .invalid').count(), 3);
   await draw([[.25,.2],[.65,.2],[.62,.38],[.75,.63],[.44,.8],[.25,.6]]);
   await build('drawn-outline', {axis: 'width', size: 60});
+  const colored = await page.evaluate(() => {
+    const canvas = Object.assign(document.createElement('canvas'), {width: 240, height: 220});
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffe9a0';
+    ctx.beginPath();
+    ctx.arc(120, 110, 95, 0, 2 * Math.PI);
+    ctx.fill();
+    // No dark strokes. The green and blue are close in brightness and touch along x=120.
+    ctx.fillStyle = '#64ba75';
+    ctx.fillRect(70, 78, 50, 64);
+    ctx.fillStyle = '#93a7ed';
+    ctx.fillRect(120, 78, 50, 64);
+    return canvas.toDataURL().split(',')[1];
+  });
+  await page.locator('#file').setInputFiles({name: 'flat-colors.png', mimeType: 'image/png', buffer: Buffer.from(colored, 'base64')});
+  await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('1 detected shape'));
+  await page.locator('#width').fill('80');
+  const originalCutter = await build('flat-colors-cutter', {axis: 'width', size: 80});
+  assert.equal(await page.locator('#download-stamp').isDisabled(), true);
+  await page.locator('#stamp-mode').selectOption('color');
+  assert.equal(await page.locator('#stamp-colors').isVisible(), true);
+  assert.equal(await page.locator('#stamp-threshold').isVisible(), false);
+  const colorModeCutter = await build('flat-colors-cutter', {axis: 'width', size: 80});
+  assert.ok(Buffer.isBuffer(originalCutter) && originalCutter.equals(colorModeCutter), 'stamp mode preserves the exact cutter STL');
+  await checkStamp('flat-colors-stamp');
+  await page.locator('#view-stamp').click();
+  const marks = await page.locator('.stamp-mark').evaluate(path =>
+    [[70, 110], [120, 110], [170, 110], [93, 110], [145, 110], [120, 46]].map(([x, y]) =>
+      path.isPointInFill(new DOMPoint(x, y))));
+  assert.deepEqual(marks, [true, true, true, false, false, false],
+    'color tracing embosses both outer edges and the shared border, with clear interiors');
   assert.deepEqual(errors, []);
-  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, handling lip, STL and 3MF parity, invalid-mesh block, threaded stamp and ring STLs, mating clearance, and 3D previews');
+  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, handling lip, STL and 3MF parity, invalid-mesh block, threaded stamp and ring STLs, mating clearance, color-region embossing, and 3D previews');
 } finally {
   await browser?.close();
   server.close();

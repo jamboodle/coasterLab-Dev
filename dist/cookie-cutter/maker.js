@@ -1,7 +1,7 @@
 import {decodeArtwork} from '../suncatcher/trace.js';
 import {createViewer} from '../plaque/viewer.js';
 import {downloadFile} from '../plaque/export.js';
-import {detectOutlines, detectStamp, starSample, usesTransparency} from './trace.js';
+import {detectColorBoundaries, detectOutlines, detectStamp, starSample, usesTransparency} from './trace.js';
 
 const $ = id => document.getElementById(id);
 const overlay = $('overlay');
@@ -17,6 +17,26 @@ async function geometryAssets() {
   if (!response.ok) throw Error('The tracing and geometry tools could not be loaded. Reload to retry.');
   const {scripts} = await response.json();
   return scripts;
+}
+
+const paletteScripts = new Map();
+function loadPaletteScripts() {
+  return Promise.all(['palette.js', 'alpha.js'].map(name => {
+    if (!paletteScripts.has(name)) {
+      paletteScripts.set(name, new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = '/' + assets[name];
+        script.onload = resolve;
+        script.onerror = () => {
+          script.remove();
+          paletteScripts.delete(name);
+          reject(Error('Could not load color tracing. Try again or use Bold lines.'));
+        };
+        document.head.append(script);
+      }));
+    }
+    return paletteScripts.get(name);
+  }));
 }
 
 function activeOutline() {
@@ -281,10 +301,12 @@ function present(result) {
   $('stamp-status').textContent = result.stamp
     ? 'Stamp ready. Select Show stamp to see the print and the matching marks on your artwork.' +
       (result.stamp.imprinted ? '' : ' There wasn’t room for the CoasterPrint.Com imprint beside the socket.')
-    : result.stampError || 'No printable interior details found. Adjust the stamp threshold or try light details.';
+    : result.stampError || ($('stamp-mode').value === 'color'
+      ? 'No printable interior boundaries found. Try more outline colors or switch to Bold lines.'
+      : 'No printable interior details found. Adjust the stamp threshold or try light details.');
 }
 
-$('build').onclick = () => {
+$('build').onclick = async () => {
   const points = activeOutline();
   if (!points || draft || worker) return;
   invalidate();
@@ -303,16 +325,23 @@ $('build').onclick = () => {
   worker.onmessageerror = () => finish({error: 'The browser could not read the cutter mesh.'});
   timer = setTimeout(() => finish({error: 'The cutter took too long to build. Try more smoothing.'}), 90000);
   let stampPaths, stampError;
+  const stampMode = $('stamp-mode').value;
+  const smoothing = Number($('smoothing').value);
+  $('model-status').textContent = 'Building and checking the cutter…';
+  renderOutline();
   try {
-    stampPaths = detectStamp(image, $('stamp-threshold').valueAsNumber, $('stamp-invert').checked,
-      Number($('smoothing').value), pathContours);
+    if (stampMode === 'color') {
+      await loadPaletteScripts();
+      if (worker !== current) return;
+      stampPaths = detectColorBoundaries(image, Number($('stamp-colors').value), smoothing, pathContours);
+    } else stampPaths = detectStamp(image, $('stamp-threshold').valueAsNumber, $('stamp-invert').checked,
+      smoothing, pathContours);
   } catch (error) {
     stampError = error.message;
   }
-  worker.postMessage({points, stampPaths, axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
+  if (worker !== current) return;
+  current.postMessage({points, stampPaths, stampMode, axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
     height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, stampDepth: $('stamp-depth').valueAsNumber});
-  $('model-status').textContent = 'Building and checking the cutter…';
-  renderOutline();
 };
 
 $('sample').onclick = () => void load();
@@ -349,7 +378,14 @@ $('close').onclick = () => {
   syncSize();
   renderOutline();
 };
-for (const id of ['width', 'height', 'cutter-height', 'wall', 'stamp-threshold', 'stamp-invert', 'stamp-depth']) $(id).oninput = () => {
+$('stamp-mode').onchange = () => {
+  const color = $('stamp-mode').value === 'color';
+  $('stamp-colors-control').hidden = !color;
+  $('stamp-threshold-control').hidden = $('stamp-invert-control').hidden = color;
+  invalidate();
+  renderOutline();
+};
+for (const id of ['width', 'height', 'cutter-height', 'wall', 'stamp-threshold', 'stamp-invert', 'stamp-depth', 'stamp-colors']) $(id).oninput = () => {
   if (id === 'width' || id === 'height') {
     sizingAxis = id;
     syncSize();
