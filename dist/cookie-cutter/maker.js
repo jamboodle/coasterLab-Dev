@@ -1,7 +1,6 @@
 import {decodeArtwork} from '../suncatcher/trace.js';
 import {createViewer} from '../plaque/viewer.js';
 import {downloadFile} from '../plaque/export.js';
-import {cookieProject} from './project.js';
 import {detectOutlines, detectStamp, starSample, usesTransparency} from './trace.js';
 
 const $ = id => document.getElementById(id);
@@ -280,7 +279,8 @@ function present(result) {
     ($('viewer').hidden ? ' 3D preview unavailable on this device.' : '');
   refreshDownloads();
   $('stamp-status').textContent = result.stamp
-    ? 'Stamp ready. Select Show stamp to see the print and the matching marks on your artwork.'
+    ? 'Stamp ready. Select Show stamp to see the print and the matching marks on your artwork.' +
+      (result.stamp.imprinted ? '' : ' There wasn’t room for the CoasterPrint.Com imprint beside the socket.')
     : result.stampError || 'No printable interior details found. Adjust the stamp threshold or try light details.';
 }
 
@@ -387,17 +387,28 @@ $('download-project').onclick = async () => {
   const current = model;
   if (!current || exporting) return;
   const status = $('download-status');
+  const showError = error => { status.textContent = error.message; };
   exporting = true;
   refreshDownloads();
-  status.textContent = 'Preparing the Bambu Studio project…';
+  status.textContent = '';
   try {
-    const bytes = await cookieProject(current);
-    if (model === current) {
-      downloadFile('coasterprint-cookie-cutter-set.3mf', bytes, 'model/3mf');
-      status.textContent = '';
-    }
+    const scripts = await geometryAssets();
+    await import('/' + scripts['export-credit-trial.js']);
+    if (model !== current) return;
+    await window.creditTrialDownload(() => {
+      const parts = current.stamp ? [current, current.stamp, current.stamp.handle] : [current];
+      const triangles = parts.reduce((count, part) => count + new DataView(part.buffer).getUint32(80, true), 0);
+      if (triangles > 400000) throw Error('The cookie cutter set is too complex for 3MF. Try smoother tracing or download the free STLs.');
+      return JSON.stringify({format: 'cookie', parts: parts.map(part => {
+        const bytes = new Uint8Array(part.buffer);
+        if (typeof bytes.toBase64 === 'function') return bytes.toBase64();
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+        return btoa(binary);
+      })});
+    }, {kind: 'cookie cutter set', freeSTL: () => $('download').focus(), onError: showError});
   } catch (error) {
-    if (model === current) status.textContent = error.message || 'Could not create the 3MF. Try again or download the individual STLs.';
+    showError(error);
   } finally {
     exporting = false;
     refreshDownloads();

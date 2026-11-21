@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {makeBatch3MF} from './project-codec.mjs';
 import {makePlaque3MF} from './plaque-codec.mjs';
+import {makeCookie3MF} from './cookie-codec.mjs';
 const fflate=createRequire(import.meta.url)('../dist/vendor/fflate.js');
 function meshReader(){
  let totalTriangles=0;
@@ -20,6 +21,26 @@ function meshReader(){
   }
   return {buffer:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),triangles:count,min,max};
  };
+}
+
+function validateCookie(payload) {
+ const specs = [
+  {title:'Cookie cutter', width:250, height:250, depth:30},
+  {title:'Embossing stamp', width:250, height:250, depth:9},
+  {title:'Ring handle', width:40, height:15, depth:40}
+ ];
+ if(!Array.isArray(payload.parts)||![1,3].includes(payload.parts.length))throw Error('Upload the cutter alone or the complete cookie cutter set.');
+ const readMesh=meshReader();
+ const fingerprint=createHash('sha256').update('server-cookie-3mf-v1\0');
+ const parts=payload.parts.map((encoded,index)=>{
+  const spec=specs[index];
+  const {buffer,min,max}=readMesh(encoded,0,spec.depth);
+  if(min.some(coordinate=>Math.abs(coordinate)>.02)||max[0]>spec.width+.02||max[1]>spec.height+.02||
+    max.some((coordinate,axis)=>coordinate-min[axis]<.5))throw Error('Invalid cookie cutter set dimensions.');
+  fingerprint.update(String(buffer.byteLength)+':').update(Buffer.from(buffer));
+  return {buffer,title:spec.title,width:max[0],height:max[1]};
+ });
+ return {parts,fingerprint:fingerprint.digest('hex')};
 }
 
 function validatePlaque(payload){
@@ -77,7 +98,11 @@ function validate(payload){
  return {items,template:cleanTemplate,format:payload.format};
 }
 try{
- if(workerData?.format==='plaque'){
+ if(workerData?.format==='cookie'){
+  const cookie=validateCookie(workerData),bytes=makeCookie3MF(cookie.parts);
+  if(bytes.byteLength>32000000)throw Error('Export is too large. Try smoother tracing.');
+  parentPort.postMessage({bytes,fingerprint:cookie.fingerprint,count:1,format:'cookie'},[bytes.buffer]);
+ }else if(workerData?.format==='plaque'){
   const plaque=validatePlaque(workerData),bytes=makePlaque3MF(plaque);
   if(bytes.byteLength>32000000)throw Error('Export is too large. Try fewer colors or smoother tracing.');
   parentPort.postMessage({bytes,fingerprint:plaque.fingerprint,count:1,format:'plaque'},[bytes.buffer]);

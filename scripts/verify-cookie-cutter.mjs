@@ -5,13 +5,20 @@ import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {withStatic} from '../server/static.mjs';
+import {handler} from '../server/app.mjs';
+import {Ledger} from '../server/ledger.mjs';
+import {modelPayload} from '../tests/export-fixture.mjs';
 import {stlMeshXML} from '../dist/shared/stl-mesh.js';
 
 const require = createRequire(import.meta.url);
 const {chromium} = require('playwright');
 const {unzipSync} = require('../dist/vendor/fflate.js');
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
-const server = createServer(withStatic((req, res) => res.writeHead(404).end(), root));
+const ledger = new Ledger(':memory:');
+const account = ledger.registerIdentity('cookie@example.com', 'salt', 'digest');
+ledger.saveSettings(account, {billingEnabled: true});
+const session = ledger.createSession(account);
+const server = createServer(withStatic((req, res) => handler({ledger, origin, customerAccounts: true})(req, res), root));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 0.03, `${actual} vs ${expected}`);
@@ -56,6 +63,8 @@ function inspect(bytes, expected) {
   if (expected.stamp) {
     assert.ok([...heights].some(z => z > 4.35 && z < 4.45), 'blind socket is recessed into the backing');
     assert.ok([...heights].some(z => z > 1 && z < 4.35), 'socket contains helical thread geometry');
+    if (expected.imprint) assert.ok([...heights].some(z => Math.abs(z - 0.28) < .00001),
+      'stamp underside contains the 0.28 mm watermark recess');
     const relief = [...vertices.values()].filter(point => point[2] > 5.61);
     assert.ok(relief.length > 3, 'raised stamp detail is present');
     if (expected.markOnRight) {
@@ -141,7 +150,36 @@ try {
     const solid = await readFile(await stl.path());
     meshes.push(stlMeshXML(Uint8Array.from(solid).buffer).xml);
   }
-  const [project] = await Promise.all([page.waitForEvent('download'), page.locator('#download-project').click()]);
+  const dialog = page.getByRole('dialog');
+  await page.locator('#download-project').click();
+  await dialog.getByText(/Log in or create an account to download 3MF/).waitFor();
+  await dialog.getByRole('button', {name: 'Switch to free STL'}).click();
+  await dialog.waitFor({state: 'detached'});
+  assert.equal(ledger.balance(account), 15);
+  await page.context().addCookies([{name: 'cl_session', value: session, url: origin}]);
+
+  async function downloadProject(cost) {
+    const balance = ledger.balance(account);
+    await page.locator('#download-project').click();
+    const confirm = dialog.getByRole('button', {name: cost ? /Confirm · 1 credit/ : 'Prepare free download'});
+    await confirm.waitFor();
+    assert.match(await dialog.locator('[data-summary]').textContent(), /1 cookie cutter set/);
+    assert.equal(ledger.balance(account), balance);
+    await confirm.click();
+    const [file] = await Promise.all([
+      page.waitForEvent('download'), dialog.getByRole('button', {name: 'Download Ready'}).click()
+    ]);
+    await dialog.getByRole('button', {name: 'Close export confirmation'}).click();
+    await dialog.waitFor({state: 'detached'});
+    assert.equal(ledger.balance(account), balance - cost);
+    return file;
+  }
+  const project = await downloadProject(1);
+  await downloadProject(0);
+  const coaster = await page.request.post(origin + '/api/exports', {data: modelPayload(), headers: {Origin: origin}});
+  assert.equal(coaster.status(), 201);
+  const coasterQuote = await coaster.json();
+  assert.equal(coasterQuote.balance, 14, 'coaster exports see the same balance after the cookie set debit');
   assert.equal(project.suggestedFilename(), 'coasterprint-cookie-cutter-set.3mf');
   const bytes = await readFile(await project.path());
   const projectFiles = unzipSync(new Uint8Array(bytes));
@@ -166,7 +204,7 @@ try {
     const [file] = await Promise.all([page.waitForEvent('download'), page.locator('#download-stamp').click()]);
     assert.equal(file.suggestedFilename(), 'coasterprint-cookie-stamp.stl');
     const bytes = await readFile(await file.path());
-    inspect(bytes, {stamp: true, depth: 8.6, markOnRight: name === 'transparent-circle-stamp'});
+    inspect(bytes, {stamp: true, depth: 8.6, imprint: name === 'sample-star-stamp', markOnRight: name === 'transparent-circle-stamp'});
     if (output) await writeFile(join(output, name + '.stl'), bytes);
     if (name === 'transparent-circle-stamp') {
       const [center, border, fineLine] = await page.locator('.stamp-mark').evaluate(path =>
@@ -256,17 +294,10 @@ try {
   await page.locator('#width').fill('60');
   await build('inverted-jpg-circle', {axis: 'width', size: 60});
   assert.equal(await page.locator('#download-stamp').isDisabled(), true, 'plain silhouettes export only the cutter');
-  const [cutterProject] = await Promise.all([page.waitForEvent('download'), page.locator('#download-project').click()]);
+  const cutterProject = await downloadProject(1);
   const cutterFiles = unzipSync(new Uint8Array(await readFile(await cutterProject.path())));
   assert.equal((Buffer.from(cutterFiles['3D/3dmodel.model']).toString().match(/<item objectid=/g) || []).length, 1);
-  const oversizeMessage = await page.evaluate(async () => {
-    const {cookieProject} = await import('/cookie-cutter/project.js');
-    try {
-      await cookieProject({width: 220, height: 220,
-        stamp: {width: 216, height: 216, handle: {width: 30, height: 9.6}}});
-    } catch (error) { return error.message; }
-  });
-  assert.match(oversizeMessage, /one P1S plate/);
+
   await page.locator('#edit').click();
   await page.locator('[data-point="0"]').press('ArrowRight');
   await page.locator('#undo').click();
@@ -292,4 +323,5 @@ try {
 } finally {
   await browser?.close();
   server.close();
+  ledger.close();
 }

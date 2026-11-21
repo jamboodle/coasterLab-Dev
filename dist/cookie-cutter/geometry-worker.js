@@ -1,4 +1,5 @@
 import Module from '../vendor/manifold.js';
+import {makeImprint} from '../shared/imprint.js';
 import {backingHeight, stampHandle, stampSocket} from './stamp-handle.js';
 
 const epsilon = 1e-7;
@@ -123,11 +124,16 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       const orient = shape => keep(keep(shape.mirror([1, 0])).translate(stampOrigin));
       const printBacking = orient(backing);
       const socket = stampSocket(kernel, keep, printBacking);
-      const plate = keep(keep(printBacking.extrude(backingHeight)).subtract(socket));
+      const {min, max} = socket.boundingBox();
+      const keepout = keep(keep(CrossSection.square([max[0] - min[0] + 2, max[1] - min[1] + 2]))
+        .translate([min[0] - 1, min[1] - 1]));
+      const imprint = makeImprint(CrossSection, keep, keep(printBacking.subtract(keepout)), backingHeight, {compact: true});
+      const solidBacking = keep(keep(printBacking.extrude(backingHeight)).subtract(socket));
+      const plate = imprint ? keep(solidBacking.subtract(imprint)) : solidBacking;
       const detail = keep(keep(orient(relief).extrude(stampDepth)).translate([0, 0, backingHeight]));
       const stamp = keep(Manifold.union([plate, detail]));
       const {solid: handle, ...handleDimensions} = stampHandle(kernel, keep);
-      return {...mesh(stamp, 'stamp'), depth: backingHeight + stampDepth,
+      return {...mesh(stamp, 'stamp'), imprinted: Boolean(imprint), depth: backingHeight + stampDepth,
         handle: {...mesh(handle, 'stamp handle'), ...handleDimensions},
         width: bounds.max[0] - bounds.min[0], height: bounds.max[1] - bounds.min[1],
         preview: relief.toPolygons().map(polygon => polygon.map(([x, y]) => [minX + x / scale, maxY - y / scale]))};

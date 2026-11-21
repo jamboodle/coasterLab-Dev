@@ -1,5 +1,10 @@
-import {stlMeshXML} from '../shared/stl-mesh.js';
-import {assignProjectPalette} from '../shared/bambu-palette.js';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {stlMeshXML} from '../dist/shared/stl-mesh.js';
+import {assignProjectPalette} from '../dist/shared/bambu-palette.js';
+
+const fflate = createRequire(import.meta.url)('../dist/vendor/fflate.js');
+const preset = JSON.parse(readFileSync(new URL('../dist/presets/bambu-p1s-04.json', import.meta.url), 'utf8'));
 
 const margin = 3;
 const farEdge = 253;
@@ -23,16 +28,11 @@ function arrange(parts, placed = []) {
   }
 }
 
-export async function cookieProject(cutter) {
-  const parts = [{...cutter, title: 'Cookie cutter'}];
-  if (cutter.stamp) parts.push({...cutter.stamp, title: 'Embossing stamp'},
-    {...cutter.stamp.handle, title: 'Ring handle'});
+export function makeCookie3MF(parts) {
   const placed = arrange(parts);
   if (!placed) throw Error('These parts do not fit together on one P1S plate. Reduce the cookie size or download the individual STLs.');
 
-  const response = await fetch('/presets/bambu-p1s-04.json');
-  if (!response.ok) throw Error('The Bambu printer preset could not be loaded. Try again or download STL.');
-  const settings = await response.json();
+  const settings = {...preset};
   assignProjectPalette(settings, [settings.filament_colour[0]]);
   settings.enable_prime_tower = '0';
 
@@ -67,7 +67,6 @@ export async function cookieProject(cutter) {
       instances.join('') + '</plate><assemble>' + assemblies.join('') + '</assemble></config>',
     'Metadata/project_settings.config': JSON.stringify(settings)
   };
-  const files = Object.fromEntries(Object.entries(entries).map(([name, value]) => [name, window.fflate.strToU8(value)]));
-  return new Promise((resolve, reject) => window.fflate.zip(files, {level: 4}, (error, bytes) =>
-    error ? reject(error) : resolve(bytes)));
+  const files = Object.fromEntries(Object.entries(entries).map(([name, value]) => [name, fflate.strToU8(value)]));
+  return fflate.zipSync(files, {level: 4});
 }

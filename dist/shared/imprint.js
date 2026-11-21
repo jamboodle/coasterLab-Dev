@@ -41,18 +41,21 @@ const outlines = lettering.flatMap(stroke => stroke.flatMap(([x, y], index) => {
   return [cap, [[px + dx, py + dy], [px - dx, py - dy], [x - dx, y - dy], [x + dx, y + dy]]];
 }));
 
-export function makeImprint(CrossSection, keep, surface, thickness) {
+export function makeImprint(CrossSection, keep, surface, thickness, {compact = false} = {}) {
   const {min, max} = surface.bounds();
   const [width, height] = max.map((value, index) => value - min[index]);
   // Leave a margin around the whole lettering so a cut cannot open the perimeter.
   const pad = 0.8;
-  for (const scale of [0.60, 0.50, 0.42]) {
+  const scales = compact ? [0.50, 0.42, 0.38, 0.34] : [0.60, 0.50, 0.42];
+  const rows = compact ? [0.16, 0.23, 0.27, 0.32, 0.38, 0.44, 0.5, 0.56, 0.62, 0.68, 0.73, 0.8, 0.84] : [0.16, 0.27, 0.5, 0.73, 0.84];
+  const columns = compact ? [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9, 0, 1] : [0.5, 0.3, 0.7, 0, 1];
+  for (const scale of scales) {
     const w = (textWidth + 2 * radius) * scale + 2 * pad;
     const h = (7 + 2 * radius) * scale + 2 * pad;
     if (w > width || h > height) continue;
     const rect = keep(CrossSection.square([w, h], true));
-    for (const row of [0.16, 0.27, 0.5, 0.73, 0.84]) {
-      for (const col of [0.5, 0.3, 0.7, 0, 1]) {
+    for (const row of rows) {
+      for (const col of columns) {
         const x = min[0] + w / 2 + (width - w) * col;
         const y = min[1] + h / 2 + (height - h) * row;
         const positioned = keep(rect.translate([x, y]));

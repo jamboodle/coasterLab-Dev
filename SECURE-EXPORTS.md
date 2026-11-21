@@ -34,8 +34,8 @@ The download block, confirmation dialog and privacy copy disclose this change.
 A bounded server worker validates the model structure, base64/binary STL sizes,
 triangle counts, finite coordinates, layer dimensions, colors, plate geometry and
 printer settings. It derives the cost from the number of coaster assemblies (1–6),
-or one plaque for a plaque project, not a client-supplied count or fingerprint.
-Both makers debit the same account balance. Project assembly code is server-only.
+one plaque per plaque project, or one cookie cutter set per one-plate project. The
+worker calculates the count and fingerprint. All three makers debit the same account balance. Project assembly code is server-only.
 Individual-file ZIPs are also assembled server-side and cost one credit per coaster
 when billing is on. Free STL ZIPs never go through these endpoints.
 

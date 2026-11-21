@@ -36,7 +36,7 @@ export async function exportRequest({req,res,path,send,ledger,account,origin,bil
   if(total>=4||(transfers.get(account)||0)>=2)return send(503,{error:'Another download is still in progress. Wait a moment and retry.'});
   const bytes=ledger.exportBytes(account,id);if(!bytes)return send(404,{error:'Export expired. Prepare it again.'});
   transfers.set(account,(transfers.get(account)||0)+1);let finished=false;const finish=()=>{if(finished)return;finished=true;const count=(transfers.get(account)||1)-1;if(count)transfers.set(account,count);else transfers.delete(account);};res.once('finish',finish);res.once('close',finish);
-  const name=job.format==='plaque'?'coasterprint-plaque.3mf':job.format==='individual'?'coasterprint-individual-models.zip':job.count>1?'coasterprint-'+job.count+'-plate-project.3mf':'coasterprint-coaster.3mf';
+  const name=job.format==='cookie'?'coasterprint-cookie-cutter-set.3mf':job.format==='plaque'?'coasterprint-plaque.3mf':job.format==='individual'?'coasterprint-individual-models.zip':job.count>1?'coasterprint-'+job.count+'-plate-project.3mf':'coasterprint-coaster.3mf';
   res.writeHead(200,{'Content-Type':job.format==='individual'?'application/zip':'model/3mf','Content-Length':bytes.length,'Content-Disposition':'attachment; filename="'+name+'"','Cache-Control':'no-store, private','X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin'});return res.end(req.method==='HEAD'?undefined:bytes);
  }
  return send(405,{error:'Method not allowed'});
