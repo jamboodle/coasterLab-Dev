@@ -79,7 +79,7 @@ function invalidate() {
   invalid = false;
   viewer?.clear();
   $('viewer').hidden = $('viewer-controls').hidden = true;
-  $('download').disabled = $('download-stamp').disabled = true;
+  $('download').disabled = $('download-stamp').disabled = $('download-handle').disabled = true;
   $('preview-parts').hidden = true;
   $('stamp-status').textContent = '';
   previewPart = 'cutter';
@@ -245,9 +245,8 @@ overlay.onkeydown = event => {
 
 function showPart(part) {
   previewPart = part;
-  const selected = part === 'stamp' ? model.stamp : model;
-  $('view-cutter').setAttribute('aria-pressed', String(part === 'cutter'));
-  $('view-stamp').setAttribute('aria-pressed', String(part === 'stamp'));
+  const selected = {cutter: model, stamp: model.stamp, handle: model.stamp?.handle}[part];
+  for (const id of ['cutter', 'stamp', 'handle']) $('view-' + id).setAttribute('aria-pressed', String(part === id));
   $('viewer').setAttribute('aria-label', 'Rotatable ' + part + ' preview');
   $('viewer').hidden = $('viewer-controls').hidden = !viewer?.show({...selected,
     parts: [{buffer: selected.buffer, color: part === 'stamp' ? '#6baad5' : '#ca537d'}]});
@@ -278,7 +277,7 @@ function present(result) {
     (result.issues.length ? ' Amber areas show tight details or rounded corners. Increase the cookie size or smooth the outline if those details matter.' : '') +
     ($('viewer').hidden ? ' 3D preview unavailable on this device.' : '');
   $('download').disabled = false;
-  $('download-stamp').disabled = !result.stamp;
+  $('download-stamp').disabled = $('download-handle').disabled = !result.stamp;
   $('stamp-status').textContent = result.stamp
     ? 'Stamp ready. Select Show stamp to see the print and the matching marks on your artwork.'
     : result.stampError || 'No printable interior details found. Adjust the stamp threshold or try light details.';
@@ -368,4 +367,9 @@ $('view-cutter').onclick = () => { if (model) showPart('cutter'); };
 $('view-stamp').onclick = () => { if (model?.stamp) showPart('stamp'); };
 $('download-stamp').onclick = () => {
   if (model?.stamp) downloadFile('coasterprint-cookie-stamp.stl', model.stamp.buffer, 'model/stl');
+};
+
+$('view-handle').onclick = () => { if (model?.stamp) showPart('handle'); };
+$('download-handle').onclick = () => {
+  if (model?.stamp) downloadFile('coasterprint-stamp-ring-handle.stl', model.stamp.handle.buffer, 'model/stl');
 };

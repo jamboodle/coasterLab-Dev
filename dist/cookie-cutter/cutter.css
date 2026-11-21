@@ -9,7 +9,7 @@
 #overlay .point { fill: white; stroke: #1647a9; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: grab; }
 #overlay .point:focus { fill: #ffe32b; }
 #model-status { min-height: 1.5em; }
-#download, #download-stamp { margin-top: .85rem; }
+#download, #download-stamp, #download-handle { margin-top: .85rem; }
 #preview-parts { margin-bottom: .65rem; }
 #preview-parts button[aria-pressed="true"] { outline: 2px solid var(--yellow); outline-offset: 2px; }
 #overlay .stamp-mark { fill: #b3347b99; fill-rule: evenodd; pointer-events: none; }

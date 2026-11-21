@@ -51,13 +51,18 @@ function inspect(bytes, expected) {
   assert.equal(Math.min(...heights), 0);
   near(Math.max(...heights), expected.depth);
   if (expected.stamp) {
-    assert.deepEqual([...heights].sort((a, b) => a - b), [0, 3, Math.fround(expected.depth)]);
-    const relief = [...vertices.values()].filter(point => point[2] > 3);
+    assert.ok([...heights].some(z => z > 8 && z < 8.5), 'blind socket is recessed into the backing');
+    assert.ok([...heights].some(z => z > 1 && z < 8), 'socket contains helical thread geometry');
+    const relief = [...vertices.values()].filter(point => point[2] > 11);
     assert.ok(relief.length > 3, 'raised stamp detail is present');
     if (expected.markOnRight) {
       const width = Math.max(...[...vertices.values()].map(point => point[0]));
       assert.ok(relief.every(point => point[0] > width / 2), 'left-side artwork is mirrored on the stamp');
     }
+    return;
+  }
+  if (expected.handle) {
+    assert.ok([...heights].filter(z => z > 33).length >= 60, 'post contains helical thread geometry');
     return;
   }
   assert.deepEqual([...heights].sort((a, b) => a - b), [0, expected.depth], 'straight-sided cutter has no height steps');
@@ -133,7 +138,7 @@ try {
     const [file] = await Promise.all([page.waitForEvent('download'), page.locator('#download-stamp').click()]);
     assert.equal(file.suggestedFilename(), 'coasterprint-cookie-stamp.stl');
     const bytes = await readFile(await file.path());
-    inspect(bytes, {stamp: true, depth: 4.4, markOnRight: name === 'transparent-circle-stamp'});
+    inspect(bytes, {stamp: true, depth: 12.4, markOnRight: name === 'transparent-circle-stamp'});
     if (output) await writeFile(join(output, name + '.stl'), bytes);
     if (name === 'transparent-circle-stamp') {
       const [center, border, fineLine] = await page.locator('.stamp-mark').evaluate(path =>
@@ -145,6 +150,38 @@ try {
     await page.locator('#view-cutter').click();
   }
   await checkStamp('sample-star-stamp');
+  await page.locator('#view-handle').click();
+  assert.equal(await page.locator('#viewer').getAttribute('aria-label'), 'Rotatable handle preview');
+  const [handle] = await Promise.all([page.waitForEvent('download'), page.locator('#download-handle').click()]);
+  assert.equal(handle.suggestedFilename(), 'coasterprint-stamp-ring-handle.stl');
+  const handleBytes = await readFile(await handle.path());
+  inspect(handleBytes, {handle: true, depth: 39.6});
+  const fit = await page.evaluate(async () => {
+    const [{default: Module}, {backingHeight, stampHandle, stampSocket}] = await Promise.all([
+      import('/vendor/manifold.js'), import('/cookie-cutter/stamp-handle.js')
+    ]);
+    const kernel = await Module({locateFile: name => '/vendor/' + name});
+    kernel.setup();
+    const owned = [];
+    const keep = value => { owned.push(value); return value; };
+    try {
+      const backing = keep(kernel.CrossSection.square([60, 60], true));
+      const socket = stampSocket(kernel, keep, backing);
+      const plate = keep(keep(backing.extrude(backingHeight)).subtract(socket));
+      const {solid, width, height} = stampHandle(kernel, keep);
+      const centered = keep(solid.translate([-width / 2, -height / 2, -32.4]));
+      const partlyInserted = keep(keep(centered.rotate([0, 0, -180])).translate([0, 0, -1.2]));
+      const finger = keep(keep(keep(kernel.Manifold.cylinder(14, 9.5, 9.5, 40))
+        .rotate([90, 0, 0])).translate([0, 7, -18.4]));
+      return [centered, partlyInserted].map(handle => keep(plate.intersect(handle)).volume())
+        .concat(keep(finger.intersect(centered)).volume());
+    } finally {
+      for (const value of owned.reverse()) value.delete();
+    }
+  });
+  assert.ok(fit.every(volume => volume < 0.001), 'threads mesh without interference and a 19 mm finger fits through');
+  if (output) await writeFile(join(output, 'ring-handle.stl'), handleBytes);
+  await page.locator('#view-cutter').click();
   const viewer = page.locator('#viewer');
   const before = await viewer.screenshot();
   await viewer.press('ArrowRight');
@@ -212,7 +249,7 @@ try {
   await draw([[.25,.2],[.65,.2],[.62,.38],[.75,.63],[.44,.8],[.25,.6]]);
   await build('drawn-outline', {axis: 'width', size: 60});
   assert.deepEqual(errors, []);
-  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, straight wall, invalid-mesh block, separate stamp STL and 3D previews');
+  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, straight wall, invalid-mesh block, threaded stamp and ring STLs, mating clearance, and 3D previews');
 } finally {
   await browser?.close();
   server.close();

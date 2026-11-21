@@ -1,4 +1,5 @@
 import Module from '../vendor/manifold.js';
+import {backingHeight, stampHandle, stampSocket} from './stamp-handle.js';
 
 const epsilon = 1e-7;
 
@@ -50,7 +51,8 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       segments: [intersection.slice(0, 2), intersection.slice(2)].map(indices => indices.map(i => points[i]))};
   }
 
-  const [{CrossSection, Manifold}, {binarySTL, signedArea}] = await Promise.all([runtime, import('/' + geometryScript)]);
+  const [kernel, {binarySTL, signedArea}] = await Promise.all([runtime, import('/' + geometryScript)]);
+  const {CrossSection, Manifold} = kernel;
   const owned = [];
   const keep = object => { owned.push(object); return object; };
   const cross = contours => keep(new CrossSection(contours, 'Positive'));
@@ -110,15 +112,19 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       const opened = offset(offset(clipped, -0.28), 0.28);
       const relief = keep(opened.intersect(clip));
       if (relief.isEmpty()) return;
-      const plateHeight = 3;
+
       const bounds = backing.bounds();
       const stampOrigin = [bounds.max[0], -bounds.min[1]];
       // Mirror across X so the impression reads correctly when the stamp turns face down.
       const orient = shape => keep(keep(shape.mirror([1, 0])).translate(stampOrigin));
-      const plate = keep(orient(backing).extrude(plateHeight));
-      const detail = keep(keep(orient(relief).extrude(stampDepth)).translate([0, 0, plateHeight]));
+      const printBacking = orient(backing);
+      const socket = stampSocket(kernel, keep, printBacking);
+      const plate = keep(keep(printBacking.extrude(backingHeight)).subtract(socket));
+      const detail = keep(keep(orient(relief).extrude(stampDepth)).translate([0, 0, backingHeight]));
       const stamp = keep(Manifold.union([plate, detail]));
-      return {...mesh(stamp, 'stamp'), depth: plateHeight + stampDepth,
+      const {solid: handle, ...handleDimensions} = stampHandle(kernel, keep);
+      return {...mesh(stamp, 'stamp'), depth: backingHeight + stampDepth,
+        handle: {...mesh(handle, 'stamp handle'), ...handleDimensions},
         width: bounds.max[0] - bounds.min[0], height: bounds.max[1] - bounds.min[1],
         preview: relief.toPolygons().map(polygon => polygon.map(([x, y]) => [minX + x / scale, maxY - y / scale]))};
     }
@@ -139,7 +145,7 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
 self.onmessage = async ({data}) => {
   try {
     const result = await build(data);
-    self.postMessage(result, [result.buffer, result.stamp?.buffer].filter(Boolean));
+    self.postMessage(result, [result.buffer, result.stamp?.buffer, result.stamp?.handle.buffer].filter(Boolean));
   } catch (error) {
     self.postMessage({error: error.message || 'The cutter could not be built. Try more smoothing.'});
   }

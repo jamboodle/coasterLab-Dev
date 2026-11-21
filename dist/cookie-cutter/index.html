@@ -90,6 +90,7 @@
       <div id="preview-parts" class="controls viewer-controls" hidden>
         <button id="view-cutter" type="button" aria-pressed="true">Show cutter</button>
         <button id="view-stamp" type="button" aria-pressed="false">Show stamp</button>
+        <button id="view-handle" type="button" aria-pressed="false">Show ring handle</button>
       </div>
       <canvas id="viewer" tabindex="0" aria-label="Rotatable cutter preview" hidden></canvas>
       <div id="viewer-controls" class="controls viewer-controls" hidden>
@@ -100,7 +101,8 @@
       </div>
       <button id="download" type="button" disabled>Download cutter STL</button>
       <button id="download-stamp" type="button" disabled>Download stamp STL</button>
-      <p>Print the cutter flat and the stamp with its details facing up. Flip the stamp over to press the cut dough.</p>
+      <button id="download-handle" type="button" disabled>Download ring handle STL</button>
+      <p>Print the pieces in their exported orientations. Screw the ring handle into the stamp’s back, then press the stamp into the cut dough.</p>
     </section>
   </main>
 </body>
