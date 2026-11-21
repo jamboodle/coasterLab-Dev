@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cookie Cutter Maker | CoasterPrint</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/assets/brand/brand.css">
+  <link rel="stylesheet" href="/suncatcher/suncatcher.css">
+  <link rel="stylesheet" href="/assets/brand/maker-theme.css">
+  <link rel="stylesheet" href="/plaque/plaque.css">
+  <link rel="stylesheet" href="cutter.css">
+  <script src="/vendor/imagetracer.js" defer></script>
+  <script type="module" src="maker.js"></script>
+</head>
+<body>
+  <header class="site-header-logo">
+    <a class="brand brand--logo" href="/" aria-label="CoasterPrint home"><img src="/assets/brand/coasterprint-logo-light.png" alt="CoasterPrint"></a>
+    <nav aria-label="Main navigation">
+      <a href="/#maker">Make a coaster</a>
+      <a href="/plaque/">Plaque Maker</a>
+      <a href="/cookie-cutter/" aria-current="page">Cookie Cutter Maker</a>
+      <a href="/#holders">Coaster holders</a>
+      <a href="/pricing/">Account &amp; credits</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Cookie Cutter Maker</h1>
+    <p class="intro">Turn an image into a single hollow cutter and download a free STL for Bambu Studio. Your image stays in this browser.</p>
+    <section aria-labelledby="outline-title">
+      <h2 id="outline-title">Artwork and cut line</h2>
+      <div class="controls">
+        <label class="plaque-drop" id="drop">
+          <strong>Choose artwork or drag it here</strong>
+          <span>PNG or JPG · up to 20 MB</span>
+          <input id="file" type="file" accept=".png,.jpg,.jpeg,image/png,image/jpeg" aria-label="Upload PNG or JPG">
+        </label>
+        <button id="sample" type="button">Try the star sample</button>
+      </div>
+      <div id="outline-tools" class="trace-controls" hidden>
+        <div class="controls">
+          <label id="threshold-control">Brightness threshold <input id="threshold" type="range" min="1" max="254" value="128"></label>
+          <label class="check" id="invert-control"><input id="invert" type="checkbox"> Invert light and dark</label>
+          <label>Trace smoothing <select id="smoothing"><option value="0.35">Low</option><option value="1" selected>Balanced</option><option value="3">High</option></select></label>
+          <label>Detected shape <select id="shape"></select></label>
+        </div>
+        <figure id="artboard">
+          <canvas id="artwork" aria-label="Original image"></canvas>
+          <svg id="overlay" aria-label="Cut line over original image"></svg>
+        </figure>
+        <div class="controls">
+          <button id="draw" type="button">Draw new outline</button>
+          <button id="edit" type="button">Edit outline</button>
+          <button id="close" type="button" hidden>Close outline</button>
+          <button id="undo" type="button" hidden>Undo point change</button>
+          <button id="use-trace" type="button" hidden>Use detected outline</button>
+        </div>
+      </div>
+      <p id="trace-status" role="status">Upload an image or try the star sample.</p>
+    </section>
+    <section aria-labelledby="size-title">
+      <h2 id="size-title">Finished size</h2>
+      <div class="controls">
+        <label>Cookie width (mm) <input id="width" type="number" min="10" max="240" step="0.1" value="80"></label>
+        <label>Cookie height (mm) <input id="height" type="number" min="10" max="240" step="0.1"></label>
+        <button id="build" type="button" class="primary" disabled>Confirm outline and preview</button>
+      </div>
+      <p>The cookie size follows the inside of the cutting edge. The grip makes the cutter larger.</p>
+      <details class="trace-controls">
+        <summary>Advanced cutter settings</summary>
+        <div class="controls">
+          <label>Cutter height (mm) <input id="cutter-height" type="number" min="6" max="30" step="0.1" value="14"></label>
+          <label>Wall thickness (mm) <input id="wall" type="number" min="0.8" max="4" step="0.05" value="1.6"></label>
+          <label>Cutting-edge thickness (mm) <input id="edge" type="number" min="0.45" max="2" step="0.05" value="0.65"></label>
+          <label>Extra grip width per side (mm) <input id="grip" type="number" min="1" max="8" step="0.1" value="3"></label>
+        </div>
+      </details>
+    </section>
+    <section aria-labelledby="preview-title">
+      <h2 id="preview-title">Cutter preview</h2>
+      <p id="model-status" role="status">Confirm an outline to build the cutter.</p>
+      <canvas id="viewer" tabindex="0" aria-label="Rotatable cutter preview" hidden></canvas>
+      <div id="viewer-controls" class="controls viewer-controls" hidden>
+        <button id="zoom-in" type="button">Zoom in</button>
+        <button id="zoom-out" type="button">Zoom out</button>
+        <button id="reset" type="button">Reset view</button>
+        <span id="viewer-help">Drag or use the arrow keys to rotate.</span>
+      </div>
+      <button id="download" type="button" disabled>Download STL</button>
+      <p>Import in millimeters with the grip flat on the build plate and the cutting edge pointing up.</p>
+    </section>
+  </main>
+</body>
+</html>
