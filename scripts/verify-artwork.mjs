@@ -100,7 +100,7 @@ try {
 
   const guest = await browser.newPage({acceptDownloads: true});
   await guest.goto(origin);
-  await guest.getByRole('link', {name: 'Resources', exact: true}).click();
+  await guest.getByRole('link', {name: 'Design Library', exact: true}).click();
   await guest.getByRole('searchbox').fill('amber fox');
   await guest.getByLabel('Category').selectOption('Animals / Woodland');
   await guest.getByRole('button', {name: 'Hidden Format'}).click();

@@ -172,5 +172,6 @@ try {
   for (const category of categories) $('category').add(new Option(category, category));
   showResults();
 } catch {
-  $('results').textContent = 'The artwork library could not load. Refresh to try again.';
+  $('results').textContent = resources ? 'The Design Library could not load. Refresh to try again.' :
+    'The artwork library could not load. Refresh to try again.';
 }
