@@ -1,6 +1,7 @@
 import {decodeArtwork} from '../suncatcher/trace.js';
 import {createViewer} from '../plaque/viewer.js';
 import {downloadFile} from '../plaque/export.js';
+import {project3MF} from '../suncatcher/downloads.js';
 import {detectOutlines, detectStamp, starSample, usesTransparency} from './trace.js';
 
 const $ = id => document.getElementById(id);
@@ -82,6 +83,7 @@ function invalidate() {
   $('download').disabled = $('download-stamp').disabled = $('download-handle').disabled = true;
   $('preview-parts').hidden = true;
   $('stamp-status').textContent = '';
+  $('download-status').textContent = '';
   previewPart = 'cutter';
   $('model-status').textContent = 'Confirm an outline to build the cutter.';
 }
@@ -276,8 +278,7 @@ function present(result) {
     `Cookie ${format(result.cookieWidth)} × ${format(result.cookieHeight)} mm · Cutter footprint ${format(result.width)} × ${format(result.height)} mm · Cutter height ${format(result.depth)} mm.` +
     (result.issues.length ? ' Amber areas show tight details or rounded corners. Increase the cookie size or smooth the outline if those details matter.' : '') +
     ($('viewer').hidden ? ' 3D preview unavailable on this device.' : '');
-  $('download').disabled = false;
-  $('download-stamp').disabled = $('download-handle').disabled = !result.stamp;
+  refreshDownloads();
   $('stamp-status').textContent = result.stamp
     ? 'Stamp ready. Select Show stamp to see the print and the matching marks on your artwork.'
     : result.stampError || 'No printable interior details found. Adjust the stamp threshold or try light details.';
@@ -359,17 +360,53 @@ for (const id of ['width', 'height', 'cutter-height', 'wall', 'stamp-threshold',
 $('zoom-in').onclick = () => viewer?.zoomBy(1.2);
 $('zoom-out').onclick = () => viewer?.zoomBy(1 / 1.2);
 $('reset').onclick = () => viewer?.reset();
-$('download').onclick = () => {
-  if (model) downloadFile('coasterprint-cookie-cutter.stl', model.buffer, 'model/stl');
+const exportsByPart = {
+  cutter: {id: 'download', title: 'cutter', filename: 'coasterprint-cookie-cutter'},
+  stamp: {id: 'download-stamp', title: 'stamp', filename: 'coasterprint-cookie-stamp'},
+  handle: {id: 'download-handle', title: 'ring handle', filename: 'coasterprint-stamp-ring-handle'}
 };
+let exporting = false;
 
-$('view-cutter').onclick = () => { if (model) showPart('cutter'); };
-$('view-stamp').onclick = () => { if (model?.stamp) showPart('stamp'); };
-$('download-stamp').onclick = () => {
-  if (model?.stamp) downloadFile('coasterprint-cookie-stamp.stl', model.stamp.buffer, 'model/stl');
-};
+function refreshDownloads() {
+  const label = $('export-format').value.toUpperCase();
+  for (const [part, {id, title}] of Object.entries(exportsByPart)) {
+    $(id).textContent = `Download ${title} ${label}`;
+    $(id).disabled = exporting || !(part === 'cutter' ? model : model?.stamp);
+  }
+}
 
-$('view-handle').onclick = () => { if (model?.stamp) showPart('handle'); };
-$('download-handle').onclick = () => {
-  if (model?.stamp) downloadFile('coasterprint-stamp-ring-handle.stl', model.stamp.handle.buffer, 'model/stl');
-};
+$('export-format').onchange = refreshDownloads;
+for (const [part, {id, title, filename}] of Object.entries(exportsByPart)) {
+  $('view-' + part).onclick = () => {
+    if (part === 'cutter' ? model : model?.stamp) showPart(part);
+  };
+  $(id).onclick = async () => {
+    const selected = {cutter: model, stamp: model?.stamp, handle: model?.stamp?.handle}[part];
+    if (!selected || exporting) return;
+    const status = $('download-status');
+    status.textContent = '';
+    if ($('export-format').value === 'stl') {
+      downloadFile(filename + '.stl', selected.buffer, 'model/stl');
+      return;
+    }
+    const current = model;
+    exporting = true;
+    refreshDownloads();
+    status.textContent = 'Preparing 3MF…';
+    try {
+      const {bytes} = await project3MF([{name: 'CoasterPrint ' + title, buffer: selected.buffer,
+        bounds: {min: [0, 0], max: [selected.width, selected.height]}}], {
+        application: 'CoasterPrint Cookie Cutter Maker', centerSingle: true
+      });
+      if (model === current) {
+        downloadFile(filename + '.3mf', bytes, 'model/3mf');
+        status.textContent = '';
+      }
+    } catch {
+      if (model === current) status.textContent = 'Could not create the 3MF. Try again or choose STL.';
+    } finally {
+      exporting = false;
+      refreshDownloads();
+    }
+  };
+}

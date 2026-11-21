@@ -70,7 +70,9 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       return cross(exterior);
     }
     const outer = envelope(wall);
-    const {min, max} = outer.bounds();
+    // The handling end prints against the bed, with the cutting edge above it.
+    const lip = envelope(wall + 1.25);
+    const {min, max} = lip.bounds();
     const [width, footprintHeight] = max.map((value, index) => value - min[index]);
     if (Math.max(width, footprintHeight) > 250) throw Error('The cutter footprint exceeds 250 mm. Reduce the cookie size or wall thickness.');
     const thin = offset(inner, -0.4);
@@ -87,8 +89,10 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       return binarySTL(solid, 'CoasterPrint cookie ' + name + '; units mm');
     }
 
-    const ring = keep(outer.subtract(inner));
-    const solid = keep(keep(ring.extrude(height)).translate([-min[0], -min[1], 0]));
+    const joined = keep(Manifold.union([keep(outer.extrude(height)), keep(lip.extrude(1.6))]));
+    const opening = keep(keep(inner.extrude(height + 0.4)).translate([0, 0, -0.2]));
+    const ring = keep(joined.subtract(opening));
+    const solid = keep(keep(keep(ring.translate([-min[0], -min[1], 0])).asOriginal()).setTolerance(0.0001));
     const cutter = mesh(solid, 'cutter');
 
     function makeStamp() {

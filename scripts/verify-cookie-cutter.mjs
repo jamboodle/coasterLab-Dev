@@ -5,8 +5,11 @@ import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {withStatic} from '../server/static.mjs';
+import {stlMeshXML} from '../dist/shared/stl-mesh.js';
 
-const {chromium} = createRequire(import.meta.url)('playwright');
+const require = createRequire(import.meta.url);
+const {chromium} = require('playwright');
+const {unzipSync} = require('../dist/vendor/fflate.js');
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
 const server = createServer(withStatic((req, res) => res.writeHead(404).end(), root));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -65,7 +68,7 @@ function inspect(bytes, expected) {
     assert.ok([...heights].filter(z => z > 33).length >= 60, 'post contains helical thread geometry');
     return;
   }
-  assert.deepEqual([...heights].sort((a, b) => a - b), [0, expected.depth], 'straight-sided cutter has no height steps');
+  assert.deepEqual([...heights].sort((a, b) => a - b), [0, Math.fround(1.6), expected.depth], 'lip is only at the handling end');
   const rim = new Map();
   for (const [edge, count] of topEdges) {
     if (count !== 1) continue;
@@ -93,6 +96,7 @@ function inspect(bytes, expected) {
   };
   near(Math.min(...loops.map(loop => span(loop, 0))), expected.cookieWidth);
   near(Math.min(...loops.map(loop => span(loop, 1))), expected.cookieHeight);
+  assert.ok(expected.width - Math.max(...loops.map(loop => span(loop, 0))) > 2.3, 'lip is wider than the cutting edge');
   near(span([...vertices.values()], 0), expected.width);
   near(span([...vertices.values()], 1), expected.height);
 }
@@ -130,6 +134,29 @@ try {
   await page.locator('#sample').click();
   await page.waitForFunction(() => document.querySelector('#trace-status').textContent.includes('1 detected shape'));
   await build('sample-star', {axis: 'width', size: 80});
+  assert.equal(await page.locator('#stamp-depth').inputValue(), '3');
+  for (const [id, filename] of [
+    ['download', 'coasterprint-cookie-cutter'],
+    ['download-stamp', 'coasterprint-cookie-stamp'],
+    ['download-handle', 'coasterprint-stamp-ring-handle']
+  ]) {
+    await page.locator('#export-format').selectOption('stl');
+    const button = page.locator('#' + id);
+    const [stl] = await Promise.all([page.waitForEvent('download'), button.click()]);
+    const solid = await readFile(await stl.path());
+    await page.locator('#export-format').selectOption('3mf');
+    assert.match(await button.textContent(), /3MF$/);
+    const [project] = await Promise.all([page.waitForEvent('download'), button.click()]);
+    assert.equal(project.suggestedFilename(), filename + '.3mf');
+    const bytes = await readFile(await project.path());
+    const files = unzipSync(new Uint8Array(bytes));
+    const xml = Buffer.from(files['3D/3dmodel.model']).toString();
+    assert.match(xml, /unit="millimeter"/);
+    assert.match(xml, /CoasterPrint Cookie Cutter Maker/);
+    assert.ok(xml.includes(stlMeshXML(Uint8Array.from(solid).buffer).xml), '3MF uses the matching STL mesh');
+    if (output) await writeFile(join(output, filename + '.3mf'), bytes);
+  }
+  await page.locator('#export-format').selectOption('stl');
   async function checkStamp(name) {
     assert.equal(await page.locator('#download-stamp').isEnabled(), true, await page.locator('#stamp-status').textContent());
     await page.locator('#view-stamp').click();
@@ -138,7 +165,7 @@ try {
     const [file] = await Promise.all([page.waitForEvent('download'), page.locator('#download-stamp').click()]);
     assert.equal(file.suggestedFilename(), 'coasterprint-cookie-stamp.stl');
     const bytes = await readFile(await file.path());
-    inspect(bytes, {stamp: true, depth: 12.4, markOnRight: name === 'transparent-circle-stamp'});
+    inspect(bytes, {stamp: true, depth: 14, markOnRight: name === 'transparent-circle-stamp'});
     if (output) await writeFile(join(output, name + '.stl'), bytes);
     if (name === 'transparent-circle-stamp') {
       const [center, border, fineLine] = await page.locator('.stamp-mark').evaluate(path =>
@@ -249,7 +276,7 @@ try {
   await draw([[.25,.2],[.65,.2],[.62,.38],[.75,.63],[.44,.8],[.25,.6]]);
   await build('drawn-outline', {axis: 'width', size: 60});
   assert.deepEqual(errors, []);
-  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, straight wall, invalid-mesh block, threaded stamp and ring STLs, mating clearance, and 3D previews');
+  console.log('PASS cookie cutter sample, PNG, inverted JPG, outline editor, handling lip, STL and 3MF parity, invalid-mesh block, threaded stamp and ring STLs, mating clearance, and 3D previews');
 } finally {
   await browser?.close();
   server.close();

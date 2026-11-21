@@ -24,7 +24,7 @@ export async function stlZip(parts, notes, map) {
   return zip(files);
 }
 
-export async function project3MF(parts) {
+export async function project3MF(parts, {application = 'CoasterPrint Suncatcher Maker', centerSingle = false} = {}) {
   const objects = [], placements = [];
   let x = margin, y = margin, row = 0;
   let oversized = false;
@@ -37,10 +37,12 @@ export async function project3MF(parts) {
       row = 0;
     }
     if (x + width > bed - margin || y + height > bed - margin) oversized = true;
+    const left = centerSingle && parts.length === 1 ? (bed - width) / 2 : x;
+    const front = centerSingle && parts.length === 1 ? (bed - height) / 2 : y;
     const id = index + 1;
     const {xml} = stlMeshXML(part.buffer);
     objects.push(`<object id="${id}" name="${part.name}" type="model"><mesh>${xml}</mesh></object>`);
-    placements.push(`<item objectid="${id}" transform="1 0 0 0 1 0 0 0 1 ${x - min[0]} ${y - min[1]} 0"/>`);
+    placements.push(`<item objectid="${id}" transform="1 0 0 0 1 0 0 0 1 ${left - min[0]} ${front - min[1]} 0"/>`);
     x += width + margin;
     row = Math.max(row, height);
     // Large STL conversions run in batches so the page can respond during export.
@@ -50,7 +52,7 @@ export async function project3MF(parts) {
     '[Content_Types].xml': '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>',
     '_rels/.rels': '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>',
     '3D/3dmodel.model': '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">' +
-      '<metadata name="Application">CoasterPrint Suncatcher Maker</metadata><resources>' + objects.join('') +
+      `<metadata name="Application">${application}</metadata><resources>` + objects.join('') +
       '</resources><build>' + placements.join('') + '</build></model>'
   };
   return {oversized, bytes: await zip(Object.fromEntries(Object.entries(files).map(([name, value]) =>

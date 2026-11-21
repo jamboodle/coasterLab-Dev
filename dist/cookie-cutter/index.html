@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/plaque/plaque.css">
   <link rel="stylesheet" href="cutter.css">
   <script src="/vendor/imagetracer.js" defer></script>
+  <script src="/vendor/fflate.js" defer></script>
   <script type="module" src="maker.js"></script>
 </head>
 <body>
@@ -65,7 +66,7 @@
         <label>Cookie height (mm) <input id="height" type="number" min="10" max="240" step="0.1"></label>
         <button id="build" type="button" class="primary" disabled>Confirm outline and preview</button>
       </div>
-      <p>Cookie size is measured from the inside of the cutter wall.</p>
+      <p>Cookie size is measured from the inside of the cutter wall. The footprint includes the handling lip.</p>
       <details class="trace-controls">
         <summary>Advanced cutter settings</summary>
         <div class="controls">
@@ -80,7 +81,7 @@
       <div class="controls">
         <label>Stamp threshold <input id="stamp-threshold" type="range" min="1" max="254" value="90"></label>
         <label class="check"><input id="stamp-invert" type="checkbox"> Use light details</label>
-        <label>Emboss depth (mm) <input id="stamp-depth" type="number" min="0.6" max="3" step="0.1" value="1.4"></label>
+        <label>Emboss depth (mm) <input id="stamp-depth" type="number" min="0.6" max="3" step="0.1" value="3"></label>
       </div>
       <p id="stamp-status" role="status"></p>
     </section>
@@ -99,10 +100,14 @@
         <button id="reset" type="button">Reset view</button>
         <span id="viewer-help">Drag or use the arrow keys to rotate.</span>
       </div>
-      <button id="download" type="button" disabled>Download cutter STL</button>
-      <button id="download-stamp" type="button" disabled>Download stamp STL</button>
-      <button id="download-handle" type="button" disabled>Download ring handle STL</button>
-      <p>Print the pieces in their exported orientations. Screw the ring handle into the stamp’s back, then press the stamp into the cut dough.</p>
+      <div class="controls">
+        <label>Export format <select id="export-format"><option value="stl">STL</option><option value="3mf">3MF</option></select></label>
+        <button id="download" type="button" disabled>Download cutter STL</button>
+        <button id="download-stamp" type="button" disabled>Download stamp STL</button>
+        <button id="download-handle" type="button" disabled>Download ring handle STL</button>
+      </div>
+      <p id="download-status" role="status"></p>
+      <p>Print the cutter with its handling lip on the build plate. Print the stamp and ring handle in their exported orientations, then screw the handle into the stamp’s back.</p>
     </section>
   </main>
 </body>
