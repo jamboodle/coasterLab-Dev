@@ -100,11 +100,15 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
     function makeStamp() {
       if (stampMode !== 'plain' && !(stampDepth >= 0.6 && stampDepth <= 3)) throw Error('Set stamp depth between 0.6 and 3 mm.');
       const backing = offset(inner, -0.75);
-      const clip = offset(backing, -0.65);
-      if (clip.isEmpty() || backing.decompose().map(keep).length !== 1) {
+      if (backing.isEmpty() || backing.decompose().map(keep).length !== 1) {
         throw Error('The outline is too narrow for a one-piece stamp. Increase the cookie size.');
       }
       if (stampMode !== 'plain' && !stampPaths?.length) return;
+      // Cropping raised detail inside the backing removes border fragments without reshaping the stamp.
+      const clip = offset(backing, strongCleanup ? -2.25 : -0.65);
+      if (stampMode !== 'plain' && clip.isEmpty()) {
+        throw Error('There is no room for embossing inside the edge clearance. Increase the cookie size or use Standard cleanup.');
+      }
       const paths = (stampPaths || []).map(path => path.map(([x, y]) => [(x - minX) * scale, (maxY - y) * scale]));
       let details, removedSpecks = 0;
       if (stampMode === 'color') {
