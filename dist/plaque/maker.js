@@ -7,9 +7,9 @@ const $ = id => document.getElementById(id);
 const traceControls = ['mode', 'color-count', 'detail', 'background', 'smooth-outer', 'edge-strength', 'clean-specks', 'seal-rim', 'threshold', 'pinhole'];
 const controls = ['file', 'sample', ...traceControls, 'trace-artwork', 'sort-area', 'width', 'largest', 'clean-relief', 'build', 'project', 'stls'];
 let assets;
-async function getAssets() {
+async function getAssets(signal) {
   if (assets) return assets;
-  const response = await fetch('../asset-manifest.json');
+  const response = await fetch('../asset-manifest.json', {signal});
   if (!response.ok) throw Error('CoasterPrint’s trace engine could not be loaded.');
   assets = await response.json();
   return assets;
@@ -36,22 +36,8 @@ function refresh() {
   $('sort-area').disabled ||= rows.length < 2;
   $('project').disabled ||= !model;
   $('stls').disabled ||= !model;
-}
-
-function runWorker(url, options, payload, transfer = []) {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(url, options);
-    const timer = setTimeout(() => finish(reject, Error('Processing took too long. Try fewer colors or Smooth detail.')), 120000);
-    function finish(callback, value) {
-      clearTimeout(timer);
-      worker.terminate();
-      callback(value);
-    }
-    worker.onmessage = ({data}) => data.error ? finish(reject, Error(data.error)) : finish(resolve, data);
-    worker.onerror = () => finish(reject, Error('The geometry or tracing engine could not start.'));
-    worker.onmessageerror = () => finish(reject, Error('The browser could not read the processing result.'));
-    try { worker.postMessage(payload, transfer); } catch (error) { finish(reject, error); }
-  });
+  $('next-build').hidden = !trace;
+  $('next-preview').hidden = !model;
 }
 
 function toggleViewer(visible) {
@@ -304,25 +290,28 @@ async function traceSource() {
   invalidateTrace();
   busy = true;
   refresh();
-  $('trace-status').textContent = 'Tracing solid colors…';
+  const progress = window.startMakerBuild('Tracing solid colors…', $('trace-status'));
   try {
-    const {scripts} = await getAssets();
+    const {scripts} = await getAssets(progress.signal);
+    progress.signal.throwIfAborted();
     const canvas = $('original');
     const {width, height} = canvas;
     const pixels = canvas.getContext('2d').getImageData(0, 0, width, height).data;
-    const output = await runWorker('/' + scripts['worker.js'], {type: 'classic'}, {
+    const output = await window.runMakerWorker('/' + scripts['worker.js'], {type: 'classic'}, {
       id: 'plaque', mode: $('mode').value, colors: count, width, height, pixels,
       detail: $('detail').value, removeBackground: $('background').checked,
       smoothOuter: $('smooth-outer').checked, edgeStrength: $('edge-strength').value,
       cleanEdgeSpecks: $('clean-specks').checked, sealOuterRim: $('seal-rim').checked,
       threshold: $('threshold').valueAsNumber, pinholeArea: Number($('pinhole').value)
-    }, [pixels.buffer]);
+    }, {signal: progress.signal, transfer: [pixels.buffer], onProgress: progress.update});
+    progress.update('Preparing the traced preview…');
     const nextTrace = readTrace(output, width);
     svgURL = URL.createObjectURL(new Blob([output.svg], {type: 'image/svg+xml'}));
     const image = new Image();
     image.src = svgURL;
     image.alt = 'Artwork traced into solid colors';
     await image.decode();
+    progress.signal.throwIfAborted();
     const areas = colorAreas(image, nextTrace.sourceColors, width, height);
     nextTrace.sourceColors.sort((a, b) => areas.get(a) - areas.get(b));
     trace = nextTrace;
@@ -331,10 +320,13 @@ async function traceSource() {
     $('trace-status').textContent = `${trace.sourceColors.length} solid colors, ordered by traced area.`;
     invalidateModel();
   } catch (error) {
+    if (progress.signal.aborted) invalidateTrace();
     $('trace-status').textContent = error.message;
   } finally {
+    const restoreFocus = progress.finish();
     busy = false;
     refresh();
+    if (restoreFocus) $('trace-artwork').focus({preventScroll: true});
   }
 }
 
@@ -413,13 +405,13 @@ async function build() {
   invalidateModel();
   busy = true;
   refresh();
-  $('model-status').textContent = 'Building stacked tiers…';
+  const progress = window.startMakerBuild('Preparing stacked tiers…', $('model-status'));
   try {
     const settings = heightSettings();
-    const {scripts} = await getAssets();
-    const {result} = await runWorker(new URL('./geometry-worker.js', import.meta.url), {type: 'module'}, {
+    const {scripts} = await getAssets(progress.signal);
+    const {result} = await window.runMakerWorker(new URL('./geometry-worker.js', import.meta.url), {type: 'module'}, {
       ...trace, ...settings, geometryScript: scripts['stl-geometry.js']
-    });
+    }, {signal: progress.signal, onProgress: progress.update});
     model = result;
     showModel(result);
     const dims = [result.width, result.height, result.depth].map(value => Number(value.toFixed(2))).join(' × ');
@@ -438,8 +430,10 @@ async function build() {
   } catch (error) {
     $('model-status').textContent = error.message;
   } finally {
+    const restoreFocus = progress.finish();
     busy = false;
     refresh();
+    if (restoreFocus) $('build').focus({preventScroll: true});
   }
 }
 

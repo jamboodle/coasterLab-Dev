@@ -2,15 +2,15 @@ import {connectDesignLibrary} from '../shared/design-library.js';
 import {decodeArtwork} from '../suncatcher/trace.js';
 import {createViewer} from '../plaque/viewer.js';
 import {downloadFile} from '../plaque/export.js';
-import {detectColorBoundaries, detectOutlines, detectStamp, starSample, usesTransparency} from './trace.js';
+import {detectOutlines, starSample, usesTransparency} from './trace.js';
 
 const $ = id => document.getElementById(id);
 const overlay = $('overlay');
 const source = $('artwork');
 const namespace = 'http://www.w3.org/2000/svg';
 let assets, pathContours, image, transparent, traces = [], manual, draft, history = [], dragging;
-let sizingAxis = 'width', worker, model, viewer, viewerAvailable = true, diagnostics, invalid = false, loadVersion = 0;
-let timer, loading = false, previewPart = 'cutter';
+let sizingAxis = 'width', activeBuild, model, viewer, viewerAvailable = true, diagnostics, invalid = false, loadVersion = 0;
+let loading = false, previewPart = 'cutter';
 
 async function geometryAssets() {
   if (assets) return assets;
@@ -18,26 +18,6 @@ async function geometryAssets() {
   if (!response.ok) throw Error('The tracing and geometry tools could not be loaded. Reload to retry.');
   const {scripts} = await response.json();
   return scripts;
-}
-
-const paletteScripts = new Map();
-function loadPaletteScripts() {
-  return Promise.all(['palette.js', 'alpha.js'].map(name => {
-    if (!paletteScripts.has(name)) {
-      paletteScripts.set(name, new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = '/' + assets[name];
-        script.onload = resolve;
-        script.onerror = () => {
-          script.remove();
-          paletteScripts.delete(name);
-          reject(Error('Could not load color tracing. Try again or use Bold lines.'));
-        };
-        document.head.append(script);
-      }));
-    }
-    return paletteScripts.get(name);
-  }));
 }
 
 function activeOutline() {
@@ -89,13 +69,17 @@ function renderOutline(focus) {
   $('undo').disabled = !history.length;
   $('use-trace').hidden = !draft && !manual;
   $('use-trace').textContent = traces.length ? 'Use detected outline' : 'Cancel drawing';
-  $('build').disabled = loading || Boolean(draft) || !activeOutline() || Boolean(worker);
+  $('next-build').hidden = !activeOutline() || Boolean(draft);
+  $('next-preview').hidden = !model;
+  $('build').disabled = loading || Boolean(draft) || !activeOutline() || Boolean(activeBuild);
 }
 
 function invalidate() {
-  if (worker) worker.terminate();
-  worker = undefined;
-  clearTimeout(timer);
+  if (activeBuild) {
+    activeBuild.cancel();
+    activeBuild.finish();
+    activeBuild = undefined;
+  }
   model = diagnostics = undefined;
   invalid = false;
   viewer?.clear();
@@ -320,40 +304,44 @@ function present(result) {
 
 $('build').onclick = async () => {
   const points = activeOutline();
-  if (!points || draft || worker) return;
+  if (!points || draft || activeBuild) return;
   invalidate();
-  worker = new Worker(new URL('./geometry-worker.js', import.meta.url), {type: 'module'});
-  const current = worker;
-  const finish = result => {
-    if (worker !== current) return;
-    current.terminate();
-    worker = undefined;
-    clearTimeout(timer);
-    present({...result, stampError: stampError || result.stampError});
-    renderOutline();
-  };
-  worker.onmessage = ({data}) => finish(data);
-  worker.onerror = () => finish({error: 'The geometry engine could not start.'});
-  worker.onmessageerror = () => finish({error: 'The browser could not read the cutter mesh.'});
-  timer = setTimeout(() => finish({error: 'The cutter took too long to build. Try more smoothing.'}), 90000);
-  let stampPaths, stampError;
-  const stampMode = $('stamp-mode').value;
-  const smoothing = Number($('smoothing').value);
-  $('model-status').textContent = 'Building and checking the cutter…';
+  const progress = window.startMakerBuild('Preparing cookie cutter…', $('model-status'));
+  activeBuild = progress;
   renderOutline();
+  const stampMode = $('stamp-mode').value;
+  const settings = {points, stampMode, strongCleanup: $('stamp-cleanup').value === 'strong',
+    axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
+    height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, stampDepth: $('stamp-depth').valueAsNumber};
   try {
-    if (stampMode === 'color') {
-      await loadPaletteScripts();
-      if (worker !== current) return;
-      stampPaths = detectColorBoundaries(image, Number($('stamp-colors').value), smoothing, pathContours);
-    } else if (stampMode === 'lines') stampPaths = detectStamp(image, $('stamp-threshold').valueAsNumber, $('stamp-invert').checked,
-      smoothing, pathContours);
+    let stampPaths, stampError;
+    if (stampMode !== 'plain') {
+      progress.update('Tracing the stamp artwork…');
+      try {
+        ({paths: stampPaths} = await window.runMakerWorker(new URL('./stamp-trace-worker.js', import.meta.url), undefined, {
+          image, mode: stampMode, colors: Number($('stamp-colors').value), threshold: $('stamp-threshold').valueAsNumber,
+          invert: $('stamp-invert').checked, smoothing: Number($('smoothing').value), scripts: assets
+        }, {signal: progress.signal, onProgress: progress.update}));
+      } catch (error) {
+        progress.signal.throwIfAborted();
+        stampError = error.message;
+      }
+    }
+    progress.update('Building the cutter wall…');
+    const result = await window.runMakerWorker(new URL('./geometry-worker.js', import.meta.url), {type: 'module'},
+      {...settings, stampPaths}, {signal: progress.signal, onProgress: progress.update, acceptError: true,
+        timeout: 90000, timeoutMessage: 'The cutter took too long to build. Try more smoothing.'});
+    present({...result, stampError: stampError || result.stampError});
   } catch (error) {
-    stampError = error.message;
+    if (activeBuild === progress) $('model-status').textContent = error.message;
+  } finally {
+    if (activeBuild === progress) {
+      const restoreFocus = progress.finish();
+      activeBuild = undefined;
+      renderOutline();
+      if (restoreFocus) $('build').focus({preventScroll: true});
+    }
   }
-  if (worker !== current) return;
-  current.postMessage({points, stampPaths, stampMode, strongCleanup: $('stamp-cleanup').value === 'strong', axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
-    height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, stampDepth: $('stamp-depth').valueAsNumber});
 };
 
 connectDesignLibrary('cookie-cutter', file => loading ? 'Cookie Cutter Maker is loading an image. Try again shortly.' : load(file));

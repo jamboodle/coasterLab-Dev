@@ -15,7 +15,7 @@
   <script src="/maker-account.js" defer></script>
   <script type="module" src="maker.js"></script>
   <script defer src="/assets/analytics.js"></script>
-</head>
+<link rel="stylesheet" href="/assets/maker-mobile.css"><script defer src="/shared/maker-build.js"></script></head>
 <body>
   <header class="site-header-logo">
   <a class="brand brand--logo" href="/" aria-label="CoasterPrint home"><img src="/assets/brand/coasterprint-logo-light.png" width="2172" height="724" alt="CoasterPrint"></a>
@@ -27,7 +27,7 @@
     <a href="/pricing/">Account &amp; credits</a>
   </nav>
 </header>
-  <main>
+  <main class="touch-maker">
     <p id="maker-account" role="status"></p>
     <h1>Cookie Cutter Maker</h1>
     <p class="intro">Cut the cookie outline first, then press the matching stamp to emboss the details. Your image stays in this browser.</p>
@@ -62,13 +62,13 @@
         </div>
       </div>
       <p id="trace-status" role="status">Upload an image or try the star sample.</p>
+      <a id="next-build" class="mobile-maker-next" href="#size-title" hidden>Next: set cookie size</a>
     </section>
     <section aria-labelledby="size-title">
       <h2 id="size-title">Finished size</h2>
       <div class="controls">
         <label>Cookie width (mm) <input id="width" type="number" min="10" max="240" step="0.1" value="80"></label>
         <label>Cookie height (mm) <input id="height" type="number" min="10" max="240" step="0.1"></label>
-        <button id="build" type="button" class="primary" disabled>Confirm outline and preview</button>
       </div>
       <p>Cookie size is measured from the inside of the cutter wall. The footprint includes the handling lip.</p>
       <details class="trace-controls">
@@ -90,10 +90,15 @@
         <label id="stamp-cleanup-control">Stamp cleanup <select id="stamp-cleanup"><option value="standard">Standard</option><option value="strong">Strong</option></select></label>
         <label id="stamp-depth-control">Emboss depth (mm) <input id="stamp-depth" type="number" min="0.6" max="3" step="0.1" value="3"></label>
       </div>
+      <div class="controls build-actions">
+        <button id="build" type="button" class="primary" disabled>Confirm outline and preview</button>
+      </div>
+      <p id="model-status" role="status">Confirm an outline to build the cutter.</p>
+      <a id="next-preview" class="mobile-maker-next" href="#preview-title" hidden>View preview and downloads</a>
     </section>
     <section aria-labelledby="preview-title">
       <h2 id="preview-title">Cutter and stamp preview</h2>
-      <p id="model-status" role="status">Confirm an outline to build the cutter.</p>
+
       <p id="stamp-status" role="status"></p>
       <div class="controls" id="stamp-recovery" hidden>
         <a href="#stamp-title">Adjust stamp settings</a>

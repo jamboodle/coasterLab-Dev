@@ -217,7 +217,7 @@ try {
       const opening = ' M4 4 L4 8 L8 8 L8 4 Z';
       try {
         const {result, error} = await new Promise((resolve, reject) => {
-          worker.onmessage = event => resolve(event.data);
+          worker.onmessage = ({data}) => { if (!data.progress) resolve(data); };
           worker.onerror = reject;
           worker.postMessage({
             paths: [
@@ -374,6 +374,7 @@ try {
   const recovery = await page.evaluate(() => new Promise((resolve, reject) => {
     const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
     worker.onmessage = ({data}) => {
+      if (data.progress) return;
       worker.terminate();
       if (data.error) reject(Error(data.error));
       else resolve({repair: data.result.repair, tiers: data.result.parts.length});

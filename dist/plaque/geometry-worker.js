@@ -4,6 +4,7 @@ import Module from '../vendor/manifold.js';
 
 async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSeal, removedEdges,
     viewWidth, width, largest, cleanRelief, strongCleanup, tiers, geometryScript}) {
+  self.postMessage({progress: 'Preparing the solid backing…'});
   const [kernel, {pathContours, signedArea, binarySTL}] = await Promise.all([
     Module({locateFile: name => new URL('../vendor/' + name, import.meta.url).href}),
     import('/' + geometryScript)
@@ -87,6 +88,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
       sections[index] = upper;
     }
 
+    self.postMessage({progress: 'Cleaning and stacking relief tiers…'});
     let filtered = 0;
     if (cleanRelief && sections.length > 1) {
       // Opening removes thin towers; closing rounds notches from raster tracing.
@@ -137,6 +139,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
             }
           }
           const cleaned = repair === 0.004 ? solid : keep(keep(solid.asOriginal()).setTolerance(0.0001));
+          self.postMessage({progress: 'Checking mesh · tier ' + (index + 1) + ' of ' + printable.length + '…'});
           const name = 'tier-' + String(index + 1).padStart(2, '0');
           try {
             const {buffer} = binarySTL(cleaned, 'CoasterPrint plaque ' + name + '; units mm');

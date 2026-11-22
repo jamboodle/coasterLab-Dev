@@ -37,7 +37,7 @@ function traceMask(image, useAlpha, threshold, invert, smoothing, pathContours, 
     binary[i] = binary[i + 1] = binary[i + 2] = foreground ? 0 : 255;
     binary[i + 3] = 255;
   }
-  const {layers} = window.ImageTracer.imagedataToTracedata({width, height, data: binary}, {
+  const {layers} = globalThis.ImageTracer.imagedataToTracedata({width, height, data: binary}, {
     pal: [{r: 0, g: 0, b: 0, a: 255}, {r: 255, g: 255, b: 255, a: 255}],
     colorquantcycles: 1, pathomit: 12, ltres: smoothing, qtres: smoothing, rightangleenhance: smoothing < 1
   });
@@ -55,8 +55,8 @@ function flattenPaths(paths, pathContours, includeHoles) {
 
 export function detectColorBoundaries(image, colors, smoothing, pathContours) {
   const {width, height, data} = image;
-  const {palette, labels, transparent} = window.alphaPalette(data, 'color', colors, 0);
-  const cleaned = window.cleanLabels(labels, width, height);
+  const {palette, labels, transparent} = globalThis.alphaPalette(data, 'color', colors, 0);
+  const cleaned = globalThis.cleanLabels(labels, width, height);
   const pixels = new Uint8ClampedArray(data.length);
   // Encode the labels as exact opaque colors for ImageTracer, including the transparent label.
   const tracePalette = palette.map((_, index) => ({r: index * 16, g: 0, b: 0, a: 255}));
@@ -65,7 +65,7 @@ export function detectColorBoundaries(image, colors, smoothing, pathContours) {
     pixels[i * 4] = tracePalette[label].r;
     pixels[i * 4 + 3] = 255;
   }
-  const {layers} = window.ImageTracer.imagedataToTracedata({width, height, data: pixels}, {
+  const {layers} = globalThis.ImageTracer.imagedataToTracedata({width, height, data: pixels}, {
     pal: tracePalette, colorquantcycles: 1, pathomit: 14, ltres: smoothing,
     qtres: smoothing, rightangleenhance: smoothing < 1
   });

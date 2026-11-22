@@ -14,7 +14,7 @@
   <script src="/vendor/fflate.js" defer></script>
   <script type="module" src="maker.js"></script>
   <script defer src="/assets/analytics.js"></script>
-</head>
+<link rel="stylesheet" href="/assets/maker-mobile.css"><script defer src="/shared/maker-build.js"></script></head>
 <body>
   <header class="site-header-logo">
   <a class="brand brand--logo" href="/" aria-label="CoasterPrint home"><img src="/assets/brand/coasterprint-logo-light.png" width="2172" height="724" alt="CoasterPrint"></a>
@@ -26,7 +26,7 @@
     <a href="/pricing/">Account &amp; credits</a>
   </nav>
 </header>
-  <main>
+  <main class="touch-maker">
     <p id="maker-account" role="status"></p>
     <h1>Plaque Maker</h1>
     <p class="intro">Turn artwork into a solid-color plaque with stacked relief. Each color can finish at a different height.</p>
@@ -66,6 +66,7 @@
         <figure><h3>Original</h3><canvas id="original" aria-label="Original artwork"></canvas></figure>
         <figure><h3>Traced colors</h3><div id="traced"></div></figure>
       </div>
+      <a id="next-build" class="mobile-maker-next" href="#height-title" hidden>Next: set layer heights</a>
     </section>
     <section aria-labelledby="height-title">
       <h2 id="height-title">Height by color</h2>
@@ -88,6 +89,8 @@
         <label>Relief cleanup <select id="clean-relief"><option value="off">Off</option><option value="standard" selected>Standard</option><option value="strong">Strong</option></select></label>
         <button class="primary" id="build" type="button" disabled>Build plaque</button>
       </div>
+      <p id="model-status" role="status">Trace your artwork, set the heights, then build the plaque.</p>
+      <a id="next-preview" class="mobile-maker-next" href="#model-title" hidden>View preview and downloads</a>
       <p id="fit-height-note">Tall artwork scales down proportionally to fit within 240 mm high.</p>
     </section>
     <section aria-labelledby="model-title">
@@ -101,7 +104,7 @@
       </div>
       <p id="viewer-help" hidden>Drag or use the arrow keys to rotate. Scroll or use + and − to zoom.</p>
       <p id="viewer-fallback" hidden>3D is unavailable in this browser. Showing a static preview.</p>
-      <p id="model-status" role="status">Trace your artwork, set the heights, then build the plaque.</p>
+
       <div class="controls">
         <button class="primary" id="project" type="button" disabled>Download 3MF</button>
         <button id="stls" type="button" disabled>Download STL tiers</button>

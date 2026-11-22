@@ -95,9 +95,11 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
     const opening = keep(keep(inner.extrude(height + 0.4)).translate([0, 0, -0.2]));
     const ring = keep(joined.subtract(opening));
     const solid = keep(keep(keep(ring.translate([-min[0], -min[1], 0])).asOriginal()).setTolerance(0.0001));
+    self.postMessage({progress: 'Checking the cutter mesh…'});
     const cutter = mesh(solid, 'cutter');
 
     function makeStamp() {
+      self.postMessage({progress: 'Building the stamp and threaded socket…'});
       if (stampMode !== 'plain' && !(stampDepth >= 0.6 && stampDepth <= 3)) throw Error('Set stamp depth between 0.6 and 3 mm.');
       const backing = offset(inner, -0.75);
       if (backing.isEmpty() || backing.decompose().map(keep).length !== 1) {
@@ -183,6 +185,7 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
         }
       }
       if (!stampMesh) throw meshError || Error('The stamp details are too small to print.');
+      self.postMessage({progress: 'Building and checking the ring handle…'});
       const {solid: handle, ...handleDimensions} = stampHandle(kernel, keep);
       return {...stampMesh, removedSpecks, imprinted: Boolean(imprint), embossed: Boolean(printedRelief),
         depth: backingHeight + (printedRelief ? stampDepth : 0),
