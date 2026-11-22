@@ -425,6 +425,7 @@ async function build() {
     const dims = [result.width, result.height, result.depth].map(value => Number(value.toFixed(2))).join(' × ');
     $('model-status').textContent = [
       `${result.parts.length} watertight tiers · ${dims} mm`,
+      result.filledHoles ? `Filled ${result.filledHoles} opening(s) in the solid backing.` : '',
       result.scaledToHeight ? 'Resized proportionally to fit the 240 mm height limit.' : '',
       result.imprinted ? '' : 'The underside is too narrow for the CoasterPrint.Com imprint.',
       result.cleaned ? 'Smoothed relief edges and cleaned small stray details.' : '',

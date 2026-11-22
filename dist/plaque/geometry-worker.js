@@ -59,7 +59,13 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     const scale = Math.min(requestedScale, 240 / artworkHeight);
     const scaledToHeight = scale < requestedScale;
     const normal = shape => keep(keep(shape.translate([-original.min[0], -original.min[1]])).scale(scale));
-    const base = normal(silhouette);
+    // A single filled outline supports the relief. Raster holes belong only to the upper tiers.
+    const loops = silhouette.toPolygons();
+    const outer = loops.filter(polygon => signedArea(polygon) > 0);
+    const backing = normal(cross(outer, 'Positive'));
+    const simplified = keep(backing.simplify(0.025));
+    const base = simplified.toPolygons().length === 1 ? simplified : backing;
+    const filledHoles = loops.length - outer.length;
     const dimensions = base.bounds().max;
     const detail = new Map();
     let covered;
@@ -114,10 +120,11 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
           let section = reliefInset ? keep(source.offset(-reliefInset, 'Round', 2, 12)) : source;
           if (repair) {
             // Remove near-coincident contour vertices before triangulation, including the base.
-            if (repair >= 0.025) section = offset(offset(section, -repair), repair);
-            section = keep(section.simplify(repair));
-            if (support) section = keep(section.intersect(support));
+            if (index && repair >= 0.025) section = offset(offset(section, -repair), repair);
+            if (index) section = keep(section.simplify(repair));
           }
+          if (support) section = keep(section.intersect(support));
+          if (!index && section.toPolygons().length !== 1) throw Error('The plaque backing must have one closed outer boundary.');
           support = section;
           if (section.isEmpty()) throw Error('Tier ' + (index + 1) + ' is too small to preserve.');
           const bottom = index ? printable[index - 1].top : 0;
@@ -152,7 +159,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     for (const [inset, repair] of [[0, 0], [0.008, 0.004], [0.02, 0.012], [0.045, 0.028], [0.08, 0.065], [0.12, 0.12]]) {
       try {
         return {...meshTiers(inset, repair), inset, repair, omitted, filtered, cleaned: cleanRelief,
-          trimmed: largest ? components.length - 1 : 0, scaledToHeight, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
+          trimmed: largest ? components.length - 1 : 0, filledHoles, scaledToHeight, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
       } catch (error) {
         if (error instanceof WebAssembly.RuntimeError) throw Error('The geometry engine hit a memory error. Try fewer colors or Smooth detail.');
         lastError = error;

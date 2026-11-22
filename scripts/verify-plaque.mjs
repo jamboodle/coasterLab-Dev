@@ -214,13 +214,14 @@ try {
   const speckCleanup = await page.evaluate(async geometryScript => {
     async function trace(cleanRelief, strongCleanup = false) {
       const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
+      const opening = ' M4 4 L4 8 L8 8 L8 4 Z';
       try {
         const {result, error} = await new Promise((resolve, reject) => {
           worker.onmessage = event => resolve(event.data);
           worker.onerror = reject;
           worker.postMessage({
             paths: [
-              {color: '#111111', d: 'M0 0 L40 0 L40 40 L0 40 Z'},
+              {color: '#111111', d: 'M0 0 L40 0 L40 40 L0 40 Z' + opening},
               {color: '#ffffff', d: 'M10 10 L18 10 L18 13 L23 13 L23 13.5 L18 13.5 L18 15 L25 15 L25 15.85 L18 15.85 L18 18 L10 18 Z M32 8 L32.96 8 L32.96 8.96 L32 8.96 Z M28 25 L29.6 25 L29.6 26.6 L28 26.6 Z'}
             ],
             viewWidth: 40, width: 40, largest: true, cleanRelief, strongCleanup, geometryScript,
@@ -229,11 +230,15 @@ try {
         });
         if (error) throw Error(error);
         const {polygons} = result.parts[1];
-        return {parts: polygons.length, rightmost: Math.max(...polygons.flat().map(point => point[0]))};
+        return {backingLoops: result.parts[0].polygons.length, filledHoles: result.filledHoles, parts: polygons.length, rightmost: Math.max(...polygons.flat().map(point => point[0]))};
       } finally { worker.terminate(); }
     }
     return [await trace(false), await trace(true), await trace(true, true)];
   }, manifest.scripts['stl-geometry.js']);
+  for (const result of speckCleanup) {
+    assert.equal(result.filledHoles, 1);
+    assert.equal(result.backingLoops, 1, 'backing has one outer boundary and no through-holes');
+  }
   assert.equal(speckCleanup[0].parts, 3);
   assert.ok(speckCleanup[0].rightmost > 32);
   assert.equal(speckCleanup[1].parts, 2);
