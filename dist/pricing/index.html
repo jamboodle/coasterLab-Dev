@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Account & credits — CoasterPrint</title>
 <meta name="description" content="Sign in to CoasterPrint, check your credit balance, and explore export credits.">
-<link rel="stylesheet" href="pricing.css"><script src="account.js" defer></script><script src="pricing.js" defer></script>
+<link rel="stylesheet" href="pricing.css"><script src="account.js" defer></script><script src="pricing.js" defer></script><script src="pro.js" defer></script>
 <link rel="stylesheet" href="../assets/brand/brand.css"><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/png" sizes="32x32" href="/assets/brand/favicon-32.png"><link rel="apple-touch-icon" sizes="180x180" href="/assets/brand/apple-touch-icon.png"><script defer src="/assets/analytics.js"></script></head>
 <body class="pricing-page">
 <header class="site-header-logo">
@@ -49,6 +49,19 @@
 </div>
 </section>
 <aside class="credits-sidebar" aria-labelledby="credits-heading">
+<section id="pro" class="credit-pack" aria-labelledby="pro-heading">
+  <div class="pack-heading"><h2 id="pro-heading">CoasterPrint Pro</h2><span class="preview-badge">$10 USD / month</span></div>
+  <ul class="pack-features">
+    <li>Unlimited 3MF downloads across Coaster, Plaque, and Cookie Cutter Maker</li>
+    <li>Watermark-free models</li>
+    <li>Save editable projects and reuse your print presets</li>
+  </ul>
+  <p>Renews monthly. Manage or cancel in Stripe.</p>
+  <button class="button primary" type="button" data-pro-signup hidden>Subscribe to Pro</button>
+  <button class="button secondary" type="button" data-pro-manage hidden>Manage subscription</button>
+  <a class="button secondary" data-pro-signin href="#account-heading" hidden>Sign in to subscribe</a>
+  <p role="status"></p>
+</section>
 <section id="export-pack" class="credit-pack"><div class="pack-heading"><h2 id="credits-heading">Export credits</h2><span class="preview-badge" id="payment-badge">Credit packs</span></div><p class="pack-description"><span id="welcome-description"></span> 3MF downloads require sign-in. STL downloads are free.</p>
 <fieldset id="pack-options" class="pack-options"><legend>Choose your credit pack</legend><label class="pack-choice"><input type="radio" name="credit-pack" value="starter" checked><span id="pack-credits">10 credits</span><strong id="pack-price">$5 USD</strong></label><label class="pack-choice"><input type="radio" name="credit-pack" value="standard"><span>50 credits</span><strong>$10 USD</strong></label><label class="pack-choice"><input type="radio" name="credit-pack" value="large"><span>100 credits</span><strong>$15 USD</strong></label></fieldset>
 <ul class="pack-features"><li>1 credit per coaster or plaque when billing is on</li><li>No subscription</li></ul>

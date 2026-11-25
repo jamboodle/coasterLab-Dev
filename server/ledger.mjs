@@ -10,6 +10,11 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), delta INTEGER NOT NULL, kind TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS export_trials(account TEXT NOT NULL REFERENCES accounts(id), fingerprint TEXT NOT NULL, cost INTEGER NOT NULL CHECK(cost BETWEEN 1 AND 10), PRIMARY KEY(account,fingerprint));
       CREATE TABLE IF NOT EXISTS export_jobs(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), fingerprint TEXT NOT NULL, count INTEGER NOT NULL, format TEXT NOT NULL, bytes BLOB NOT NULL, released INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL, UNIQUE(account,fingerprint));
+      CREATE TABLE IF NOT EXISTS pro_subscriptions(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,id TEXT PRIMARY KEY,customer TEXT NOT NULL,status TEXT NOT NULL,expires INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS pro_subscriptions_account ON pro_subscriptions(account,mode);
+      CREATE TABLE IF NOT EXISTS pro_checkouts(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,id TEXT NOT NULL UNIQUE,expires INTEGER NOT NULL,url TEXT,session TEXT,PRIMARY KEY(account,mode));
+      CREATE TABLE IF NOT EXISTS pro_library(id TEXT PRIMARY KEY,account TEXT NOT NULL REFERENCES accounts(id),maker TEXT NOT NULL,kind TEXT NOT NULL,name TEXT NOT NULL,payload TEXT NOT NULL,updated INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS pro_library_account ON pro_library(account,maker);
       CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY);
       CREATE TABLE IF NOT EXISTS identities(email TEXT PRIMARY KEY, account TEXT UNIQUE NOT NULL REFERENCES accounts(id), salt TEXT NOT NULL, digest TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS challenges(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), purpose TEXT NOT NULL, expires INTEGER NOT NULL, credential_digest TEXT NOT NULL);
@@ -59,7 +64,26 @@ export class Ledger {
   }
   touchVisit(account,now=Date.now()){this.db.prepare('UPDATE identities SET last_visited_at=? WHERE account=? AND (last_visited_at IS NULL OR last_visited_at<?)').run(now,account,now-60000);}
   updateName(account,name){this.db.prepare('UPDATE identities SET name=? WHERE account=?').run(name,account);}
-  makerAccess(account){const registered=Boolean(account && this.identityForAccount(account)),credits=account?this.balance(account):0;return {registered,credits,maxImages:registered&&credits>0?6:1};}
+  proSubscription(account,mode){
+    return this.db.prepare("SELECT * FROM pro_subscriptions WHERE account=? AND mode=? AND status NOT IN ('canceled','incomplete_expired') ORDER BY expires DESC LIMIT 1").get(account,mode);
+  }
+  isPro(account,mode,now=Date.now()){return Boolean(account && this.proSubscription(account,mode)?.expires>now);}
+  savePro(account,mode,id,customer,status,expires){
+    this.db.prepare('INSERT INTO pro_subscriptions VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,expires=excluded.expires WHERE account=excluded.account AND mode=excluded.mode')
+      .run(account,mode,id,customer,status,expires);
+  }
+  proCheckout(account,mode,now=Date.now()){
+    this.db.prepare('INSERT INTO pro_checkouts VALUES (?,?,?,?,NULL,NULL) ON CONFLICT(account,mode) DO UPDATE SET id=excluded.id,expires=excluded.expires,url=NULL,session=NULL WHERE expires<=?')
+      .run(account,mode,randomBytes(16).toString('hex'),Math.floor(now/1000+3600)*1000,now);
+    return this.pendingProCheckout(account,mode);
+  }
+  pendingProCheckout(account,mode){
+    return this.db.prepare('SELECT id,expires,url,session FROM pro_checkouts WHERE account=? AND mode=?').get(account,mode);
+  }
+  makerAccess(account,mode='test'){
+    const registered=Boolean(account && this.identityForAccount(account)),credits=account?this.balance(account):0,pro=this.isPro(account,mode);
+    return {...(pro && {pro}),registered,credits,maxImages:registered&&(credits>0||pro)?6:1};
+  }
   createSession(account) {
     this.touchVisit(account);
     const token=randomBytes(32).toString('hex');

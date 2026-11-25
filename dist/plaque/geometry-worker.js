@@ -3,7 +3,7 @@ import {removeReliefSpecks} from '../shared/relief-cleanup.js';
 import Module from '../vendor/manifold.js';
 
 async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSeal, removedEdges,
-    viewWidth, width, largest, cleanRelief, strongCleanup, tiers, geometryScript}) {
+    viewWidth, width, largest, cleanRelief, strongCleanup, tiers, omitImprint, geometryScript}) {
   self.postMessage({progress: 'Preparing the solid backing…'});
   const [kernel, {pathContours, signedArea, binarySTL}] = await Promise.all([
     Module({locateFile: name => new URL('../vendor/' + name, import.meta.url).href}),
@@ -132,7 +132,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
           const bottom = index ? printable[index - 1].top : 0;
           let solid = keep(keep(section.extrude(tier.top - bottom)).translate([0, 0, bottom]));
           if (index === 0) {
-            const imprint = makeImprint(CrossSection, keep, section, tier.top - bottom);
+            const imprint = !omitImprint && makeImprint(CrossSection, keep, section, tier.top - bottom);
             if (imprint) {
               solid = keep(solid.subtract(imprint));
               imprinted = true;

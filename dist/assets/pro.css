@@ -1,0 +1,21 @@
+.pro-library {
+  color: #ececec;
+  background: #202020;
+  border: 1px solid #515151;
+  border-radius: .65rem;
+  padding: .85rem 1rem;
+  margin: .85rem 0;
+}
+.pro-library summary { cursor: pointer; color: #ffe32b; font-weight: 700; }
+.pro-library label { display: block; margin: .6rem 0; }
+.pro-library input, .pro-library select {
+  display: block; width: min(100%, 25rem); box-sizing: border-box;
+  color: inherit; background: #151515; border: 1px solid #666; border-radius: .35rem;
+  padding: .55rem; font: inherit;
+}
+.pro-library-actions { display: flex; flex-wrap: wrap; gap: .45rem; }
+.pro-library-actions button {
+  min-height: 44px; padding: .45rem .7rem; border-radius: .4rem;
+  color: inherit; background: #303030; border: 1px solid #777; font: inherit; cursor: pointer;
+}
+.pro-library-actions button[data-action="project"] { color: #161616; background: #ffe32b; border-color: #ffe32b; }

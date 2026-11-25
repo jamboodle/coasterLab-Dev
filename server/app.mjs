@@ -1,3 +1,4 @@
+import {proBilling, proLibrary, syncPro} from './pro.mjs';
 import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto';
 import {paymentContext} from './payments.mjs';
 import {exportRequest} from './exports.mjs';
@@ -41,12 +42,13 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         let event;try {event=JSON.parse(body);} catch {return send(400,{error:'Invalid JSON'});}
         if (!event || typeof event.id!=='string' || !event.id || typeof event.type!=='string') return send(400,{error:'Invalid event'});
         ledger.creditPayment(event,webhookMode);
+        await syncPro(ledger,event,webhookMode,payments.credentials[webhookMode].secret,fetchImpl);
         return send(200,{received:true});
       }
       const session=req.headers.cookie?.match(/(?:^|;\s*)cl_session=([a-f0-9]{64})(?:;|$)/)?.[1];
       const bearer=req.headers.authorization?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       const cookie=(value,age)=>res.setHeader('Set-Cookie',`cl_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${age}${origin.startsWith('https:')?'; Secure':''}`);
-      if(req.method==='GET' && path==='/api/maker-access'){const id=ledger.authenticate(bearer) || ledger.sessionAccount(session);if(id)ledger.touchVisit(id);return send(200,ledger.makerAccess(id));}
+      if(req.method==='GET' && path==='/api/maker-access'){const id=ledger.authenticate(bearer) || ledger.sessionAccount(session);if(id)ledger.touchVisit(id);return send(200,ledger.makerAccess(id,mode));}
       if (req.method==='GET' && path==='/api/config') return send(200,{developmentLogin,customerAccounts,paymentsEnabled:Boolean(paymentsEnabled),mode,emailEnabled,developmentInbox,secureExports,exportCreditTrial:chargeExports,exportLoginRequired:customerAccounts,...publicSettings(settings)});
       if (req.method==='POST' && path!=='/api/webhooks/stripe' && !bearer && req.headers.origin!==origin) return send(403,{error:'Origin rejected'});
       if(req.method==='GET' && path==='/api/dev/inbox') {
@@ -135,7 +137,12 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if(typeof body?.name!=='string'||body.name.trim().length>80||/[\x00-\x1f\x7f]/.test(body.name))return send(400,{error:'Use a name of up to 80 characters.'});
         ledger.updateName(account,body.name.trim());return send(200,{ok:true});
       }
-      if(path==='/api/exports'||path.startsWith('/api/exports/'))return await exportRequest({req,res,path,send,ledger,account,origin,billingEnabled:chargeExports});
+      if(path.startsWith('/api/pro/library/'))return await proLibrary({req,path,send,ledger,account,mode,origin});
+      if(path==='/api/pro'||path.startsWith('/api/pro/')){
+        const manageEnabled=payments.configured(mode)&&(mode==='live'?payments.liveAllowed:payments.testAllowed);
+        return await proBilling({req,path,send,ledger,account,mode,enabled:paymentsEnabled&&customerAccounts,manageEnabled,secret:activeSecret,origin,fetchImpl});
+      }
+      if(path==='/api/exports'||path.startsWith('/api/exports/'))return await exportRequest({req,res,path,send,ledger,account,origin,billingEnabled:chargeExports,mode});
       if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork,resources});
       if(req.method==='POST' && ['/api/export-quote','/api/export-debit'].includes(path)) {
         if(secureExports)return send(410,{error:'Use the account-bound export preparation and download flow.'});
@@ -144,14 +151,14 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Payload too large'});}
         let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
         if(!body || typeof body.fingerprint!=='string' || !/^[a-f0-9]{64}$/.test(body.fingerprint) || !Number.isInteger(body.count) || body.count<1 || body.count>6)return send(400,{error:'Invalid export reference or coaster count'});
-        if(!chargeExports)return send(200,{cost:0,balance:ledger.balance(account),remaining:ledger.balance(account),retry:false,billingEnabled:false});
+        if(!chargeExports || ledger.isPro(account,mode))return send(200,{cost:0,balance:ledger.balance(account),remaining:ledger.balance(account),retry:false,billingEnabled:false});
         const result=path==='/api/export-quote'?ledger.exportQuote(account,body.fingerprint,body.count):ledger.debitExport(account,body.fingerprint,body.count);
         if(result.error)return send(result.status,{error:result.error});
         return send(200,result);
       }
       if (req.method==='GET' && path==='/api/account') {
         const identity=ledger.identityForAccount(account);
-        return send(200,{name:identity?.name || '',joinedAt:identity?.joined_at || null,lastVisitedAt:identity?.last_visited_at || null,maxImages:ledger.makerAccess(account).maxImages,credits:ledger.balance(account),admin:Boolean(ledger.control(account).admin),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),activity:ledger.activity(account)});
+        return send(200,{name:identity?.name || '',joinedAt:identity?.joined_at || null,lastVisitedAt:identity?.last_visited_at || null,maxImages:ledger.makerAccess(account,mode).maxImages,credits:ledger.balance(account),admin:Boolean(ledger.control(account).admin),email:identity?.email || null,passwordAccount:Boolean(identity),emailVerified:Boolean(identity?.verified_at),...(ledger.isPro(account,mode) && {pro:true}),activity:ledger.activity(account)});
       }
       if(req.method==='POST' && path==='/api/send-verification') {
         if(!emailEnabled)return send(503,{error:'Email verification is not configured'});

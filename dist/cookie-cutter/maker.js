@@ -10,6 +10,7 @@ const source = $('artwork');
 const namespace = 'http://www.w3.org/2000/svg';
 let assets, pathContours, image, transparent, traces = [], manual, draft, history = [], dragging;
 let sizingAxis = 'width', activeBuild, model, viewer, viewerAvailable = true, diagnostics, invalid = false, loadVersion = 0;
+let sourceFile;
 let loading = false, previewPart = 'cutter';
 
 async function geometryAssets() {
@@ -163,6 +164,8 @@ async function load(file) {
     history = [];
     overlay.setAttribute('viewBox', `0 0 ${source.width} ${source.height}`);
     $('outline-tools').hidden = false;
+    sourceFile = file || new File([await new Promise(resolve => source.toBlob(resolve))], 'star.png', {type: 'image/png'});
+    if (version !== loadVersion) return;
     refreshTrace(true);
   } catch (error) {
     if (version === loadVersion) $('trace-status').textContent = error.message;
@@ -261,7 +264,7 @@ function showPart(part) {
   renderOutline();
 }
 
-function present(result) {
+function present(result, omitImprint) {
   if (!result.buffer) {
     invalid = Boolean(result.segments);
     diagnostics = result;
@@ -292,7 +295,7 @@ function present(result) {
       ? 'Stamp and ring ready. Select Show stamp to see the matching marks on your artwork.'
       : 'Plain stamp and ring ready. The stamp has no raised artwork.') +
       (result.stamp.removedSpecks ? ' Tiny traced fragments were removed.' : '') +
-      (result.stamp.imprinted ? '' : ' There wasn’t room for the CoasterPrint.Com imprint beside the socket.');
+      ((omitImprint || result.stamp.imprinted) ? '' : ' There wasn’t room for the CoasterPrint.Com imprint beside the socket.');
   } else {
     const reason = result.stampError || ($('stamp-mode').value === 'color'
       ? 'No printable interior boundaries found. Try more outline colors or switch to Bold lines.'
@@ -314,6 +317,7 @@ $('build').onclick = async () => {
     axis: sizingAxis, size: $(sizingAxis).valueAsNumber, geometryScript: assets['stl-geometry.js'],
     height: $('cutter-height').valueAsNumber, wall: $('wall').valueAsNumber, stampDepth: $('stamp-depth').valueAsNumber};
   try {
+    const omitImprint = await window.coasterProActive(progress.signal);
     let stampPaths, stampError;
     if (stampMode !== 'plain') {
       progress.update('Tracing the stamp artwork…');
@@ -329,9 +333,9 @@ $('build').onclick = async () => {
     }
     progress.update('Building the cutter wall…');
     const result = await window.runMakerWorker(new URL('./geometry-worker.js', import.meta.url), {type: 'module'},
-      {...settings, stampPaths}, {signal: progress.signal, onProgress: progress.update, acceptError: true,
+      {...settings, stampPaths, omitImprint}, {signal: progress.signal, onProgress: progress.update, acceptError: true,
         timeout: 90000, timeoutMessage: 'The cutter took too long to build. Try more smoothing.'});
-    present({...result, stampError: stampError || result.stampError});
+    present({...result, stampError: stampError || result.stampError}, omitImprint);
   } catch (error) {
     if (activeBuild === progress) $('model-status').textContent = error.message;
   } finally {
@@ -458,3 +462,32 @@ $('download-project').onclick = async () => {
     refreshDownloads();
   }
 };
+
+const proCutterControls = ['threshold', 'invert', 'smoothing', 'width', 'height', 'cutter-height', 'wall',
+  'stamp-mode', 'stamp-colors', 'stamp-threshold', 'stamp-invert', 'stamp-depth', 'stamp-cleanup'];
+window.addEventListener('DOMContentLoaded', () => void window.mountProLibrary({
+  maker: 'cookie-cutter', anchor: $('trace-status').closest('section'),
+  settings: kind => ({controls: window.proControlValues(proCutterControls), sizingAxis,
+    ...(kind === 'project' && {manual, shape: $('shape').value})}),
+  files: () => sourceFile ? [sourceFile] : [],
+  async apply(saved, files) {
+    if (activeBuild || loading) throw Error('Wait until the maker is ready.');
+    if (files.length) {
+      const error = await load(files[0]);
+      if (error) throw Error(error);
+    }
+    window.proControlValues(proCutterControls, saved.controls);
+    sizingAxis = saved.sizingAxis === 'height' ? 'height' : 'width';
+    if (files.length && Array.isArray(saved.manual) && saved.manual.every(point =>
+      Array.isArray(point) && point.length === 2 && point.every(Number.isFinite))) manual = saved.manual;
+    $('stamp-mode').dispatchEvent(new Event('change'));
+    if (image) {
+      refreshTrace(true);
+      if (files.length && [...$('shape').options].some(option => option.value === saved.shape)) {
+        $('shape').value = saved.shape;
+        refreshTrace();
+      }
+      syncSize();
+    }
+  }
+}));

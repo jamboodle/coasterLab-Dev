@@ -119,3 +119,31 @@ failed health checks, and no-op updates using temporary files and substituted
 service/rsync operations. They do not establish GitHub SSH access, real systemd
 behavior or a deployment on the hosting server. First successful server execution
 must be verified there before calling this update method installed.
+
+## CoasterPrint Pro billing
+
+Pro uses the existing Stripe account, payment mode, and signed webhook
+endpoint for each environment. The app creates a recurring $10 USD monthly
+line item. Existing credit packs continue to use one-time checkout.
+
+1. In Stripe test mode, enable the Customer Portal with payment-method updates
+   and subscription cancellation. Leave plan changes disabled.
+2. Add `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated`, `customer.subscription.deleted`,
+   `invoice.paid`, and `invoice.payment_failed` to the existing development
+   webhook at `https://dev.jamboodle.com/api/webhooks/stripe`. Preserve all
+   events already enabled for credit purchases.
+3. Run `coasterlab-update`. On development, sign in with a customer account,
+   subscribe with a Stripe test card, check that the Pro plan is active, build a
+   watermark-free model, and confirm a 3MF download costs zero credits.
+   Test cancellation from Manage subscription.
+4. Configure the portal and event list separately in Stripe live mode. Use the
+   existing production webhook at `https://coasterprint.com/api/webhooks/stripe/live`.
+   Then run `coasterprint-publish` on the server.
+
+Projects and presets are private to each account and persist in the existing
+SQLite database. Saving a project uploads its artwork. The library supports
+up to 100 items and about 100 MB of stored data per account, with a 19 MB total
+source artwork limit per project. Pro access ends when Stripe no longer reports
+an active subscription or its current billing period ends. Saved items remain
+available if the account subscribes again.

@@ -33,6 +33,7 @@
     el('customer-password').value='';
   }
   function checkoutState(connected){
+    if(signedIn!==connected)window.dispatchEvent(new Event('coasterprint-account'));
     signedIn=connected;
     el('test-checkout').disabled=!configured || !signedIn;
     el('test-checkout').textContent=!configured?'Purchases unavailable':signedIn?`${paymentMode==='live'?'Buy credits':'Open test checkout'} · $${(pack.amount/100).toFixed(2)} / ${pack.credits} credits`:'Sign in to buy credits';

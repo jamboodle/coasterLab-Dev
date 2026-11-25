@@ -29,17 +29,17 @@
   try{
    const config=await request('/api/config');dialog=panel(kind);dialog.showModal();const signup=dialog.querySelector('[data-account] a[href*=register]');if(config.welcomeCredits>0)signup.textContent=`Create an account · ${config.welcomeCredits} free credits`;
    const summary=dialog.querySelector('[data-summary]'),message=dialog.querySelector('[data-message]'),authorize=dialog.querySelector('[data-authorize]'),ready=dialog.querySelector('[data-save]'),account=dialog.querySelector('[data-account]'),recheck=dialog.querySelector('[data-recheck]'),insufficient=dialog.querySelector('[data-insufficient]'),stl=dialog.querySelector('[data-stl]');
-   const privacy=document.createElement('p');privacy.textContent='Preparing 3MF uploads the generated model parts and printer settings to our server. Original images stay in your browser. Prepared downloads are private and kept for up to 24 hours.';privacy.className='hint';dialog.append(privacy);
+   const privacy=document.createElement('p');privacy.textContent='Preparing 3MF uploads the generated model parts and printer settings to our server. Original images are only uploaded when you save a Pro project. Prepared downloads are private and kept for up to 24 hours.';privacy.className='hint';dialog.append(privacy);
    dialog.addEventListener('close',()=>{dialog.remove();preparing=false;},{once:true});let job,quote,downloadUrl;
    stl.onclick=()=>{dialog.close();void freeSTL();};
    async function check(){
     authorize.hidden=true;ready.hidden=true;account.hidden=true;recheck.hidden=true;insufficient.hidden=true;stl.hidden=true;message.textContent='Checking your account…';
     try{
-     await request('/api/account');if(!dialog.open)return;
+     const profile=await request('/api/account');if(!dialog.open)return;
      if(!job){message.textContent='Preparing your private 3MF download… No credits are deducted yet.';if(typeof preparePayload!=='function')throw Error('Build your '+kind+' and use its 3MF download button.');const result=await request('/api/exports',await preparePayload());job=result.id;quote=result;}
      else quote=await request('/api/exports/'+job);
      if(!dialog.open)return;
-     summary.textContent=`${quote.count} ${kind}${quote.count===1?'':'s'} · Cost: ${quote.cost} credit${quote.cost===1?'':'s'} · Balance: ${quote.balance} · After export: ${quote.remaining}`;
+     summary.textContent=`${profile.pro?'CoasterPrint Pro · ':''}${quote.count} ${kind}${quote.count===1?'':'s'} · Cost: ${quote.cost} credit${quote.cost===1?'':'s'} · Balance: ${quote.balance} · After export: ${quote.remaining}`;
      if(quote.remaining<0){message.textContent='Not enough credits. No credits were used.';insufficient.hidden=false;stl.hidden=false;return;}
      message.textContent=quote.cost===0?'No credits will be deducted for this download.':'Your file is ready. Credits are deducted only after you confirm.';authorize.textContent=quote.cost===0?'Prepare free download':`Confirm · ${quote.cost} credit${quote.cost===1?'':'s'}`;authorize.hidden=false;authorize.disabled=false;
     }catch(error){if(error.status===401){message.textContent='Log in or create an account to download 3MF. '+(config.welcomeCredits>0?`New accounts start with ${config.welcomeCredits} credits. `:'')+'STL downloads are free.';account.hidden=false;stl.hidden=false;recheck.textContent='I’m signed in · check again';}else{message.textContent=error.message;recheck.textContent='Try again';}recheck.hidden=false;}

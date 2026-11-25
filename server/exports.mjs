@@ -1,6 +1,6 @@
 import {Worker} from 'node:worker_threads';
 const running=new WeakMap(),downloads=new WeakMap();
-export async function exportRequest({req,res,path,send,ledger,account,origin,billingEnabled}){
+export async function exportRequest({req,res,path,send,ledger,account,origin,billingEnabled,mode}){
  if(req.method==='POST'&&req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
  ledger.pruneExports();
  const match=path.match(/^\/api\/exports\/([a-f0-9]{32})(?:\/(authorize|file))?$/);
@@ -18,17 +18,17 @@ export async function exportRequest({req,res,path,send,ledger,account,origin,bil
     function finish(error,value){if(finished)return;finished=true;clearTimeout(timer);void worker.terminate();error?reject(error):resolve(value);}
     worker.once('message',message=>message.error?finish(Error(message.error)):finish(null,message));worker.once('error',()=>finish(Error('Export preparation failed. Try a smaller batch.')));worker.once('exit',code=>{if(!finished)finish(Error('Export preparation failed. Try a smaller batch.'));});
    });
-   const id=ledger.storeExport(account,{...result,bytes:Buffer.from(result.bytes)});return send(201,{id,...quote(ledger,account,id,billingEnabled)});
+   const id=ledger.storeExport(account,{...result,bytes:Buffer.from(result.bytes)});return send(201,{id,...quote(ledger,account,id,billingEnabled&&!ledger.isPro(account,mode))});
   }catch(error){return send(400,{error:error.message});}finally{active.delete(account);}
  }
  if(!match)return send(404,{error:'Not found'});
  const id=match[1],action=match[2],job=ledger.exportJob(account,id);if(!job)return send(404,{error:'Export expired or not found. Prepare it again.'});
- if(req.method==='GET'&&!action)return send(200,{id,...quote(ledger,account,id,billingEnabled)});
+ if(req.method==='GET'&&!action)return send(200,{id,...quote(ledger,account,id,billingEnabled&&!ledger.isPro(account,mode))});
  if(req.method==='POST'&&action==='authorize'){
   let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>1024)return send(413,{error:'Payload too large'});}
   let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
   if(!Number.isInteger(body?.expectedCost)||body.expectedCost<0||body.expectedCost>6)return send(400,{error:'Invalid export confirmation.'});
-  const result=ledger.releaseExport(account,id,billingEnabled,body.expectedCost);if(result.error)return send(result.status,{error:result.error});return send(200,{...result,url:'/api/exports/'+id+'/file'});
+  const result=ledger.releaseExport(account,id,billingEnabled&&!ledger.isPro(account,mode),body.expectedCost);if(result.error)return send(result.status,{error:result.error});return send(200,{...result,url:'/api/exports/'+id+'/file'});
  }
  if(['GET','HEAD'].includes(req.method)&&action==='file'){
   if(!job.released)return send(403,{error:'Confirm the export before downloading.'});

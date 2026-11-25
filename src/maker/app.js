@@ -3,7 +3,7 @@ function render(){ $('queue').replaceChildren();for(const item of items){const c
 let currentMakerAccess={registered:false,credits:0,maxImages:1},addingFiles=false;
 async function refreshMakerAccess(signal){
  const timeout=AbortSignal.timeout(10000);
- try{const response=await fetch('/api/maker-access',{credentials:'same-origin',signal:signal&&typeof AbortSignal.any==="function"?AbortSignal.any([signal,timeout]):signal||timeout});if(!response.ok)throw Error();const access=await response.json();currentMakerAccess={registered:access.registered===true,credits:Number(access.credits)||0,maxImages:access.registered===true&&access.credits>0?6:1};}
+ try{const response=await fetch('/api/maker-access',{credentials:'same-origin',signal:signal&&typeof AbortSignal.any==="function"?AbortSignal.any([signal,timeout]):signal||timeout});if(!response.ok)throw Error();const access=await response.json();currentMakerAccess={registered:access.registered===true,credits:Number(access.credits)||0,pro:access.pro===true,maxImages:access.maxImages===6?6:1};}
  catch{signal?.throwIfAborted();currentMakerAccess={registered:false,credits:0,maxImages:1};}
  $('files').multiple=currentMakerAccess.maxImages>1;
  if($('upload-limit'))$('upload-limit').textContent=currentMakerAccess.maxImages===6?'JPG or PNG · up to 6 images · 20 MB each':'JPG or PNG · 1 image at a time · 20 MB';
@@ -162,3 +162,21 @@ function invalidateTraceOutputs(){if(busy)return;let changed=false;for(const ite
 for(const id of ['colors','threshold'])$(id).addEventListener('input',invalidateTraceOutputs);
 for(const id of ['detail','removeBackground','smoothOuter','cleanEdgeSpecks','sealOuterRim','edgeStrength','pinholeArea'])$(id).addEventListener('change',invalidateTraceOutputs);
 for(const id of ['bw','color'])$(id).addEventListener('click',invalidateTraceOutputs);
+
+const proCoasterControls=['colors','threshold','detail','removeBackground','smoothOuter','cleanEdgeSpecks','sealOuterRim','edgeStrength','pinholeArea','modelWidth','baseHeight','topHeight','autoSTL'];
+window.addEventListener('DOMContentLoaded',()=>{
+ void window.mountProLibrary({
+  maker:'coaster',anchor:$('upload-artwork'),
+  settings:()=>({mode,controls:window.proControlValues(proCoasterControls)}),
+  files:()=>items.map(item=>item.file),
+  async apply(saved,files){
+   if(busy||addingFiles)throw Error('Wait until the maker is ready.');
+   if(files.length){$('clear').click();const error=await addFiles(files);if(error)throw Error(error);}
+   $(saved.mode==='bw'?'bw':'color').click();
+   window.proControlValues(proCoasterControls,saved.controls);
+   for(const id of proCoasterControls)$(id).dispatchEvent(new Event('input'));
+   invalidateTraceOutputs();
+   render();
+  }
+ });
+});

@@ -1,7 +1,7 @@
 import {makeImprint} from './shared/imprint.js';
 import Module from './vendor/manifold.js';
 import {pathContours,signedArea,binarySTL} from './stl-geometry.js';
-onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,perimeterFill,perimeterRimPx,viewWidth,widthMM,baseMM,topMM,includeSTL=true}})=>{
+onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,perimeterFill,perimeterRimPx,viewWidth,widthMM,baseMM,topMM,includeSTL=true,omitImprint=false}})=>{
  const owned=[];const keep=x=>{owned.push(x);return x;};const warnings=[];
  try{
  for(const n of [widthMM,baseMM,topMM])if(!Number.isFinite(n)||n<=0)throw Error('Width and layer thicknesses must be greater than zero.');
@@ -32,8 +32,8 @@ onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,pe
  const outerLoops=footprint.toPolygons().filter(p=>signedArea(p)>0);
  const baseShape=normalise(cross(outerLoops,'Positive'));
  postMessage({progress:'Building solid base…'});
- const imprint=makeImprint(CrossSection,keep,baseShape,baseMM);
- if(!imprint)warnings.push('The underside is too narrow for the CoasterPrint.Com imprint.');
+ const imprint=!omitImprint&&makeImprint(CrossSection,keep,baseShape,baseMM);
+ if(!omitImprint&&!imprint)warnings.push('The underside is too narrow for the CoasterPrint.Com imprint.');
  const base=exportLayer(baseShape,0,baseMM,'Solid base',imprint);let occupied=null;const layers=[];
  for(let i=sections.length-1;i>=0;i--){postMessage({progress:'Building color layer '+(sections.length-i)+' of '+sections.length+'…'});const section=sections[i],shape=occupied?keep(section.shape.subtract(occupied)):section.shape;occupied=occupied?keep(occupied.add(section.shape)):section.shape;if(shape.isEmpty())continue;const part=exportLayer(normalise(shape),baseMM,topMM,'Color '+(i+1)+' '+section.fill);layers.unshift({fill:section.fill,index:i+1,...part});}
  // The merged STL is optional. A failure here must not suppress validated 3MF parts.
@@ -42,7 +42,7 @@ onmessage=async({data:{paths,rimSealPx,edgeRemovedD,perimeterD,perimeterMaskD,pe
  if(includeSTL)for(const tolerance of [.005,0,.01,.02]){try{const topShape=prepare(normalise(footprint),tolerance);const top=keep(keep(topShape.extrude(topMM)).translate([0,0,baseMM]));const solid=keep(Manifold.union([base.solid,top]));combined=binarySTL(clean(solid,tolerance));combinedSolid=solid;if(tolerance>.005)warnings.push('Merged STL required '+tolerance+' mm cleanup.');break;}catch(e){combinedError=e.message||String(e);}}
  if(includeSTL&&!combined)warnings.push('Merged STL unavailable: '+combinedError+'. Validated multipart 3MF and STL parts remain available.');
  const b=base.solid.boundingBox();const dimensions={min:[...b.min],max:[b.max[0],b.max[1],baseMM+topMM]};
- const output={baseFill:perimeterFill||layers[0]?.fill,combined,base:{buffer:base.buffer,triangles:base.triangles},parts:layers.map(({fill,index,buffer,triangles})=>({fill,index,buffer,triangles})),dimensions,baseMM,topMM,widthMM,volume:combinedSolid?combinedSolid.volume():null,warnings};
+ const output={imprinted:Boolean(imprint),baseFill:perimeterFill||layers[0]?.fill,combined,base:{buffer:base.buffer,triangles:base.triangles},parts:layers.map(({fill,index,buffer,triangles})=>({fill,index,buffer,triangles})),dimensions,baseMM,topMM,widthMM,volume:combinedSolid?combinedSolid.volume():null,warnings};
  const transfer=[output.base.buffer,...output.parts.map(p=>p.buffer)];if(combined)transfer.push(combined.buffer);postMessage(output,transfer);
  }catch(e){postMessage({error:e.message||String(e)});}finally{for(const object of owned.reverse())try{object.delete();}catch{}}
 };

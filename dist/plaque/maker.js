@@ -6,7 +6,7 @@ import {bambuPlacement} from '../shared/plaque-layout.js';
 const $ = id => document.getElementById(id);
 const traceControls = ['mode', 'color-count', 'detail', 'background', 'smooth-outer', 'edge-strength', 'clean-specks', 'seal-rim', 'threshold', 'pinhole'];
 const controls = ['file', 'sample', ...traceControls, 'trace-artwork', 'sort-area', 'width', 'largest', 'clean-relief', 'build', 'project', 'stls'];
-let assets;
+let assets, sourceFile;
 async function getAssets(signal) {
   if (assets) return assets;
   const response = await fetch('../asset-manifest.json', {signal});
@@ -408,9 +408,10 @@ async function build() {
   const progress = window.startMakerBuild('Preparing stacked tiers…', $('model-status'));
   try {
     const settings = heightSettings();
+    const omitImprint = await window.coasterProActive(progress.signal);
     const {scripts} = await getAssets(progress.signal);
     const {result} = await window.runMakerWorker(new URL('./geometry-worker.js', import.meta.url), {type: 'module'}, {
-      ...trace, ...settings, geometryScript: scripts['stl-geometry.js']
+      ...trace, ...settings, omitImprint, geometryScript: scripts['stl-geometry.js']
     }, {signal: progress.signal, onProgress: progress.update});
     model = result;
     showModel(result);
@@ -419,7 +420,7 @@ async function build() {
       `${result.parts.length} watertight tiers · ${dims} mm`,
       result.filledHoles ? `Filled ${result.filledHoles} opening(s) in the solid backing.` : '',
       result.scaledToHeight ? 'Resized proportionally to fit the 240 mm height limit.' : '',
-      result.imprinted ? '' : 'The underside is too narrow for the CoasterPrint.Com imprint.',
+      (omitImprint || result.imprinted) ? '' : 'The underside is too narrow for the CoasterPrint.Com imprint.',
       result.cleaned ? 'Smoothed relief edges and cleaned small stray details.' : '',
       result.filtered ? `${result.filtered} detached raised detail(s) removed.` : '',
       result.repair ? `Used a ${result.repair} mm contour cleanup to make the mesh watertight.` : '',
@@ -474,6 +475,7 @@ async function loadFile(file, {sample = false} = {}) {
         $('color-count').value = 5;
         $('background').checked = true;
       }
+      sourceFile = file;
       showSource(image, sample ? 'Fairy Princess sample' : file.name);
     } finally { image.close(); }
   } catch (error) {
@@ -528,3 +530,40 @@ $('project').onclick = async () => {
   } catch (error) { onError(error); }
 };
 $('stls').onclick = () => void exportSTL();
+
+const proPlaqueControls = [...traceControls, 'width', 'largest', 'clean-relief'];
+window.addEventListener('DOMContentLoaded', () => void window.mountProLibrary({
+  maker: 'plaque', anchor: $('trace-status').closest('section'),
+  settings: () => ({controls: window.proControlValues(proPlaqueControls), tiers: [...$('tiers').children].map(row => ({
+    source: row.dataset.source, top: row.querySelector('[data-field=top]').valueAsNumber,
+    color: row.querySelector('[data-field=color]').value
+  }))}),
+  files: () => sourceFile ? [sourceFile] : [],
+  async apply(saved, files) {
+    if (busy) throw Error('Wait until the maker is ready.');
+    window.proControlValues(proPlaqueControls, saved.controls);
+    $('threshold').dispatchEvent(new Event('input'));
+    if (files.length) {
+      const error = await loadFile(files[0]);
+      if (error) throw Error(error);
+    } else if (imageLoaded) await traceSource();
+    if (!trace || !Array.isArray(saved.tiers)) return;
+    const rows = [...$('tiers').children];
+    if (!saved.tiers.every(tier => tier && typeof tier.source === 'string')) return;
+    const matching = saved.tiers.map(tier => rows.find(row => row.dataset.source === tier.source)).filter(Boolean);
+    const ordered = matching.length === rows.length && new Set(matching).size === rows.length;
+    if (ordered) $('tiers').append(...matching);
+    const heights = saved.tiers.map(tier => tier.top);
+    const ranked = [...$('tiers').children];
+    if (ranked.length === heights.length && heights.every((top, index) => Number.isFinite(top) && top <= 50 && top - (heights[index + 1] ?? 0) >= 0.2 - 1e-6)) {
+      ranked.forEach((row, index) => { row.querySelector('[data-field=top]').value = heights[index]; });
+    }
+    for (const tier of saved.tiers) {
+      const row = rows.find(candidate => candidate.dataset.source === tier.source);
+      if (row && /^#[a-f0-9]{6}$/i.test(tier.color)) row.querySelector('[data-field=color]').value = tier.color;
+    }
+    describeTierOrder();
+    invalidateModel();
+    refresh();
+  }
+}));

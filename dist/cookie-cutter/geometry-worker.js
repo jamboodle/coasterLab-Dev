@@ -31,7 +31,7 @@ const runtime = Module({locateFile: name => new URL('../vendor/' + name, import.
   return kernel;
 });
 
-async function build({points, axis, size, height, wall, stampDepth, stampPaths, stampMode, strongCleanup, geometryScript}) {
+async function build({points, axis, size, height, wall, stampDepth, stampPaths, stampMode, strongCleanup, omitImprint, geometryScript}) {
   for (const [value, low, high, name] of [
     [size, 10, 240, 'Cookie size'], [height, 6, 30, 'Cutter height'],
     [wall, 0.65, 2, 'Wall thickness']
@@ -162,7 +162,7 @@ async function build({points, axis, size, height, wall, stampDepth, stampPaths, 
       const {min, max} = socket.boundingBox();
       const keepout = keep(keep(CrossSection.square([max[0] - min[0] + 2, max[1] - min[1] + 2]))
         .translate([min[0] - 1, min[1] - 1]));
-      const imprint = makeImprint(CrossSection, keep, keep(printBacking.subtract(keepout)), backingHeight, {compact: true});
+      const imprint = !omitImprint && makeImprint(CrossSection, keep, keep(printBacking.subtract(keepout)), backingHeight, {compact: true});
       const solidBacking = keep(keep(printBacking.extrude(backingHeight)).subtract(socket));
       const plate = imprint ? keep(solidBacking.subtract(imprint)) : solidBacking;
       let stampMesh, printedRelief, meshError;
