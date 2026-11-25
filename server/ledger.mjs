@@ -26,7 +26,7 @@ export class Ledger {
     const columns=new Set(this.db.prepare('PRAGMA table_info(orders)').all().map(row=>row.name));
     if(!columns.has('request_key'))this.db.exec('ALTER TABLE orders ADD COLUMN request_key TEXT');
     if(!columns.has('created_at'))this.db.exec('ALTER TABLE orders ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
-    for(const [name,definition] of [['payment_mode',"TEXT NOT NULL DEFAULT 'test'"],['pack_id',"TEXT NOT NULL DEFAULT 'starter'"],['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"]]){
+    for(const [name,definition] of [['payment_mode',"TEXT NOT NULL DEFAULT 'test'"],['pack_id',"TEXT NOT NULL DEFAULT 'starter'"],['amount','INTEGER NOT NULL DEFAULT 500'],['credits','INTEGER NOT NULL DEFAULT 10'],['currency',"TEXT NOT NULL DEFAULT 'usd'"],['managed_price','TEXT']]){
       if(!columns.has(name))this.db.exec(`ALTER TABLE orders ADD COLUMN ${name} ${definition}`);
     }
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS order_request_key ON orders(account,request_key); CREATE INDEX IF NOT EXISTS entries_account ON entries(account)');
@@ -176,6 +176,10 @@ export class Ledger {
     this.db.prepare('INSERT OR IGNORE INTO orders(id,account,request_key,created_at,amount,credits,currency,pack_id,payment_mode) VALUES (?,?,?,?,?,?,?,?,?)').run(randomBytes(16).toString('hex'),account,key,now,pack.amount,pack.credits,pack.currency,pack.id || 'starter',paymentMode);
     return this.db.prepare('SELECT * FROM orders WHERE account=? AND request_key=?').get(account,key);
   }
+  setCreditPackPrice(order, price) {
+    this.db.prepare('UPDATE orders SET managed_price=? WHERE id=? AND session IS NULL AND managed_price IS NULL').run(price,order);
+    return this.db.prepare('SELECT managed_price,session FROM orders WHERE id=?').get(order);
+  }
   orderStatus(account,id,now=Date.now()) {
     const order=this.db.prepare('SELECT * FROM orders WHERE id=? AND account=?').get(id,account);
     if(!order)return null;
@@ -204,7 +208,13 @@ export class Ledger {
       return false;
     }
     if(order.payment_mode!==paymentMode)return false;
-    if(s.amount_total!==order.amount || s.currency!==order.currency)return false;
+    if(s.currency!==order.currency)return false;
+    if(order.managed_price){
+      const tax=s.total_details?.amount_tax;
+      if(s.amount_subtotal!==order.amount || s.total_details?.amount_discount!==0 ||
+        !Number.isSafeInteger(tax) || tax<0 ||
+        (s.amount_total!==order.amount && s.amount_total!==order.amount+tax))return false;
+    }else if(s.amount_total!==order.amount)return false;
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.prepare('INSERT OR IGNORE INTO events VALUES (?)').run(event.id);

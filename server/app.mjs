@@ -1,5 +1,5 @@
 import {proBilling, proLibrary, syncPro} from './pro.mjs';
-import {createHmac, timingSafeEqual, randomUUID} from 'node:crypto';
+import {createHash, createHmac, timingSafeEqual, randomUUID} from 'node:crypto';
 import {paymentContext} from './payments.mjs';
 import {exportRequest} from './exports.mjs';
 import {adminRequest,publicSettings,creditPacks} from './admin.mjs';
@@ -12,7 +12,7 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, secureExports=true, allowLivePayments=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch, artwork=null, resources=null, proPriceId}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, secureExports=true, allowLivePayments=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch, artwork=null, resources=null, proPriceId,creditPackPriceIds={}}) {
 
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
@@ -217,8 +217,28 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if(state==='confirmed')return send(409,{error:'This checkout is already confirmed. Refresh your balance.',code:'checkout_complete'});
         if(state==='expired')return send(409,{error:'Checkout attempt expired. Try again to start a new checkout.',code:'checkout_expired'});
         const order=attempt.id;
-        const form=new URLSearchParams({mode:'payment','line_items[0][price_data][currency]':attempt.currency,'line_items[0][price_data][unit_amount]':String(attempt.amount),'line_items[0][price_data][product_data][name]':`CoasterPrint — ${attempt.credits} export credits${mode==='test'?' (test)':''}`,'line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order+'&pack='+attempt.pack_id+'&paymentMode='+mode,cancel_url:origin+'/pricing/?checkout=canceled&order='+order+'&pack='+attempt.pack_id+'&paymentMode='+mode,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order,'metadata[payment_mode]':mode,client_reference_id:order});
-        const response=await fetchImpl('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+activeSecret,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':order},body:form,signal:AbortSignal.timeout(15000)});
+        const configuredPrice=creditPackPriceIds[attempt.pack_id];
+        let managedPrice=attempt.managed_price;
+        if(!attempt.session && !managedPrice && Object.values(creditPackPriceIds).some(Boolean)){
+          if(!/^price_[A-Za-z0-9]+$/.test(configuredPrice || ''))return send(503,{error:'This credit pack is not configured for Stripe Managed Payments.'});
+          const priceResponse=await fetchImpl('https://api.stripe.com/v1/prices/'+configuredPrice+'?expand%5B%5D=product',{
+            headers:{Authorization:'Bearer '+activeSecret,'Stripe-Version':'2025-03-31.basil'},signal:AbortSignal.timeout(15000)
+          });
+          if(!priceResponse.ok)return send(502,{error:'Stripe could not read the configured credit-pack price.'});
+          const price=await priceResponse.json();
+          if(price.id!==configuredPrice || price.livemode!==(mode==='live') || price.active!==true ||
+            price.type!=='one_time' || price.unit_amount!==attempt.amount || price.currency!==attempt.currency ||
+            price.product?.active!==true || !/^txcd_\d{8}$/.test(price.product.tax_code || '')){
+            return send(503,{error:'The Stripe credit-pack product needs a matching one-time price and a product tax code.'});
+          }
+          managedPrice=ledger.setCreditPackPrice(order,configuredPrice).managed_price;
+        }
+        const lineItem=managedPrice ? {'line_items[0][price]':managedPrice,'managed_payments[enabled]':'true'} :
+          {'line_items[0][price_data][currency]':attempt.currency,'line_items[0][price_data][unit_amount]':String(attempt.amount),
+            'line_items[0][price_data][product_data][name]':`CoasterPrint — ${attempt.credits} export credits${mode==='test'?' (test)':''}`};
+        const form=new URLSearchParams({mode:'payment',...lineItem,'line_items[0][quantity]':'1',success_url:origin+'/pricing/?checkout=returned&order='+order+'&pack='+attempt.pack_id+'&paymentMode='+mode,cancel_url:origin+'/pricing/?checkout=canceled&order='+order+'&pack='+attempt.pack_id+'&paymentMode='+mode,expires_at:String(Math.floor((attempt.created_at+3600000)/1000)),'metadata[order_id]':order,'metadata[payment_mode]':mode,client_reference_id:order});
+        const checkoutKey=managedPrice?createHash('sha256').update(order+':managed:'+managedPrice).digest('hex'):order;
+        const response=await fetchImpl('https://api.stripe.com/v1/checkout/sessions',{method:'POST',headers:{Authorization:'Bearer '+activeSecret,'Content-Type':'application/x-www-form-urlencoded','Idempotency-Key':checkoutKey,...(managedPrice&&{'Stripe-Version':'2025-03-31.basil'})},body:form,signal:AbortSignal.timeout(15000)});
         if (!response.ok) return send(502,{error:'Checkout provider unavailable'});
         const session=await response.json();
         if (typeof session.id!=='string' || typeof session.url!=='string' || !session.url.startsWith('https://checkout.stripe.com/')) return send(502,{error:'Invalid checkout response'});

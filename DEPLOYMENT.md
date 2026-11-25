@@ -158,3 +158,20 @@ up to 100 items and about 100 MB of stored data per account, with a 19 MB total
 source artwork limit per project. Pro access ends when Stripe no longer reports
 an active subscription or its current billing period ends. Saved items remain
 available if the account subscribes again.
+
+### Export credit packs with Managed Payments
+
+Confirm the eligibility and product tax classification of prepaid export
+credits with Stripe. After Stripe confirms, create one product per pack with
+the approved tax code and an active one-time price matching the app's pricing.
+Use the Stripe price IDs for the corresponding service environment:
+
+- `STRIPE_CREDITS_STARTER_PRICE_ID` for Starter
+- `STRIPE_CREDITS_STANDARD_PRICE_ID` for Standard
+- `STRIPE_CREDITS_LARGE_PRICE_ID` for Large
+
+Once any of these is configured, new checkouts require a catalog price for
+their selected pack. Keep the app's credit-pack amounts in sync with Stripe.
+Test an actual sandbox payment and confirm that the balance increases once,
+even if Stripe retries the webhook. The existing live checkout webhook events
+also cover these purchases.

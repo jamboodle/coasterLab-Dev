@@ -5,9 +5,9 @@ import {createServer} from 'node:http';
 import {Ledger} from '../server/ledger.mjs';
 import {handler} from '../server/app.mjs';
 const testSecret='whsec_test_fixture',liveSecret='whsec_live_fixture';
-async function fixture(run,{origin='https://coasterprint.com',allowed=true}={}){
+async function fixture(run,{origin='https://coasterprint.com',allowed=true,creditPackPriceIds,price}={}){
  const ledger=new Ledger(':memory:'),admin=ledger.registerIdentity('admin@example.com','salt','digest');ledger.makeAdmin('admin@example.com');const cookie='cl_session='+ledger.createSession(admin),runtime={allowed},calls=[];let badMode=false;
- const server=createServer((req,res)=>handler({ledger,origin,customerAccounts:true,allowLivePayments:runtime.allowed,fetchImpl:async(_url,options)=>{calls.push(options);return Response.json({id:'cs_live_'+options.headers['Idempotency-Key'],url:'https://checkout.stripe.com/fixture',livemode:!badMode});}})(req,res));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base='http://127.0.0.1:'+server.address().port;
+ const server=createServer((req,res)=>handler({ledger,origin,customerAccounts:true,allowLivePayments:runtime.allowed,creditPackPriceIds,fetchImpl:async(url,options)=>{calls.push(options);if(url.includes('/prices/'))return Response.json(price);return Response.json({id:'cs_live_'+options.headers['Idempotency-Key'],url:'https://checkout.stripe.com/fixture',livemode:!badMode});}})(req,res));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base='http://127.0.0.1:'+server.address().port;
  async function call(path,body,key){const response=await fetch(base+path,{method:body?'POST':'GET',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},body:body?JSON.stringify(body):undefined});return {status:response.status,data:await response.json()};}
  async function webhook(event,mode='live',secret=liveSecret){const body=JSON.stringify(event),timestamp=Math.floor(Date.now()/1000),signature=`t=${timestamp},v1=${createHmac('sha256',secret).update(timestamp+'.'+body).digest('hex')}`;const response=await fetch(base+'/api/webhooks/stripe'+(mode==='live'?'/live':''),{method:'POST',headers:{'stripe-signature':signature},body});return response.status;}
  try{await run({ledger,admin,runtime,calls,call,webhook,setBadMode:value=>{badMode=value;}});}finally{await new Promise(resolve=>server.close(resolve));ledger.close();}
@@ -62,3 +62,28 @@ test('restricted sandbox keys work, while both restricted key modes reject the w
  assert.equal((await call('/api/admin/settings',{secretKey:'rk_live_wrong'})).status,400);assert.equal((await call('/api/admin/settings',{liveSecretKey:'rk_test_wrong'})).status,400);
  assert.equal((await call('/api/admin/settings',{secretKey:'rk_test_fixture',webhookSecret:testSecret,billingEnabled:true})).status,200);setBadMode(true);assert.equal((await call('/api/checkout',{pack:'starter',mode:'test'},'restricted-test-request-1234')).status,200);assert.equal(calls[0].headers.Authorization,'Bearer rk_test_fixture');
 },{origin:'https://dev.jamboodle.com',allowed:false}));
+
+test('Managed Payments packs use validated catalog prices and credit taxed purchases once',()=>fixture(async({ledger,admin,call,webhook,calls})=>{
+ await configure(call);
+ await call('/api/admin/settings',{billingEnabled:true,paymentMode:'live',livePaymentsEnabled:true});
+ const key='managed-credit-pack-request';
+ const previous=ledger.checkoutOrder(admin,key,Date.now(),{id:'starter',amount:500,credits:10,currency:'usd'},'live');
+ assert.equal((await call('/api/checkout',{pack:'large',mode:'live'},'managed-missing-pack-request')).status,503);
+ const checkout=await call('/api/checkout',{pack:'starter',mode:'live'},key);
+ assert.equal(checkout.status,200);
+ assert.equal(checkout.data.order,previous.id);
+ assert.equal(calls[1].body.get('managed_payments[enabled]'),'true');
+ assert.equal(calls[1].body.get('line_items[0][price]'),'price_Starter');
+ assert.notEqual(calls[1].headers['Idempotency-Key'],previous.id);
+ const order=ledger.db.prepare('SELECT * FROM orders WHERE id=?').get(previous.id);
+ const event=payment(order);
+ const details={amount_discount:0,amount_tax:45,amount_shipping:0};
+ Object.assign(event.data.object,{amount_total:545,amount_subtotal:499,total_details:details});
+ await webhook(event);
+ assert.equal(ledger.balance(admin),15);
+ event.data.object.amount_subtotal=500;
+ assert.equal(await webhook(event),200);
+ assert.equal(await webhook(event),200);
+ assert.equal(ledger.balance(admin),25);
+},{creditPackPriceIds:{starter:'price_Starter'},price:{id:'price_Starter',active:true,livemode:true,
+ type:'one_time',unit_amount:500,currency:'usd',product:{active:true,tax_code:'txcd_10000000'}}}));
