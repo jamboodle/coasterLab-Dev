@@ -123,8 +123,19 @@ must be verified there before calling this update method installed.
 ## CoasterPrint Pro billing
 
 Pro uses the existing Stripe account, payment mode, and signed webhook
-endpoint for each environment. The app creates a recurring $10 USD monthly
-line item. Existing credit packs continue to use one-time checkout.
+endpoint for each environment. To use Stripe as merchant of record, create a
+CoasterPrint Pro product with a Stripe Managed Payments-eligible tax code and
+an active $10 USD recurring monthly price. Set `STRIPE_PRO_PRICE_ID=price_...`
+in the app service environment. Use the sandbox price for development and the
+live price for production. An unconfigured sandbox can still use the original
+inline test checkout. Live Pro checkout requires a catalog price.
+
+The app validates the price and tax-code presence, and requests Managed Payments
+explicitly when using a catalog price. Stripe validates tax-code eligibility.
+If you use a restricted API key, give it read access to Prices and Products in
+addition to the checkout and subscription permissions. Existing credit packs
+continue to use one-time checkout. Confirm prepaid export credit eligibility and
+classification with Stripe before changing those products.
 
 1. In Stripe test mode, enable the Customer Portal with payment-method updates
    and subscription cancellation. Leave plan changes disabled.

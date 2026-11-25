@@ -12,7 +12,7 @@ export function verifyWebhook(body, signature, secret, now=Date.now()) {
   const expected=createHmac('sha256',secret).update(timestamp+'.').update(body).digest();
   return parts.some(([key,value])=>key==='v1' && /^[a-f0-9]{64}$/i.test(value || '') && timingSafeEqual(expected,Buffer.from(value,'hex')));
 }
-export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, secureExports=true, allowLivePayments=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch, artwork=null, resources=null}) {
+export function handler({ledger, secretKey, webhookSecret, origin, developmentLogin=false, customerAccounts=false, exportCreditTrial=false, secureExports=true, allowLivePayments=false, mailer=null, developmentInbox=false, onMailFailure=()=>{}, fetchImpl=fetch, artwork=null, resources=null, proPriceId}) {
 
   const emailEnabled=customerAccounts && typeof mailer?.send==='function';
   const sendChallenge=async(account,purpose)=>{
@@ -140,7 +140,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
       if(path.startsWith('/api/pro/library/'))return await proLibrary({req,path,send,ledger,account,mode,origin});
       if(path==='/api/pro'||path.startsWith('/api/pro/')){
         const manageEnabled=payments.configured(mode)&&(mode==='live'?payments.liveAllowed:payments.testAllowed);
-        return await proBilling({req,path,send,ledger,account,mode,enabled:paymentsEnabled&&customerAccounts,manageEnabled,secret:activeSecret,origin,fetchImpl});
+        return await proBilling({req,path,send,ledger,account,mode,enabled:paymentsEnabled&&customerAccounts,manageEnabled,secret:activeSecret,origin,fetchImpl,priceId:proPriceId});
       }
       if(path==='/api/exports'||path.startsWith('/api/exports/'))return await exportRequest({req,res,path,send,ledger,account,origin,billingEnabled:chargeExports,mode});
       if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork,resources});

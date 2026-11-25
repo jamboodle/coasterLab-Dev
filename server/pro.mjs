@@ -1,4 +1,4 @@
-import {randomUUID} from 'node:crypto';
+import {createHash, randomUUID} from 'node:crypto';
 
 export const proAmount = 1000;
 const subscriptionId = /^sub_[a-zA-Z0-9]+$/;
@@ -59,18 +59,20 @@ async function syncSubscription(ledger, mode, secret, fetchImpl, id) {
   try { await next; } finally { if (syncing.get(key) === next) syncing.delete(key); }
 }
 
-export async function proBilling({req, path, send, ledger, account, mode, enabled, manageEnabled, secret, origin, fetchImpl}) {
+export async function proBilling({req, path, send, ledger, account, mode, enabled, manageEnabled, secret, origin, fetchImpl, priceId}) {
+  const managed = /^price_[A-Za-z0-9]+$/.test(priceId || '');
+  const checkoutEnabled = enabled && (managed || (mode === 'test' && !priceId));
   const identity = ledger.identityForAccount(account);
   if (!identity) return send(403, {error: 'Sign in with a CoasterPrint email account.'});
   const subscription = ledger.proSubscription(account, mode);
   if (req.method === 'GET' && path === '/api/pro') {
     return send(200, {active: ledger.isPro(account, mode), mode, status: subscription?.status ?? null,
-      canManage: manageEnabled && Boolean(subscription), canSubscribe: enabled && !subscription});
+      canManage: manageEnabled && Boolean(subscription), canSubscribe: checkoutEnabled && !subscription});
   }
   if (req.method !== 'POST' || !['/api/pro/checkout', '/api/pro/portal'].includes(path)) return send(404, {error: 'Not found'});
   if (req.headers.origin !== origin) return send(403, {error: 'Origin rejected'});
   const portalRequest = path.endsWith('/portal');
-  if (!(portalRequest ? manageEnabled : enabled)) return send(503, {error: 'Pro billing is unavailable.'});
+  if (!(portalRequest ? manageEnabled : checkoutEnabled)) return send(503, {error: 'Pro billing is unavailable.'});
   if (!ledger.allowAuth('pro-billing:' + account)) return send(429, {error: 'Too many requests. Try again later.'});
   try {
     if (portalRequest) {
@@ -93,18 +95,34 @@ export async function proBilling({req, path, send, ledger, account, mode, enable
       }
     }
     const attempt = ledger.proCheckout(account, mode);
-    const form = {mode: 'subscription', customer_email: identity.email,
-      'line_items[0][price_data][currency]': 'usd', 'line_items[0][price_data][unit_amount]': String(proAmount),
+    // Reuse the same session on retries, even when there is under 30 minutes left.
+    if (attempt.url) return send(200, {url: attempt.url});
+    let lineItem = {
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][unit_amount]': String(proAmount),
       'line_items[0][price_data][recurring][interval]': 'month',
-      'line_items[0][price_data][product_data][name]': 'CoasterPrint Pro',
+      'line_items[0][price_data][product_data][name]': 'CoasterPrint Pro'
+    };
+    let checkoutKey = attempt.id;
+    if (managed) {
+      const price = await stripe(fetchImpl, secret, 'prices/' + priceId + '?expand%5B%5D=product');
+      if (price.id !== priceId || price.livemode !== (mode === 'live') || !price.active ||
+          price.unit_amount !== proAmount || price.currency !== 'usd' ||
+          price.recurring?.interval !== 'month' || price.recurring.interval_count !== 1 ||
+          price.product?.active !== true || !/^txcd_\d{8}$/.test(price.product.tax_code || '')) {
+        return send(503, {error: 'The Stripe Pro product needs an active $10 USD monthly price and a product tax code.'});
+      }
+      lineItem = {'line_items[0][price]': priceId, 'managed_payments[enabled]': 'true'};
+      // The catalog form differs from the original inline request.
+      checkoutKey = createHash('sha256').update(attempt.id + ':managed:' + priceId).digest('hex');
+    }
+    const form = {mode: 'subscription', customer_email: identity.email, ...lineItem,
       'line_items[0][quantity]': '1', expires_at: String(attempt.expires / 1000),
       success_url: origin + '/pricing/?pro=returned#pro', cancel_url: origin + '/pricing/#pro',
       'subscription_data[metadata][coasterprint_plan]': 'pro',
       'subscription_data[metadata][coasterprint_account]': account,
       'metadata[coasterprint_plan]': 'pro', client_reference_id: account};
-    // Reuse the same session on retries, even when there is under 30 minutes left.
-    if (attempt.url) return send(200, {url: attempt.url});
-    const checkout = await stripe(fetchImpl, secret, 'checkout/sessions', form, attempt.id);
+    const checkout = await stripe(fetchImpl, secret, 'checkout/sessions', form, checkoutKey);
     if (checkout.livemode !== (mode === 'live') || checkoutId.exec(checkout.id || '')?.[1] !== mode ||
         !checkout.url?.startsWith('https://checkout.stripe.com/')) throw Error('Unexpected checkout response');
     ledger.db.prepare('UPDATE pro_checkouts SET url=?,session=? WHERE id=?').run(checkout.url, checkout.id, attempt.id);

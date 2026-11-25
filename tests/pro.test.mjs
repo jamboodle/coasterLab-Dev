@@ -115,3 +115,38 @@ test('Pro checkout, signed lifecycle events, zero-credit exports and private lib
     ledger.close();
   }
 });
+
+test('live Pro uses a taxable catalog price and explicitly requests Managed Payments', async () => {
+  const {proBilling} = await import('../server/pro.mjs');
+  const ledger = new Ledger(':memory:');
+  try {
+    const account = ledger.registerIdentity('live@example.com', 'salt', 'digest');
+    const origin = 'https://coasterprint.com';
+    const priceId = 'price_ProMonthly';
+    const price = {id:priceId, active:true, livemode:true, unit_amount:1000, currency:'usd',
+      recurring:{interval:'month', interval_count:1}, product:{active:true}};
+    const keys = [];
+    const params = {ledger, account, origin, mode:'live', enabled:true, secret:'sk_live_fixture',
+      req:{method:'POST', headers:{origin}}, path:'/api/pro/checkout', send:(status, body)=>({status, body}),
+      async fetchImpl(url, init) {
+        if (url.includes('/prices/')) return Response.json(price);
+        keys.push(init.headers['Idempotency-Key']);
+        assert.equal(init.body.get('line_items[0][price]'), priceId);
+        assert.equal(init.body.get('managed_payments[enabled]'), 'true');
+        assert.equal(init.body.has('line_items[0][price_data][currency]'), false);
+        return Response.json({livemode:true,id:'cs_live_123',url:'https://checkout.stripe.com/example'});
+      }};
+    assert.equal((await proBilling(params)).status, 503);
+    assert.equal((await proBilling({...params, priceId})).status, 503);
+    price.product.tax_code = 'txcd_10103000';
+    price.unit_amount = 999;
+    assert.equal((await proBilling({...params, priceId})).status, 503);
+    price.unit_amount = 1000;
+    assert.equal((await proBilling({...params, priceId})).status, 200);
+    assert.notEqual(keys[0], ledger.pendingProCheckout(account, 'live').id);
+    assert.equal((await proBilling({...params, priceId})).status, 200);
+    assert.equal(keys.length, 1);
+  } finally {
+    ledger.close();
+  }
+});
