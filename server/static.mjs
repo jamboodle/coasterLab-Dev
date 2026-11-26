@@ -1,8 +1,8 @@
 import {readFileSync} from 'node:fs';
 import {readFile,realpath,stat} from 'node:fs/promises';
 import {resolve,extname,sep,normalize} from 'node:path';
-const types={'.ico':'image/vnd.microsoft.icon','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.wasm':'application/wasm','.woff2':'font/woff2','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.zip':'application/zip'};
-export function withStatic(api, root) {
+const types={'.txt':'text/plain; charset=utf-8','.xml':'application/xml; charset=utf-8','.ico':'image/vnd.microsoft.icon','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.wasm':'application/wasm','.woff2':'font/woff2','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.zip':'application/zip'};
+export function withStatic(api, root, {indexable = true} = {}) {
   root=resolve(root);
   const current=new Set(Object.values(JSON.parse(readFileSync(resolve(root,'asset-manifest.json'),'utf8')).scripts));
   for(const file of ['maker-account.js'])current.add(file);
@@ -27,7 +27,9 @@ export function withStatic(api, root) {
       path=await realpath(path);
       if(!path.startsWith(root+sep))throw Error();
       const data=await readFile(path);
-      res.writeHead(200,{'Content-Type':types[extname(path)] || 'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache'});
+      const extension=extname(path);
+      res.writeHead(200,{'Content-Type':types[extension] || 'application/octet-stream','X-Content-Type-Options':'nosniff','Cache-Control':'no-cache',
+        ...(!indexable && extension==='.html' && {'X-Robots-Tag':'noindex'})});
       res.end(req.method==='HEAD'?undefined:data);
     }catch{res.writeHead(404);res.end('Not found');}
   };

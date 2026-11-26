@@ -5,6 +5,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:net';
+import {createServer as httpServer} from 'node:http';
+import {withStatic} from '../server/static.mjs';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 
@@ -18,11 +20,41 @@ test('server uses public_html for public assets while its database stays in the 
  let errors='';child.stderr.on('data',data=>{errors+=data;});
  try{
   await Promise.race([once(child.stdout,'data'),once(child,'exit').then(()=>{throw Error('Server failed: '+errors);})]);const origin='http://127.0.0.1:'+port;
-  assert.match(await (await fetch(origin)).text(),/Independent public_html/);assert.equal((await fetch(origin+'/server/index.mjs')).status,404);assert.equal((await fetch(origin+'/.data/credits.sqlite')).status,404);assert.equal((await fetch(origin+'/.htaccess')).status,404);
+  const home=await fetch(origin);assert.equal(home.headers.get('x-robots-tag'),'noindex');assert.match(await home.text(),/Independent public_html/);assert.equal((await fetch(origin+'/server/index.mjs')).status,404);assert.equal((await fetch(origin+'/.data/credits.sqlite')).status,404);assert.equal((await fetch(origin+'/.htaccess')).status,404);
   const verified=await fetch(origin+'/'+verification,{redirect:'manual'});assert.equal(verified.status,200);assert.equal(await verified.text(),verificationBody);
   const head=await fetch(origin+'/'+verification,{method:'HEAD',redirect:'manual'});assert.equal(head.status,200);assert.equal(await head.text(),'');
   assert.equal((await fetch(origin+'/googleabcdef.html',{redirect:'manual'})).status,404);
   const retired=await fetch(origin+'/old-maker.html',{redirect:'manual'});assert.equal(retired.status,308);assert.equal(retired.headers.get('location'),'/');
   assert.equal(existsSync(join(privateApp,'.data/credits.sqlite')),true);assert.equal(existsSync(join(publicRoot,'.data')),false);
  }finally{child.kill('SIGTERM');if(child.exitCode===null)await once(child,'exit');rmSync(root,{recursive:true,force:true});}
+});
+
+test('production sitemap lists canonical public pages and keeps account pages out',async()=>{
+ const root=fileURLToPath(new URL('../dist/',import.meta.url));
+ const server=httpServer(withStatic((_req,res)=>res.end(),root));
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const origin='http://127.0.0.1:'+server.address().port;
+ try{
+  const robots=await fetch(origin+'/robots.txt');
+  assert.match(robots.headers.get('content-type'),/^text\/plain/);
+  assert.match(await robots.text(),/Sitemap: https:\/\/coasterprint\.com\/sitemap\.xml/);
+  const sitemap=await fetch(origin+'/sitemap.xml');
+  assert.match(sitemap.headers.get('content-type'),/^application\/xml/);
+  const urls=[...(await sitemap.text()).matchAll(/<loc>(.*?)<\/loc>/g)].map(match=>match[1]);
+  assert.equal(urls.length,6);
+  for(const url of urls){
+   assert.equal(new URL(url).origin,'https://coasterprint.com');
+   const page=await fetch(origin+new URL(url).pathname,{redirect:'manual'});
+   assert.equal(page.status,200,url);
+   assert.equal(page.headers.get('x-robots-tag'),null);
+   const html=await page.text();
+   assert.ok(html.includes('<link rel="canonical" href="'+url+'">'),url);
+   assert.match(html,/<meta name="description" content="[^"]+"/);
+   assert.doesNotMatch(html,/<meta name="robots" content="noindex">/);
+  }
+  for(const path of ['/admin/','/account/','/suncatcher/','/artwork/','/dev/inbox/']){
+   assert.match(await (await fetch(origin+path)).text(),/<meta name="robots" content="noindex">/);
+  }
+  assert.match(await (await fetch(origin)).text(),/href="\/guides\/image-to-coaster\/"/);
+ }finally{await new Promise(resolve=>server.close(resolve));}
 });

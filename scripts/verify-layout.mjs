@@ -44,6 +44,14 @@ try{
   assert.match(await page.locator('.status').textContent(),/Your coaster is ready/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.locator('#maker').screenshot({path:`/tmp/coasterprint-layout-${width}.png`});
+  if(width===320||width===1440){
+   await page.getByRole('link',{name:'How to turn an image into a coaster 3MF'}).click();
+   await page.waitForURL(origin+'/guides/image-to-coaster/');
+   await page.getByRole('heading',{level:1,name:/coaster 3MF for Bambu Studio/}).waitFor();
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   await page.getByRole('link',{name:'Open the Coaster Maker'}).click();
+   await page.waitForURL(origin+'/#upload-artwork');
+  }
   assert.deepEqual(errors,[]);await page.close();console.log(`PASS ${width}px guided maker: ordered steps, current stage, accessible advanced controls, real export and uncluttered preview`);
  }
 }finally{await browser?.close();await new Promise(r=>server.close(r));ledger.close();}
