@@ -137,18 +137,27 @@ export async function proBilling({req, path, send, ledger, account, mode, enable
 }
 
 const maxSize = 26000000;
-export async function proLibrary({req, path, send, ledger, account, mode, origin}) {
+export async function proLibrary({req, res, path, send, ledger, account, mode, origin}) {
   if (!ledger.isPro(account, mode)) return send(403, {error: 'Active Pro access is required.'});
-  const match = path.match(/^\/api\/pro\/library\/(coaster|plaque|cookie-cutter)(?:\/([a-f0-9-]{36}))?$/);
+  const match = path.match(/^\/api\/pro\/library\/(coaster|plaque|cookie-cutter)(?:\/([a-f0-9-]{36})(\/thumbnail)?)?$/);
   if (!match) return send(404, {error: 'Not found'});
-  const [, maker, id] = match;
+  const [, maker, id, thumbnailPath] = match;
   const db = ledger.db;
   if (req.method === 'GET') {
+    if (thumbnailPath) {
+      const saved = db.prepare(`SELECT COALESCE(thumbnail,json_extract(payload,'$.files[0].data')) AS image
+        FROM pro_library WHERE account=? AND maker=? AND id=? AND kind='project'`).get(account,maker,id);
+      const image = saved?.image?.match(/^data:image\/(png|jpeg);base64,([a-zA-Z0-9+/]+=*)$/);
+      if (!image) return send(404,{error:'Project preview unavailable.'});
+      res.writeHead(200,{'Content-Type':'image/'+image[1],'Cache-Control':'private, no-store',
+        'X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin'});
+      return res.end(Buffer.from(image[2],'base64'));
+    }
     if (!id) return send(200, {items: db.prepare('SELECT id,kind,name FROM pro_library WHERE account=? AND maker=? ORDER BY updated DESC').all(account, maker)});
     const row = db.prepare('SELECT id,kind,name,payload FROM pro_library WHERE account=? AND maker=? AND id=?').get(account, maker, id);
     return row ? send(200, {...row, payload: JSON.parse(row.payload)}) : send(404, {error: 'Saved item not found.'});
   }
-  if (req.method !== 'POST') return send(405, {error: 'Method not allowed'});
+  if (req.method !== 'POST' || thumbnailPath) return send(405, {error: 'Method not allowed'});
   if (req.headers.origin !== origin) return send(403, {error: 'Origin rejected'});
   if (id) {
     db.prepare('DELETE FROM pro_library WHERE account=? AND maker=? AND id=?').run(account, maker, id);
@@ -166,23 +175,25 @@ export async function proLibrary({req, path, send, ledger, account, mode, origin
   req.setTimeout(0);
   let body;
   try { body = JSON.parse(Buffer.concat(chunks)); } catch {return send(400, {error: 'Invalid saved item.'});}
-  const {kind, name, payload, replace} = body ?? {};
+  const {kind, name, payload, replace, thumbnail} = body ?? {};
   if (!['preset', 'project'].includes(kind) || typeof name !== 'string' || !name.trim() || name.length > 80 ||
       !payload || payload.version !== 1 || !payload.settings || typeof payload.settings !== 'object' || Array.isArray(payload.settings) ||
+      (thumbnail !== undefined && (kind !== 'project' || typeof thumbnail !== 'string' || thumbnail.length > 64000 ||
+        !/^data:image\/jpeg;base64,[a-zA-Z0-9+/]+=*$/.test(thumbnail))) ||
       (kind === 'preset' && (size > 65536 || payload.files)) ||
       (kind === 'project' && (!Array.isArray(payload.files) || !payload.files.length || payload.files.length > (maker === 'coaster' ? 6 : 1) ||
         payload.files.some(file => typeof file?.name !== 'string' || !/\.(png|jpe?g)$/i.test(file.name) ||
           typeof file.data !== 'string' || !/^data:image\/(png|jpeg);base64,[a-zA-Z0-9+/]+=*$/.test(file.data))))) {
     return send(400, {error: 'Use a valid project or preset and a name up to 80 characters.'});
   }
-  const target = typeof replace === 'string' && db.prepare('SELECT length(CAST(payload AS BLOB)) AS size FROM pro_library WHERE account=? AND maker=? AND kind=? AND id=?').get(account, maker, kind, replace);
+  const target = typeof replace === 'string' && db.prepare('SELECT length(CAST(payload AS BLOB))+coalesce(length(thumbnail),0) AS size FROM pro_library WHERE account=? AND maker=? AND kind=? AND id=?').get(account, maker, kind, replace);
   if (replace && !target) return send(404, {error: 'Saved item not found.'});
-  const usage = db.prepare('SELECT count(*) AS count,coalesce(sum(length(CAST(payload AS BLOB))),0) AS size FROM pro_library WHERE account=?').get(account);
+  const usage = db.prepare('SELECT count(*) AS count,coalesce(sum(length(CAST(payload AS BLOB))+coalesce(length(thumbnail),0)),0) AS size FROM pro_library WHERE account=?').get(account);
   if ((!target && usage.count >= 100) || usage.size - (target?.size || 0) + size > 100000000) {
     return send(409, {error: 'Your Pro library is full. Delete an item before saving.'});
   }
   const item = target ? replace : randomUUID();
-  db.prepare('INSERT INTO pro_library VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,payload=excluded.payload,updated=excluded.updated')
-    .run(item, account, maker, kind, name.trim(), JSON.stringify(payload), Date.now());
+  db.prepare('INSERT INTO pro_library(id,account,maker,kind,name,payload,updated,thumbnail) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,payload=excluded.payload,updated=excluded.updated,thumbnail=excluded.thumbnail')
+    .run(item, account, maker, kind, name.trim(), JSON.stringify(payload), Date.now(), thumbnail ?? null);
   return send(201, {id: item});
 }

@@ -29,6 +29,9 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS admin_audit(id TEXT PRIMARY KEY, actor TEXT NOT NULL REFERENCES accounts(id), action TEXT NOT NULL, target TEXT, detail TEXT NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), expires INTEGER NOT NULL);`);
+    if(!this.db.prepare('PRAGMA table_info(pro_library)').all().some(column=>column.name==='thumbnail')){
+      this.db.exec('ALTER TABLE pro_library ADD COLUMN thumbnail TEXT');
+    }
     const columns=new Set(this.db.prepare('PRAGMA table_info(orders)').all().map(row=>row.name));
     if(!columns.has('request_key'))this.db.exec('ALTER TABLE orders ADD COLUMN request_key TEXT');
     if(!columns.has('created_at'))this.db.exec('ALTER TABLE orders ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');

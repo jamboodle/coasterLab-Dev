@@ -48,11 +48,10 @@ try {
     {maker:'cutter',path:'/cookie-cutter/',size:'#width',build:'#build',download:'#download-project',trigger:'#sample',value:'70',other:'80'}
   ]) {
     await page.goto(origin + path);
-    const panel = page.locator('.pro-library');
-    await panel.locator('summary').click();
-    const status = panel.getByRole('status');
-    const select = panel.locator('select');
-    const name = panel.getByRole('textbox',{name:'Name'});
+    const projects = page.locator('.pro-projects');
+    const presets = page.locator('.pro-presets');
+    await projects.locator('summary').click();
+    await presets.locator('summary').click();
     if (trigger) {
       await page.locator(trigger).click();
       await page.locator(build).and(page.locator(':enabled')).waitFor();
@@ -68,22 +67,33 @@ try {
       await page.locator('#queue .card').waitFor();
     }
     await page.locator(size).fill(value);
-    await name.fill('Saved ' + maker);
-    await panel.getByRole('button',{name:'Save new project'}).click();
-    await status.getByText('Project saved.').waitFor();
-    await name.fill('Preset ' + maker);
-    await panel.getByRole('button',{name:'Save new preset'}).click();
-    await status.getByText('Preset saved.').waitFor();
+    const projectName = projects.getByRole('textbox',{name:'Project name'});
+    await projectName.fill('Saved ' + maker);
+    await projects.getByRole('button',{name:'Save new project'}).click();
+    await projects.getByText('Project saved.',{exact:true}).waitFor();
+    const image = projects.locator('.pro-project-preview img');
+    await image.scrollIntoViewIfNeeded();
+    await page.waitForFunction(() => document.querySelector('.pro-project-preview img')?.naturalWidth > 0);
+    assert.ok(await image.evaluate(img => Math.max(img.naturalWidth,img.naturalHeight) <= 240));
+    await projectName.fill('Updated ' + maker);
+    await projects.getByRole('button',{name:'Save project changes'}).click();
+    await projects.getByRole('button',{name:'Open project Updated ' + maker,exact:true}).waitFor();
+
+    await presets.getByRole('textbox',{name:'Preset name'}).fill('Preset ' + maker);
+    await presets.getByRole('button',{name:'Save new preset'}).click();
+    await presets.getByText('Preset saved.',{exact:true}).waitFor();
     await page.locator(size).fill(other);
-    await panel.getByRole('button',{name:'Open / apply'}).click();
-    await status.getByText('Preset applied.').waitFor();
+    await presets.getByRole('button',{name:'Apply preset'}).click();
+    await presets.getByText('Preset applied.',{exact:true}).waitFor();
     assert.equal(await page.locator(size).inputValue(),value);
 
     await page.reload();
-    await panel.locator('summary').click();
-    await select.selectOption({label:'Project · Saved ' + maker});
-    await panel.getByRole('button',{name:'Open / apply'}).click();
-    await status.getByText('Project opened.').waitFor();
+    await projects.locator('summary').click();
+    await projects.getByRole('searchbox',{name:'Find a project'}).fill('unmatched');
+    await projects.getByText('No projects match your search.',{exact:true}).waitFor();
+    await projects.getByRole('searchbox',{name:'Find a project'}).fill('updated');
+    await projects.getByRole('button',{name:'Open project Updated ' + maker,exact:true}).click();
+    await projects.getByText('Project opened.',{exact:true}).waitFor();
     assert.equal(await page.locator(size).inputValue(),value);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, maker + ' horizontal overflow');
 

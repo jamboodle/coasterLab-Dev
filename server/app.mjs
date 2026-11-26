@@ -137,7 +137,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         if(typeof body?.name!=='string'||body.name.trim().length>80||/[\x00-\x1f\x7f]/.test(body.name))return send(400,{error:'Use a name of up to 80 characters.'});
         ledger.updateName(account,body.name.trim());return send(200,{ok:true});
       }
-      if(path.startsWith('/api/pro/library/'))return await proLibrary({req,path,send,ledger,account,mode,origin});
+      if(path.startsWith('/api/pro/library/'))return await proLibrary({req,res,path,send,ledger,account,mode,origin});
       if(path==='/api/pro'||path.startsWith('/api/pro/')){
         const manageEnabled=payments.configured(mode)&&(mode==='live'?payments.liveAllowed:payments.testAllowed);
         return await proBilling({req,path,send,ledger,account,mode,enabled:paymentsEnabled&&customerAccounts,manageEnabled,secret:activeSecret,origin,fetchImpl,priceId:proPriceId});

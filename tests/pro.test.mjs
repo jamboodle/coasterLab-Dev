@@ -77,10 +77,19 @@ test('Pro checkout, signed lifecycle events, zero-credit exports and private lib
     assert.equal(created.status, 201);
     const {id} = await created.json();
     assert.deepEqual((await (await call(library+'/'+id)).json()).payload, project.payload);
+    const legacyPreview = await call(library+'/'+id+'/thumbnail');
+    assert.equal(legacyPreview.headers.get('content-type'),'image/png');
+    assert.equal(await legacyPreview.text(),'a');
     ledger.savePro(other,'test','sub_other','cus_other','active',Date.now()+3600000);
     assert.deepEqual((await (await call(library, undefined, otherSession)).json()).items, []);
     assert.equal((await call(library+'/'+id, undefined, otherSession)).status, 404);
-    assert.equal((await call(library, {...project, replace:id, name:'Updated plaque'})).status,201);
+    assert.equal((await call(library+'/'+id+'/thumbnail', undefined, otherSession)).status,404);
+    assert.equal((await call(library, {...project, replace:id, thumbnail:'data:image/svg+xml;base64,YQ=='})).status,400);
+    assert.equal((await call(library, {...project, replace:id, name:'Updated plaque', thumbnail:'data:image/jpeg;base64,Yg=='})).status,201);
+    const preview = await call(library+'/'+id+'/thumbnail');
+    assert.equal(preview.headers.get('content-type'),'image/jpeg');
+    assert.equal(preview.headers.get('cache-control'),'private, no-store');
+    assert.equal(await preview.text(),'b');
     assert.equal((await (await call(library+'/'+id)).json()).name,'Updated plaque');
 
     const quote = await (await call('/api/exports',modelPayload(2))).json();
