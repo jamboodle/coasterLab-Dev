@@ -143,7 +143,7 @@ export function handler({ledger, secretKey, webhookSecret, origin, developmentLo
         return await proBilling({req,path,send,ledger,account,mode,enabled:paymentsEnabled&&customerAccounts,manageEnabled,secret:activeSecret,origin,fetchImpl,priceId:proPriceId});
       }
       if(path==='/api/exports'||path.startsWith('/api/exports/'))return await exportRequest({req,res,path,send,ledger,account,origin,billingEnabled:chargeExports,mode});
-      if(path.startsWith('/api/admin/'))return adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork,resources});
+      if(path.startsWith('/api/admin/'))return adminRequest({req,res,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork,resources});
       if(req.method==='POST' && ['/api/export-quote','/api/export-debit'].includes(path)) {
         if(secureExports)return send(410,{error:'Use the account-bound export preparation and download flow.'});
         if(!customerAccounts && !chargeExports)return send(404,{error:'Account exports are disabled'});

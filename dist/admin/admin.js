@@ -82,7 +82,55 @@
    row.append(credits,planCell,element('td',user.pro_credits_saved.toLocaleString()),element('td',user.suspended?'Suspended':user.admin?'Admin':user.verified_at?'Verified':'Unverified'));const actions=element('td'),button=element('button','Manage');button.className='button secondary';button.setAttribute('aria-label','Manage '+(user.name || user.email));button.onclick=()=>manage(user,data.mode);actions.append(button);row.append(actions);list.append(row);
   }
  }
- function section(name){if(name==='users')void users().catch(error=>status(error.message));if(name==='artwork')void artworkStatus();if(name==='resources')void resourcesStatus();for(const tab of document.querySelectorAll('[data-section]')){const active=tab.dataset.section===name;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$(tab.dataset.section).hidden=!active;}}
+ const projectSearch=$('project-search'),projectPreview=$('admin-project-preview');
+ const projectMakerNames={coaster:'Coaster',plaque:'Plaque','cookie-cutter':'Cookie Cutter'};
+ let projectOffset=0,projectRequest=0,projectFilters={search:'',maker:''};
+ function projectImage(url,alt){
+  const image=element('img');image.alt=alt;image.decoding='async';image.src=url;
+  image.onerror=()=>image.replaceWith(element('p','Artwork preview unavailable.'));
+  return image;
+ }
+ function showProject(project){
+  const choice=$('admin-project-image'),artwork=$('admin-project-artwork');
+  $('admin-project-title').textContent=project.name;
+  $('admin-project-owner').textContent=[project.owner,project.email,projectMakerNames[project.maker]].filter(Boolean).join(' · ');
+  choice.replaceChildren(...Array.from({length:project.imageCount},(_,index)=>new Option('Image '+(index+1),index)));
+  $('admin-project-image-choice').hidden=project.imageCount<2;
+  choice.onchange=()=>artwork.replaceChildren(projectImage('/api/admin/projects/'+project.id+'/artwork/'+choice.value,project.name+' artwork'));
+  if(project.imageCount)choice.onchange();
+  else artwork.replaceChildren(element('p','No saved artwork.'));
+  projectPreview.showModal();
+ }
+ projectPreview.addEventListener('close',()=>$('admin-project-artwork').replaceChildren());
+ async function savedProjects(){
+  const generation=++projectRequest;
+  const result=$('project-results'),previous=$('project-prev'),next=$('project-next');
+  result.textContent='Loading saved projects…';previous.disabled=next.disabled=true;
+  try{
+   const data=await api('/api/admin/projects?'+new URLSearchParams({...projectFilters,offset:projectOffset}));
+   if(generation!==projectRequest)return;
+   if(projectOffset>=data.total&&projectOffset){projectOffset=Math.max(0,Math.floor((data.total-1)/data.limit)*data.limit);return savedProjects();}
+   result.textContent=data.total?`${projectOffset+1}–${projectOffset+data.projects.length} of ${data.total} projects`:'No matching projects.';
+   previous.disabled=projectOffset===0;next.disabled=projectOffset+data.limit>=data.total;
+   previous.onclick=()=>{projectOffset-=data.limit;void savedProjects();};
+   next.onclick=()=>{projectOffset+=data.limit;void savedProjects();};
+   $('project-list').replaceChildren(...data.projects.map(project=>{
+    const card=element('li'),preview=element('div'),button=element('button','View project');
+    preview.className='pro-project-preview';
+    const image=projectImage('/api/admin/projects/'+project.id+'/thumbnail','');
+    image.loading='lazy';preview.append(image);
+    button.type='button';button.className='button secondary';
+    button.setAttribute('aria-label','View project '+project.name);button.onclick=()=>showProject(project);
+    card.append(preview,element('strong',project.name),element('span',project.owner?project.owner+' · '+project.email:project.email),
+      element('small',projectMakerNames[project.maker]+' · Updated '+visitDate(project.updated)),button);
+    return card;
+   }));
+  }catch(error){if(generation===projectRequest){$('project-list').replaceChildren();result.textContent=error.message;}}
+ }
+ projectSearch.onsubmit=event=>{
+  event.preventDefault();projectOffset=0;projectFilters=Object.fromEntries(new FormData(projectSearch));void savedProjects();
+ };
+ function section(name){if(name==='projects')void savedProjects();if(name==='users')void users().catch(error=>status(error.message));if(name==='artwork')void artworkStatus();if(name==='resources')void resourcesStatus();for(const tab of document.querySelectorAll('[data-section]')){const active=tab.dataset.section===name;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$(tab.dataset.section).hidden=!active;}}
  for(const tab of document.querySelectorAll('[data-section]')){tab.onclick=()=>section(tab.dataset.section);tab.addEventListener('keydown',event=>{const tabs=[...document.querySelectorAll('[data-section]')],index=tabs.indexOf(tab);let next;if(event.key==='ArrowRight')next=(index+1)%tabs.length;if(event.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;if(event.key==='Home')next=0;if(event.key==='End')next=tabs.length-1;if(next!==undefined){event.preventDefault();section(tabs[next].dataset.section);tabs[next].focus();}});}
  for(const button of document.querySelectorAll('[data-sort]'))button.onclick=()=>{direction=sort===button.dataset.sort&&direction==='asc'?'desc':'asc';sort=button.dataset.sort;offset=0;void users().catch(error=>status(error.message));};
  $('plan-filter').onchange=()=>{plan=$('plan-filter').value;offset=0;void users().catch(error=>status(error.message));};

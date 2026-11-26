@@ -136,6 +136,14 @@ export async function proBilling({req, path, send, ledger, account, mode, enable
   }
 }
 
+export function sendProjectImage(res,send,data) {
+  const image = data?.match(/^data:image\/(png|jpeg);base64,([a-zA-Z0-9+/]+=*)$/);
+  if (!image) return send(404,{error:'Project preview unavailable.'});
+  res.writeHead(200,{'Content-Type':'image/'+image[1],'Cache-Control':'private, no-store',
+    'X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin'});
+  return res.end(Buffer.from(image[2],'base64'));
+}
+
 const maxSize = 26000000;
 export async function proLibrary({req, res, path, send, ledger, account, mode, origin}) {
   if (!ledger.isPro(account, mode)) return send(403, {error: 'Active Pro access is required.'});
@@ -147,11 +155,7 @@ export async function proLibrary({req, res, path, send, ledger, account, mode, o
     if (thumbnailPath) {
       const saved = db.prepare(`SELECT COALESCE(thumbnail,json_extract(payload,'$.files[0].data')) AS image
         FROM pro_library WHERE account=? AND maker=? AND id=? AND kind='project'`).get(account,maker,id);
-      const image = saved?.image?.match(/^data:image\/(png|jpeg);base64,([a-zA-Z0-9+/]+=*)$/);
-      if (!image) return send(404,{error:'Project preview unavailable.'});
-      res.writeHead(200,{'Content-Type':'image/'+image[1],'Cache-Control':'private, no-store',
-        'X-Content-Type-Options':'nosniff','Cross-Origin-Resource-Policy':'same-origin'});
-      return res.end(Buffer.from(image[2],'base64'));
+      return sendProjectImage(res,send,saved?.image);
     }
     if (!id) return send(200, {items: db.prepare('SELECT id,kind,name FROM pro_library WHERE account=? AND maker=? ORDER BY updated DESC').all(account, maker)});
     const row = db.prepare('SELECT id,kind,name,payload FROM pro_library WHERE account=? AND maker=? AND id=?').get(account, maker, id);

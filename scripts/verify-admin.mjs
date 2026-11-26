@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
 import {fileURLToPath} from 'node:url';
@@ -56,6 +57,23 @@ try{
  await page.keyboard.press('Escape');
  for(const width of [1440,768,390,320]){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Admin overflow at ${width}`);}
  await page.screenshot({path:'/tmp/coasterprint-admin-mobile.png',fullPage:true});
+ const data=await page.evaluate(()=>document.createElement('canvas').toDataURL('image/png'));
+ const payload=JSON.stringify({version:1,settings:{},files:[{name:'one.png',data},{name:'two.png',data}]});
+ ledger.db.prepare('INSERT INTO pro_library(id,account,maker,kind,name,payload,updated) VALUES (?,?,?,?,?,?,?)')
+  .run(randomUUID(),user,'coaster','project','Holiday design',payload,Date.now());
+ await page.locator('#tab-projects').click();
+ await page.locator('#project-search [name=search]').fill('customer@');
+ await page.locator('#project-search [name=maker]').selectOption('coaster');
+ await page.getByRole('button',{name:'Search',exact:true}).filter({visible:true}).click();
+ await page.getByRole('button',{name:'View project Holiday design',exact:true}).click();
+ const preview=page.getByRole('dialog',{name:'Holiday design'});
+ await preview.getByText(/customer@example.com/).waitFor();
+ await preview.getByLabel('Artwork').selectOption('1');
+ await page.waitForFunction(()=>document.querySelector('#admin-project-artwork img')?.naturalWidth>0);
+ assert.match(await preview.locator('img').getAttribute('src'),/\/artwork\/1$/);
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await preview.getByRole('button',{name:'Close',exact:true}).click();
+ await preview.waitFor({state:'hidden'});
  await context.close();
  const mobile=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true}),maker=await mobile.newPage();maker.on('pageerror',error=>errors.push(error.message));
  await maker.goto(origin);

@@ -1,3 +1,4 @@
+import {sendProjectImage} from './pro.mjs';
 import {stripeKeyMode} from './payments.mjs';
 export async function jsonBody(req,limit=8192){
  let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>limit)throw Error('Request too large.');}
@@ -7,7 +8,7 @@ export function creditPacks(settings){return [{id:'starter',amount:settings.amou
 export function publicSettings(settings){
  return {welcomeCredits:settings.welcomeCredits,billingEnabled:settings.billingEnabled,amount:settings.amount,credits:settings.credits,currency:settings.currency,packs:creditPacks(settings)};
 }
-export async function adminRequest({req,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork,resources}){
+export async function adminRequest({req,res,path,send,ledger,account,origin,secretKey,webhookSecret,payments,artwork,resources}){
  if(!ledger.control(account).admin || !ledger.identityForAccount(account))return send(403,{error:'Administrator access required.'});
  if(req.method==='POST' && req.headers.origin!==origin)return send(403,{error:'Origin rejected'});
  if(resources && (path==='/api/admin/resources' || path.startsWith('/api/admin/resources/'))) return resources.admin(req,path,send);
@@ -18,6 +19,30 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
   if(!Number.isSafeInteger(offset)||offset<0||![10,25,50].includes(limit)||!['name','joined','lastVisited','credits','creditsSaved'].includes(sort)||!['asc','desc'].includes(direction)||!['all','pro'].includes(plan))return send(400,{error:'Invalid page or sorting.'});
   const scope={plan,mode:payments.mode,now:Date.now()};
   return send(200,{users:ledger.users(search,offset,{...scope,sort,direction,limit}),total:ledger.usersCount(search,scope),offset,limit,sort,direction,mode:scope.mode});
+ }
+ if(req.method==='GET' && path==='/api/admin/projects'){
+  const params=new URL(req.url,'http://localhost').searchParams;
+  const offset=Number(params.get('offset') || 0), maker=params.get('maker') || '';
+  const search=(params.get('search') || '').slice(0,254).trim().toLowerCase();
+  if(!Number.isSafeInteger(offset)||offset<0||!['','coaster','plaque','cookie-cutter'].includes(maker)){
+   return send(400,{error:'Invalid project filter.'});
+  }
+  const from=`FROM pro_library p JOIN identities i ON p.account=i.account
+   WHERE p.kind='project' AND ($maker='' OR p.maker=$maker)
+   AND instr(LOWER(p.name||' '||i.name||' '||i.email),$search)>0`;
+  const projects=ledger.db.prepare(`SELECT p.id,p.name,p.maker,p.updated,i.name AS owner,i.email,
+   json_array_length(p.payload,'$.files') AS imageCount
+   ${from} ORDER BY p.updated DESC,p.id LIMIT 24 OFFSET $offset`).all({maker,search,offset});
+  const {total}=ledger.db.prepare('SELECT COUNT(*) AS total '+from).get({maker,search});
+  return send(200,{projects,total,offset,limit:24});
+ }
+ const projectImage=path.match(/^\/api\/admin\/projects\/([a-f0-9-]{36})\/(thumbnail|artwork)(?:\/([0-5]))?$/);
+ if(req.method==='GET' && projectImage){
+  const [,id,type,index]=projectImage;
+  const imagePath='$.files['+Number(index || 0)+'].data';
+  const image=ledger.db.prepare(`SELECT CASE WHEN ?='thumbnail' THEN COALESCE(thumbnail,json_extract(payload,'$.files[0].data'))
+   ELSE json_extract(payload,?) END AS data FROM pro_library WHERE id=? AND kind='project'`).get(type,imagePath,id);
+  return sendProjectImage(res,send,image?.data);
  }
  if(req.method==='GET' && path==='/api/admin/audit')return send(200,{entries:ledger.auditLog()});
  if(req.method==='GET' && path==='/api/admin/settings'){

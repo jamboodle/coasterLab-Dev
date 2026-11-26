@@ -146,3 +146,25 @@ test('complimentary Pro grants are admin-only, scoped, audited and independent o
  assert.equal((await call(path,{body:{...revoke,key:randomUUID()}})).status,200);
  assert.equal(ledger.isPro(user,'test'),true);
 }));
+
+test('saved project browsing and artwork are read-only and restricted to administrators',()=>fixture(async({call,user,ledger,origin,userCookie,adminCookie})=>{
+ const id=randomUUID(), now=Date.now();
+ const files=[{name:'first.png',data:'data:image/png;base64,YQ=='},{name:'second.png',data:'data:image/png;base64,Yg=='}];
+ const save=ledger.db.prepare('INSERT INTO pro_library(id,account,maker,kind,name,payload,updated) VALUES (?,?,?,?,?,?,?)');
+ save.run(id,user,'coaster','project','Holiday design',JSON.stringify({version:1,settings:{},files}),now);
+ save.run(randomUUID(),user,'coaster','preset','Holiday preset','{}',now);
+ const path='/api/admin/projects';
+ assert.equal((await call(path,{cookie:userCookie})).status,403);
+ assert.equal((await call(path,{cookie:''})).status,401);
+ assert.equal((await call(path,{body:{}})).status,400);
+ const found=(await call(path+'?search=user%40example.com&maker=coaster')).data;
+ assert.equal(found.total,1);
+ assert.equal(found.projects[0].imageCount,2);
+ assert.equal(found.projects[0].payload,undefined);
+ assert.equal((await call(path+'?maker=plaque')).data.total,0);
+ const imagePath=path+'/'+id+'/artwork/1';
+ const image=await fetch(origin+imagePath,{headers:{Cookie:adminCookie}});
+ assert.equal(image.headers.get('cache-control'),'private, no-store');
+ assert.equal(await image.text(),'b');
+ assert.equal((await fetch(origin+imagePath,{headers:{Cookie:userCookie}})).status,403);
+}));

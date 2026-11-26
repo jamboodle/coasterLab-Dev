@@ -11,3 +11,11 @@
 .pro-grant-form fieldset { min-width:0; margin:1.25rem 0; padding:.9rem; border:1px solid #555; border-radius:.5rem; }
 .pro-grant-form legend { padding:0 .35rem; font-weight:700; }
 .pro-grant-form input { display:block; box-sizing:border-box; margin-top:.35rem; }
+
+#project-search { display:flex; flex-wrap:wrap; gap:.75rem; align-items:end; }
+#project-search label { margin:0; }
+#project-search label:first-child { flex:1 1 15rem; }
+#project-search input, #project-search select, #admin-project-image { display:block; min-height:44px; margin:.3rem 0 0; }
+#project-search select, #admin-project-image { color:inherit; background:#191919; border:1px solid #555; border-radius:6px; padding:.45rem; }
+#project-list { margin-bottom:.9rem; }
+#admin-project-artwork img { display:block; max-width:100%; max-height:56vh; object-fit:contain; margin:.75rem auto 0; }
