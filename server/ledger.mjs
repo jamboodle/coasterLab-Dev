@@ -1,6 +1,9 @@
 import {DatabaseSync} from 'node:sqlite';
 import {randomBytes, createHash} from 'node:crypto';
 const hash = token => createHash('sha256').update(token).digest('hex');
+const adminUserFilter = `instr(LOWER(i.email||' '||i.name),$search)>0
+  AND ($plan='all' OR EXISTS(SELECT 1 FROM pro_subscriptions p WHERE p.account=i.account
+    AND p.mode=$mode AND p.status NOT IN ('canceled','incomplete_expired') AND p.expires>$now))`;
 export class Ledger {
   constructor(path) {
     this.db = new DatabaseSync(path);
@@ -12,6 +15,7 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS export_jobs(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), fingerprint TEXT NOT NULL, count INTEGER NOT NULL, format TEXT NOT NULL, bytes BLOB NOT NULL, released INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL, UNIQUE(account,fingerprint));
       CREATE TABLE IF NOT EXISTS pro_subscriptions(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,id TEXT PRIMARY KEY,customer TEXT NOT NULL,status TEXT NOT NULL,expires INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS pro_subscriptions_account ON pro_subscriptions(account,mode);
+      CREATE TABLE IF NOT EXISTS pro_export_savings(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,fingerprint TEXT NOT NULL,credits INTEGER NOT NULL,PRIMARY KEY(account,mode,fingerprint));
       CREATE TABLE IF NOT EXISTS pro_checkouts(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,id TEXT NOT NULL UNIQUE,expires INTEGER NOT NULL,url TEXT,session TEXT,PRIMARY KEY(account,mode));
       CREATE TABLE IF NOT EXISTS pro_library(id TEXT PRIMARY KEY,account TEXT NOT NULL REFERENCES accounts(id),maker TEXT NOT NULL,kind TEXT NOT NULL,name TEXT NOT NULL,payload TEXT NOT NULL,updated INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS pro_library_account ON pro_library(account,maker);
@@ -245,16 +249,25 @@ export class Ledger {
   audit(actor,action,target,detail,id=randomBytes(16).toString('hex')) {
     this.db.prepare('INSERT INTO admin_audit VALUES (?,?,?,?,?,?)').run(id,actor,action,target,JSON.stringify(detail),Date.now());
   }
-  users(search='',offset=0,{sort='name',direction='asc',limit=25}={}) {
-    const sorts={name:"LOWER(COALESCE(NULLIF(i.name,''),i.email))",joined:'i.joined_at',lastVisited:'i.last_visited_at',credits:'credits'};
+  users(search='',offset=0,{sort='name',direction='asc',limit=25,mode='test',plan='all',now=Date.now()}={}) {
+    const sorts={name:"LOWER(COALESCE(NULLIF(i.name,''),i.email))",joined:'i.joined_at',lastVisited:'i.last_visited_at',credits:'credits',creditsSaved:'pro_credits_saved'};
     if(!Object.hasOwn(sorts,sort)||!['asc','desc'].includes(direction)||![10,25,50].includes(limit))throw Error('Invalid sort or page size.');
     return this.db.prepare(`SELECT i.account,i.email,i.name,i.joined_at,i.last_visited_at,i.verified_at,COALESCE(c.admin,0) AS admin,COALESCE(c.suspended,0) AS suspended,
-      COALESCE((SELECT SUM(delta) FROM entries WHERE account=i.account),0) AS credits
+      COALESCE((SELECT SUM(delta) FROM entries WHERE account=i.account),0) AS credits,
+      COALESCE((SELECT SUM(credits) FROM pro_export_savings WHERE account=i.account AND mode=$mode),0) AS pro_credits_saved,
+      (SELECT p.status FROM pro_subscriptions p WHERE p.account=i.account AND p.mode=$mode
+       ORDER BY (p.status NOT IN ('canceled','incomplete_expired')) DESC,p.expires DESC,p.id LIMIT 1) AS pro_status,
+      COALESCE((SELECT MAX(p.expires) FROM pro_subscriptions p WHERE p.account=i.account AND p.mode=$mode
+       AND p.status NOT IN ('canceled','incomplete_expired') AND p.expires>$now),0) AS pro_until
       FROM identities i LEFT JOIN account_controls c ON c.account=i.account
-      WHERE instr(LOWER(i.email||' '||i.name),?)>0
-      ORDER BY ${sorts[sort]} IS NULL ASC,${sorts[sort]} ${direction},i.email ASC LIMIT ? OFFSET ?`).all(search.trim().toLowerCase(),limit,offset);
+      WHERE ${adminUserFilter}
+      ORDER BY ${sorts[sort]} IS NULL ASC,${sorts[sort]} ${direction},i.email ASC LIMIT $limit OFFSET $offset`)
+      .all({search:search.trim().toLowerCase(),mode,plan,now,limit,offset});
   }
-  usersCount(search=''){return this.db.prepare("SELECT COUNT(*) AS count FROM identities WHERE instr(LOWER(email||' '||name),?)>0").get(search.trim().toLowerCase()).count;}
+  usersCount(search='',{mode='test',plan='all',now=Date.now()}={}){
+    return this.db.prepare(`SELECT COUNT(*) AS count FROM identities i WHERE ${adminUserFilter}`)
+      .get({search:search.trim().toLowerCase(),mode,plan,now}).count;
+  }
   adjustCredits(actor,target,delta,reason,key) {
     this.db.exec('BEGIN IMMEDIATE');
     try{
@@ -295,16 +308,21 @@ export class Ledger {
     if(capacity.count>=100||capacity.size+result.bytes.length>512000000)throw Error('Export storage is busy. Try again later.');
     const id=randomBytes(16).toString('hex');this.db.prepare('INSERT INTO export_jobs(id,account,fingerprint,count,format,bytes,expires) VALUES (?,?,?,?,?,?,?)').run(id,account,result.fingerprint,result.count,result.format,result.bytes,Date.now()+86400000);return id;
   }
-  releaseExport(account,id,billingEnabled,expectedCost){
+  releaseExport(account,id,billingEnabled,expectedCost,mode){
     this.db.exec('BEGIN IMMEDIATE');
     try{
       const job=this.exportJob(account,id);if(!job){this.db.exec('ROLLBACK');return {error:'Export expired or not found. Prepare it again.',status:404};}
       const balance=this.balance(account);if(job.released){this.db.exec('COMMIT');return {cost:0,balance,remaining:balance,retry:true};}
-      const quote=billingEnabled?this.exportQuote(account,job.fingerprint,job.count):{cost:0,balance,remaining:balance,retry:false};
+      const pro=billingEnabled&&mode&&this.isPro(account,mode);
+      const standardQuote=billingEnabled?this.exportQuote(account,job.fingerprint,job.count):{cost:0,balance,remaining:balance,retry:false};
+      const quote=pro?{cost:0,balance,remaining:balance,retry:false}:standardQuote;
       if(quote.error){this.db.exec('ROLLBACK');return quote;}
       if(quote.cost!==expectedCost){this.db.exec('ROLLBACK');return {error:'Export pricing changed. Check the cost and confirm again.',status:409};}
       if(quote.remaining<0){this.db.exec('ROLLBACK');return {error:'Not enough credits. Download STL free or purchase more credits.',status:402};}
       if(quote.cost>0){this.db.prepare('INSERT INTO export_trials VALUES (?,?,?)').run(account,job.fingerprint,job.count);this.db.prepare("INSERT INTO entries VALUES (?,?,?,'export_trial')").run('export:'+account+':'+job.fingerprint,account,-quote.cost);}
+      if(pro&&standardQuote.cost>0){
+        this.db.prepare('INSERT OR IGNORE INTO pro_export_savings VALUES (?,?,?,?)').run(account,mode,job.fingerprint,standardQuote.cost);
+      }
       this.db.prepare('UPDATE export_jobs SET released=1 WHERE id=? AND account=?').run(id,account);this.db.exec('COMMIT');return quote;
     }catch(error){this.db.exec('ROLLBACK');throw error;}
   }

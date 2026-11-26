@@ -1,7 +1,7 @@
 'use strict';
 (()=>{
  const $=id=>document.getElementById(id),status=text=>{$('status').textContent=text;};
- let offset=0,search='',sort='name',direction='asc',limit=25,userGeneration=0;
+ let offset=0,search='',sort='name',direction='asc',limit=25,userGeneration=0,plan='all';
  async function api(path,body){
   const response=await fetch(path,{credentials:'same-origin',method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
   const data=await response.json();if(!response.ok){const error=Error(data.error || 'Request failed.');error.status=response.status;throw error;}return data;
@@ -9,10 +9,12 @@
  function element(tag,text){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;}
  async function busy(button,action){button.disabled=true;try{await action();}catch(error){status(error.message);}finally{button.disabled=false;}}
  function visitDate(value){return value?new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(value):'Not recorded';}
+ function planLabel(user){return user.pro_until?'Pro':user.pro_status?'Pro inactive':'Standard';}
  function manage(user){
   const content=$('manage-content');content.replaceChildren();$('manage-status').textContent='';
   const heading=element('h2',user.name || 'Name not provided');heading.id='manage-title';content.append(heading,element('p',user.email),element('p','Joined: '+visitDate(user.joined_at)+' · Last visited: '+visitDate(user.last_visited_at)));
-  const balance=element('p',user.credits+' credits');content.append(balance);
+  const balance=element('p',user.credits+' credits');content.append(balance,element('p',planLabel(user)+(user.pro_until?' · Current period ends '+visitDate(user.pro_until):'')),
+   element('p','Pro credits saved: '+user.pro_credits_saved.toLocaleString()));
   const form=element('form'),delta=element('input'),reason=element('input'),button=element('button','Apply credit adjustment');form.className='credit-adjustment';
   delta.type='number';delta.step='1';delta.min='-100000';delta.max='100000';delta.required=true;reason.required=true;reason.minLength=3;reason.maxLength=300;button.className='button secondary';
   const creditLabel=element('label','Credits to add or remove'),reasonLabel=element('label','Reason');creditLabel.append(delta);reasonLabel.append(reason);form.append(creditLabel,reasonLabel,button);let key=crypto.randomUUID();
@@ -23,21 +25,23 @@
  }
  async function users(){
   const generation=++userGeneration;
-  const data=await api('/api/admin/users?'+new URLSearchParams({search,offset,limit,sort,direction}));if(generation!==userGeneration)return;
+  const data=await api('/api/admin/users?'+new URLSearchParams({search,offset,limit,sort,direction,plan}));if(generation!==userGeneration)return;
   if(offset>=data.total && offset>0){offset=Math.max(0,Math.floor((data.total-1)/limit)*limit);return users();}
   const list=$('user-list');list.replaceChildren();$('previous').disabled=offset===0;$('next').disabled=offset+limit>=data.total;
   $('page-info').textContent=data.total?`${offset+1}–${Math.min(offset+limit,data.total)} of ${data.total} users`:'No matching users';
   $('page-number').replaceChildren();for(let page=0;page<Math.max(1,Math.ceil(data.total/limit));page++){const option=element('option',String(page+1));option.value=String(page+1);option.selected=page===Math.floor(offset/limit);$('page-number').append(option);}
   for(const button of document.querySelectorAll('[data-sort]')){const active=button.dataset.sort===sort;button.parentElement.setAttribute('aria-sort',active?(direction==='asc'?'ascending':'descending'):'none');}
-  if(!data.users.length){const row=element('tr'),cell=element('td','No matching users.');cell.colSpan=6;row.append(cell);list.append(row);}
+  if(!data.users.length){const row=element('tr'),cell=element('td','No matching users.');cell.colSpan=8;row.append(cell);list.append(row);}
   for(const user of data.users){const row=element('tr');row.className='user';row.dataset.account=user.account;const identity=element('td');identity.append(element('strong',user.name || 'Not provided'),element('small',user.email));row.append(identity);
    for(const date of [user.joined_at,user.last_visited_at]){const cell=element('td');if(date){const time=element('time',visitDate(date));time.dateTime=new Date(date).toISOString();cell.append(time);}else cell.textContent='Not recorded';row.append(cell);}
-   const credits=element('td',String(user.credits));credits.className='user-credits';row.append(credits,element('td',user.suspended?'Suspended':user.admin?'Admin':user.verified_at?'Verified':'Unverified'));const actions=element('td'),button=element('button','Manage');button.className='button secondary';button.setAttribute('aria-label','Manage '+(user.name || user.email));button.onclick=()=>manage(user);actions.append(button);row.append(actions);list.append(row);
+   const credits=element('td',String(user.credits));credits.className='user-credits';const planCell=element('td',planLabel(user));if(user.pro_until)planCell.className='active-pro';
+   row.append(credits,planCell,element('td',user.pro_credits_saved.toLocaleString()),element('td',user.suspended?'Suspended':user.admin?'Admin':user.verified_at?'Verified':'Unverified'));const actions=element('td'),button=element('button','Manage');button.className='button secondary';button.setAttribute('aria-label','Manage '+(user.name || user.email));button.onclick=()=>manage(user);actions.append(button);row.append(actions);list.append(row);
   }
  }
- function section(name){if(name==='artwork')void artworkStatus();if(name==='resources')void resourcesStatus();for(const tab of document.querySelectorAll('[data-section]')){const active=tab.dataset.section===name;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$(tab.dataset.section).hidden=!active;}}
+ function section(name){if(name==='users')void users().catch(error=>status(error.message));if(name==='artwork')void artworkStatus();if(name==='resources')void resourcesStatus();for(const tab of document.querySelectorAll('[data-section]')){const active=tab.dataset.section===name;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;$(tab.dataset.section).hidden=!active;}}
  for(const tab of document.querySelectorAll('[data-section]')){tab.onclick=()=>section(tab.dataset.section);tab.addEventListener('keydown',event=>{const tabs=[...document.querySelectorAll('[data-section]')],index=tabs.indexOf(tab);let next;if(event.key==='ArrowRight')next=(index+1)%tabs.length;if(event.key==='ArrowLeft')next=(index+tabs.length-1)%tabs.length;if(event.key==='Home')next=0;if(event.key==='End')next=tabs.length-1;if(next!==undefined){event.preventDefault();section(tabs[next].dataset.section);tabs[next].focus();}});}
  for(const button of document.querySelectorAll('[data-sort]'))button.onclick=()=>{direction=sort===button.dataset.sort&&direction==='asc'?'desc':'asc';sort=button.dataset.sort;offset=0;void users().catch(error=>status(error.message));};
+ $('plan-filter').onchange=()=>{plan=$('plan-filter').value;offset=0;void users().catch(error=>status(error.message));};
  $('page-size').onchange=()=>{limit=Number($('page-size').value);offset=0;void users().catch(error=>status(error.message));};$('page-number').onchange=()=>{offset=(Number($('page-number').value)-1)*limit;void users().catch(error=>status(error.message));};
  function indexingStatus(name){
  let timer, version=0;

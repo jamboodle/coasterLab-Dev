@@ -14,9 +14,10 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
  if(artwork && (path==='/api/admin/artwork' || path.startsWith('/api/admin/artwork/'))) return artwork.admin(req,path,send);
  if(req.method==='GET' && path==='/api/admin/users'){
   const params=new URL(req.url,'http://localhost').searchParams;
-  const offset=Number(params.get('offset') || 0),search=(params.get('search') || '').slice(0,254),limit=Number(params.get('limit') || 25),sort=params.get('sort') || 'name',direction=params.get('direction') || 'asc';
-  if(!Number.isSafeInteger(offset)||offset<0||![10,25,50].includes(limit)||!['name','joined','lastVisited','credits'].includes(sort)||!['asc','desc'].includes(direction))return send(400,{error:'Invalid page or sorting.'});
-  return send(200,{users:ledger.users(search,offset,{sort,direction,limit}),total:ledger.usersCount(search),offset,limit,sort,direction});
+  const offset=Number(params.get('offset') || 0),search=(params.get('search') || '').slice(0,254),limit=Number(params.get('limit') || 25),sort=params.get('sort') || 'name',direction=params.get('direction') || 'asc',plan=params.get('plan') || 'all';
+  if(!Number.isSafeInteger(offset)||offset<0||![10,25,50].includes(limit)||!['name','joined','lastVisited','credits','creditsSaved'].includes(sort)||!['asc','desc'].includes(direction)||!['all','pro'].includes(plan))return send(400,{error:'Invalid page or sorting.'});
+  const scope={plan,mode:payments.mode,now:Date.now()};
+  return send(200,{users:ledger.users(search,offset,{...scope,sort,direction,limit}),total:ledger.usersCount(search,scope),offset,limit,sort,direction});
  }
  if(req.method==='GET' && path==='/api/admin/audit')return send(200,{entries:ledger.auditLog()});
  if(req.method==='GET' && path==='/api/admin/settings'){

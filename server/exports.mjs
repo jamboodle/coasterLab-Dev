@@ -28,7 +28,7 @@ export async function exportRequest({req,res,path,send,ledger,account,origin,bil
   let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>1024)return send(413,{error:'Payload too large'});}
   let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'Invalid request'});}
   if(!Number.isInteger(body?.expectedCost)||body.expectedCost<0||body.expectedCost>6)return send(400,{error:'Invalid export confirmation.'});
-  const result=ledger.releaseExport(account,id,billingEnabled&&!ledger.isPro(account,mode),body.expectedCost);if(result.error)return send(result.status,{error:result.error});return send(200,{...result,url:'/api/exports/'+id+'/file'});
+  const result=ledger.releaseExport(account,id,billingEnabled,body.expectedCost,mode);if(result.error)return send(result.status,{error:result.error});return send(200,{...result,url:'/api/exports/'+id+'/file'});
  }
  if(['GET','HEAD'].includes(req.method)&&action==='file'){
   if(!job.released)return send(403,{error:'Confirm the export before downloading.'});

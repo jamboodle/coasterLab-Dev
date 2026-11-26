@@ -34,6 +34,17 @@ try{
  await page.locator('#next').click();await page.waitForFunction(()=>document.getElementById('page-info').textContent==='11–20 of 30 users');assert.equal(await page.locator('.user strong').first().textContent(),'Member 19');
  await page.locator('#page-number').selectOption({value:'3'});await page.waitForFunction(()=>document.getElementById('page-info').textContent==='21–30 of 30 users');assert.equal(await page.locator('#next').isDisabled(),true);assert.equal(await page.locator('.user strong').first().textContent(),'Member 09');
  await page.locator('#previous').click();await page.waitForFunction(()=>document.getElementById('page-info').textContent==='11–20 of 30 users');
+ ledger.savePro(admin,'test','sub_admin','cus_admin','active',Date.now()+3600000);
+ const saved=ledger.storeExport(admin,{fingerprint:'admin-browser-savings',count:3,format:'project',bytes:Buffer.from('fixture')});
+ assert.equal(ledger.releaseExport(admin,saved,true,0,'test').cost,0);
+ await page.locator('#search input').fill('');
+ await page.locator('#search button').click();
+ await page.locator('#plan-filter').selectOption('pro');
+ await page.locator('.user .active-pro').waitFor();
+ assert.equal(await page.locator('.user').count(),1);
+ await page.getByRole('button',{name:'Manage admin@example.com'}).click();
+ await manager.getByText('Pro credits saved: 3',{exact:true}).waitFor();
+ await page.keyboard.press('Escape');
  for(const width of [1440,768,390,320]){await page.setViewportSize({width,height:1000});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Admin overflow at ${width}`);}
  await page.screenshot({path:'/tmp/coasterprint-admin-mobile.png',fullPage:true});
  await context.close();
@@ -43,10 +54,10 @@ try{
  await maker.locator('[data-account]').waitFor({state:'visible'});assert.match(await maker.locator('[data-message]').textContent(),/Log in or create/);assert.equal(ledger.balance(user),23);
  const response=await mobile.request.post(origin+'/api/login',{headers:{Origin:origin},data:{email:'customer@example.com',password}});assert.equal(response.status(),200);
  await maker.locator('[data-recheck]').click();await maker.locator('[data-authorize]').waitFor({state:'visible'});await maker.locator('[data-authorize]').click();await maker.locator('[data-save]').waitFor({state:'visible'});assert.equal(ledger.balance(user),22);
- await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});ledger.adjustCredits(admin,user,-22,'Empty balance fixture','test-empty-credit');
+ await maker.keyboard.press('Escape');await maker.waitForFunction(()=>!document.querySelector('dialog'));ledger.adjustCredits(admin,user,-22,'Empty balance fixture','test-empty-credit');
  await maker.evaluate(payload=>{payload.items[0].file.name='new.png';return window.creditTrialDownload(()=>Promise.resolve(JSON.stringify(payload)));},modelPayload());await maker.locator('[data-insufficient]').waitFor({state:'visible'});assert.match(await maker.locator('[data-insufficient]').textContent(),/STL.*free.*purchase more credits/s);assert.equal(await maker.locator('[data-insufficient] a').getAttribute('href'),'/pricing/#export-pack');
- await maker.locator('[data-stl]').click();await maker.getByRole('dialog',{name:'STL parts ZIP',exact:true}).waitFor();assert.match(await maker.locator('[data-progress]').textContent(),/Build your coaster first/);await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});
+ await maker.locator('[data-stl]').click();await maker.getByRole('dialog',{name:'STL parts ZIP',exact:true}).waitFor();assert.match(await maker.locator('[data-progress]').textContent(),/Build your coaster first/);await maker.keyboard.press('Escape');await maker.waitForFunction(()=>!document.querySelector('dialog'));
  ledger.saveSettings(admin,{billingEnabled:false});await maker.evaluate(payload=>{payload.items[0].file.name='free.png';return window.creditTrialDownload(()=>Promise.resolve(JSON.stringify(payload)));},modelPayload());await maker.locator('[data-authorize]').waitFor({state:'visible'});await maker.locator('[data-authorize]').click();await maker.locator('[data-save]').waitFor({state:'visible'});assert.equal(ledger.balance(user),0);
- await maker.keyboard.press('Escape');await maker.locator('dialog').waitFor({state:'detached'});await maker.reload();await maker.waitForFunction(()=>document.getElementById('maker-account').textContent.includes('0 credits'));
- assert.deepEqual(errors,[]);await mobile.close();console.log('PASS admin responsive layout, credit adjustment, suspend/restore, dynamic billing/price, anonymous login prompt, insufficient-credit STL alternative, free billing mode, and maker balance');
+ await maker.keyboard.press('Escape');await maker.waitForFunction(()=>!document.querySelector('dialog'));await maker.reload();await maker.waitForFunction(()=>document.getElementById('maker-account').textContent.includes('0 credits'));
+ assert.deepEqual(errors,[]);await mobile.close();console.log('PASS admin responsive layout, Pro filter and credits saved, credit adjustment, suspend/restore, dynamic billing/price, anonymous login prompt, insufficient-credit STL alternative, free billing mode, and maker balance');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));ledger.close();}

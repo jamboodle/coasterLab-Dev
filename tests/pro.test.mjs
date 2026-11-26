@@ -10,6 +10,7 @@ test('Pro checkout, signed lifecycle events, zero-credit exports and private lib
   const ledger = new Ledger(':memory:');
   const account = ledger.registerIdentity('pro@example.com', 'salt', 'digest');
   const other = ledger.registerIdentity('other@example.com', 'salt', 'digest');
+  ledger.makeAdmin('pro@example.com');
   const session = ledger.createSession(account);
   const otherSession = ledger.createSession(other);
   ledger.grantTestCredits(account, 4);
@@ -87,6 +88,17 @@ test('Pro checkout, signed lifecycle events, zero-credit exports and private lib
     assert.equal((await call('/api/exports/'+quote.id+'/authorize',{expectedCost:0})).status,200);
     assert.equal((await call('/api/exports/'+quote.id+'/file')).status,200);
     assert.equal(ledger.balance(account),balance);
+    ledger.pruneExports(Date.now()+86400001);
+    const rebuilt = await (await call('/api/exports',modelPayload(2))).json();
+    assert.notEqual(rebuilt.id,quote.id);
+    assert.equal((await call('/api/exports/'+rebuilt.id+'/authorize',{expectedCost:0})).status,200);
+    const list = await (await call('/api/admin/users?plan=pro&sort=creditsSaved&direction=desc')).json();
+    assert.equal(list.total,2);
+    assert.equal(list.users[0].account,account);
+    assert.equal(list.users[0].pro_credits_saved,2);
+    assert.ok(list.users[0].pro_until>Date.now());
+    assert.equal((await call('/api/admin/users',undefined,otherSession)).status,403);
+    assert.equal(ledger.users('pro@example.com',0,{mode:'live'})[0].pro_credits_saved,0);
 
     const next = await (await call('/api/exports',modelPayload(3))).json();
     subscription.status = 'past_due';

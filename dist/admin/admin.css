@@ -3,3 +3,7 @@
 #settings select{display:block;width:100%;min-height:44px;padding:10px;margin:10px 0 20px;background:#191919;color:#eee;border:1px solid #555;border-radius:6px}#settings input:disabled,#settings select option:disabled{opacity:.55}
 
 #artwork-progress:not([hidden]){display:block;width:min(100%,32rem);height:1rem;margin:0 0 1rem;accent-color:var(--yellow,#f9e064)}
+
+.plan-filter { display:inline-flex; align-items:center; gap:.65rem; }
+.plan-filter select { min-height:44px; padding:.45rem .65rem; color:inherit; background:#191919; border:1px solid #555; border-radius:6px; }
+.users-table .active-pro { color:#ffe926; font-weight:700; }
