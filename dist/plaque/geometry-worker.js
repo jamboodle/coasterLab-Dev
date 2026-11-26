@@ -2,7 +2,7 @@ import {makeImprint} from '../shared/imprint.js';
 import {removeReliefSpecks} from '../shared/relief-cleanup.js';
 import Module from '../vendor/manifold.js';
 
-async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSeal, removedEdges,
+async function build({paths, perimeter, perimeterMask, sourceAlpha, rimColor, rimWidth, rimSeal, removedEdges,
     viewWidth, width, largest, cleanRelief, strongCleanup, tiers, omitImprint, geometryScript}) {
   self.postMessage({progress: 'Preparing the solid backing…'});
   const [kernel, {pathContours, signedArea, binarySTL}] = await Promise.all([
@@ -65,8 +65,26 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     const outer = loops.filter(polygon => signedArea(polygon) > 0);
     const backing = normal(cross(outer, 'Positive'));
     const simplified = keep(backing.simplify(0.025));
-    const base = simplified.toPolygons().length === 1 ? simplified : backing;
-    const filledHoles = loops.length - outer.length;
+    const solidBase = simplified.toPolygons().length === 1 ? simplified : backing;
+    // Source alpha defines intentional cutouts. Holes introduced by tracing alone
+    // still get a solid backing, as they may be gaps between painted colors.
+    let base = solidBase, cutoutIslands = 0;
+    if (sourceAlpha) {
+      const alpha = contours(sourceAlpha, 'NonZero');
+      const alphaOuter = cross(alpha.toPolygons().filter(polygon => signedArea(polygon) > 0), 'Positive');
+      const cutouts = keep(alphaOuter.subtract(alpha));
+      if (!cutouts.isEmpty()) {
+        base = keep(solidBase.subtract(normal(cutouts)));
+        const islands = base.decompose().map(keep).sort((a,b) => b.area() - a.area());
+        cutoutIslands = islands.length - 1;
+        if (cutoutIslands > 0) {
+          if (!largest) throw Error('Transparent cutouts separate the artwork. Enable Keep only the largest outline, or connect the artwork.');
+          base = islands[0];
+        }
+      }
+    }
+    const preservedHoles = base.toPolygons().filter(polygon => signedArea(polygon) < 0).length;
+    const filledHoles = Math.max(0, loops.length - outer.length - preservedHoles);
     const dimensions = base.bounds().max;
     const detail = new Map();
     let covered;
@@ -74,7 +92,8 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     for (const region of raw.reverse()) {
       const clipped = keep(region.shape.intersect(silhouette));
       const visible = covered ? keep(clipped.subtract(covered)) : clipped;
-      if (!visible.isEmpty()) detail.set(region.color, normal(visible));
+      const supported = keep(normal(visible).intersect(base));
+      if (!supported.isEmpty()) detail.set(region.color, supported);
       covered = covered ? keep(covered.add(clipped)) : clipped;
     }
     const sorted = [...tiers].sort((a, b) => a.top - b.top);
@@ -126,7 +145,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
             if (index) section = keep(section.simplify(repair));
           }
           if (support) section = keep(section.intersect(support));
-          if (!index && section.toPolygons().length !== 1) throw Error('The plaque backing must have one closed outer boundary.');
+          if (!index && section.toPolygons().filter(polygon => signedArea(polygon) > 0).length !== 1) throw Error('The plaque backing must have one connected outline.');
           support = section;
           if (section.isEmpty()) throw Error('Tier ' + (index + 1) + ' is too small to preserve.');
           const bottom = index ? printable[index - 1].top : 0;
@@ -162,7 +181,7 @@ async function build({paths, perimeter, perimeterMask, rimColor, rimWidth, rimSe
     for (const [inset, repair] of [[0, 0], [0.008, 0.004], [0.02, 0.012], [0.045, 0.028], [0.08, 0.065], [0.12, 0.12]]) {
       try {
         return {...meshTiers(inset, repair), inset, repair, omitted, filtered, cleaned: cleanRelief,
-          trimmed: largest ? components.length - 1 : 0, filledHoles, scaledToHeight, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
+          trimmed: largest ? components.length - 1 + cutoutIslands : 0, filledHoles, preservedHoles, scaledToHeight, width: dimensions[0], height: dimensions[1], depth: printable.at(-1).top};
       } catch (error) {
         if (error instanceof WebAssembly.RuntimeError) throw Error('The geometry engine hit a memory error. Try fewer colors or Smooth detail.');
         lastError = error;

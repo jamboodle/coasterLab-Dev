@@ -371,6 +371,44 @@ try {
     for (let j = 0; j < 3; j++) maxY = Math.max(maxY, base.readFloatLE(100 + 50 * i + 12 * j));
   }
   assert.ok(maxY <= 240 && maxY > 239.99, 'the exported STL observes the height limit');
+  const transparentPlaque = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 160;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#194731';
+    ctx.fillRect(10, 10, 140, 140);
+    ctx.fillStyle = '#eb392a';
+    ctx.fillRect(25, 25, 110, 110);
+    ctx.clearRect(60, 60, 40, 40);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(28, 68, 20, 24);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.locator('#color-count').fill('3');
+  await page.locator('#file').setInputFiles({name:'transparent-opening.png',mimeType:'image/png',buffer:Buffer.from(transparentPlaque,'base64')});
+  await page.waitForFunction(() => document.querySelectorAll('.tier').length === 3);
+  await buildPlaque();
+  assert.match(await page.locator('#model-status').textContent(), /Kept 1 transparent opening/);
+  const withOpening = await getProject(1);
+  const openingArchive = unzipSync(new Uint8Array(await readFile(await withOpening.path())));
+  const modelXML = strFromU8(openingArchive['3D/3dmodel.model']);
+  function coverageAt(x, y) {
+    let hits = 0;
+    for (const mesh of modelXML.matchAll(/<mesh>(.*?)<\/mesh>/gs)) {
+      const vertices = [...mesh[1].matchAll(/<vertex x="([^"]+)" y="([^"]+)"/g)]
+        .map(vertex => [Number(vertex[1]),Number(vertex[2])]);
+      const side = (a,b) => (b[0]-a[0])*(y-a[1])-(b[1]-a[1])*(x-a[0]);
+      for (const triangle of mesh[1].matchAll(/<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"/g)) {
+        const [a,b,c] = triangle.slice(1).map(index => vertices[index]);
+        const edges = [side(a,b),side(b,c),side(c,a)];
+        if (edges.every(edge => edge > 1e-8) || edges.every(edge => edge < -1e-8)) hits++;
+      }
+    }
+    return hits;
+  }
+  const finishedWidth = Number(/· ([\d.]+) ×/.exec(await page.locator('#model-status').textContent())[1]);
+  assert.equal(coverageAt(finishedWidth*.5,finishedWidth*.51),0,'the transparent opening has no material in the exported 3MF');
+  assert.ok(coverageAt(finishedWidth*.19,finishedWidth*.51)>0,'opaque white remains printable');
   const recovery = await page.evaluate(() => new Promise((resolve, reject) => {
     const worker = new Worker('/plaque/geometry-worker.js', {type: 'module'});
     worker.onmessage = ({data}) => {

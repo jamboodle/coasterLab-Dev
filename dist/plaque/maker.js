@@ -118,7 +118,7 @@ function readTrace(result, width) {
   const rimColor = result.perimeterFill && hexColor(result.perimeterFill);
   const sourceColors = [...new Set(paths.map(path => path.color))];
   const perimeterMask = result.perimeterMaskPathID && document.getElementById(result.perimeterMaskPathID)?.getAttribute('d');
-  return {paths, perimeter, perimeterMask, rimColor, rimWidth: result.perimeterRimPx, rimSeal: result.rimSealPx,
+  return {paths, perimeter, perimeterMask, sourceAlpha: result.sourceAlpha, rimColor, rimWidth: result.perimeterRimPx, rimSeal: result.rimSealPx,
     removedEdges: result.edgeCleanup?.removedRegionsD, viewWidth: width, sourceColors};
 }
 
@@ -298,7 +298,7 @@ async function traceSource() {
     const {width, height} = canvas;
     const pixels = canvas.getContext('2d').getImageData(0, 0, width, height).data;
     const output = await window.runMakerWorker('/' + scripts['worker.js'], {type: 'classic'}, {
-      id: 'plaque', mode: $('mode').value, colors: count, width, height, pixels,
+      id: 'plaque', preserveSourceAlpha: true, mode: $('mode').value, colors: count, width, height, pixels,
       detail: $('detail').value, removeBackground: $('background').checked,
       smoothOuter: $('smooth-outer').checked, edgeStrength: $('edge-strength').value,
       cleanEdgeSpecks: $('clean-specks').checked, sealOuterRim: $('seal-rim').checked,
@@ -418,6 +418,7 @@ async function build() {
     const dims = [result.width, result.height, result.depth].map(value => Number(value.toFixed(2))).join(' × ');
     $('model-status').textContent = [
       `${result.parts.length} watertight tiers · ${dims} mm`,
+      result.preservedHoles ? `Kept ${result.preservedHoles} transparent opening(s) through the plaque.` : '',
       result.filledHoles ? `Filled ${result.filledHoles} opening(s) in the solid backing.` : '',
       result.scaledToHeight ? 'Resized proportionally to fit the 240 mm height limit.' : '',
       (omitImprint || result.imprinted) ? '' : 'The underside is too narrow for the CoasterPrint.Com imprint.',
