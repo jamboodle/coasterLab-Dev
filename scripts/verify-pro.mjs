@@ -50,6 +50,11 @@ try {
     await page.goto(origin + path);
     const projects = page.locator('.pro-projects');
     const presets = page.locator('.pro-presets');
+    const gallery = page.getByRole('dialog',{name:'Saved projects'});
+    const browse = projects.getByRole('button',{name:'Browse saved projects'});
+    const blockTwo = {coaster:'#customize-coaster',plaque:'section[aria-labelledby="height-title"]',
+      cutter:'section[aria-labelledby="size-title"]'}[maker];
+    await page.locator(blockTwo + ' + .pro-library').waitFor();
     await projects.locator('summary').click();
     await presets.locator('summary').click();
     if (trigger) {
@@ -71,13 +76,19 @@ try {
     await projectName.fill('Saved ' + maker);
     await projects.getByRole('button',{name:'Save new project'}).click();
     await projects.getByText('Project saved.',{exact:true}).waitFor();
-    const image = projects.locator('.pro-project-preview img');
+    await gallery.waitFor({state:'hidden'});
+    assert.equal(await projects.locator('img').count(),0);
+    await browse.click();
+    const image = gallery.locator('.pro-project-preview img');
     await image.scrollIntoViewIfNeeded();
     await page.waitForFunction(() => document.querySelector('.pro-project-preview img')?.naturalWidth > 0);
     assert.ok(await image.evaluate(img => Math.max(img.naturalWidth,img.naturalHeight) <= 240));
+    await page.keyboard.press('Escape');
+    await gallery.waitFor({state:'hidden'});
+    assert.equal(await browse.evaluate(button => button === document.activeElement),true);
     await projectName.fill('Updated ' + maker);
     await projects.getByRole('button',{name:'Save project changes'}).click();
-    await projects.getByRole('button',{name:'Open project Updated ' + maker,exact:true}).waitFor();
+    await projects.getByText('Project saved.',{exact:true}).waitFor();
 
     await presets.getByRole('textbox',{name:'Preset name'}).fill('Preset ' + maker);
     await presets.getByRole('button',{name:'Save new preset'}).click();
@@ -89,10 +100,12 @@ try {
 
     await page.reload();
     await projects.locator('summary').click();
-    await projects.getByRole('searchbox',{name:'Find a project'}).fill('unmatched');
-    await projects.getByText('No projects match your search.',{exact:true}).waitFor();
-    await projects.getByRole('searchbox',{name:'Find a project'}).fill('updated');
-    await projects.getByRole('button',{name:'Open project Updated ' + maker,exact:true}).click();
+    await browse.click();
+    await gallery.getByRole('searchbox',{name:'Find a project'}).fill('unmatched');
+    await gallery.getByText('No projects match your search.',{exact:true}).waitFor();
+    await gallery.getByRole('searchbox',{name:'Find a project'}).fill('updated');
+    await gallery.getByRole('button',{name:'Open project Updated ' + maker,exact:true}).click();
+    await gallery.waitFor({state:'hidden'});
     await projects.getByText('Project opened.',{exact:true}).waitFor();
     assert.equal(await page.locator(size).inputValue(),value);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, maker + ' horizontal overflow');

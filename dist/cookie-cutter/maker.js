@@ -466,7 +466,7 @@ $('download-project').onclick = async () => {
 const proCutterControls = ['threshold', 'invert', 'smoothing', 'width', 'height', 'cutter-height', 'wall',
   'stamp-mode', 'stamp-colors', 'stamp-threshold', 'stamp-invert', 'stamp-depth', 'stamp-cleanup'];
 window.addEventListener('DOMContentLoaded', () => void window.mountProLibrary({
-  maker: 'cookie-cutter', anchor: $('trace-status').closest('section'),
+  maker: 'cookie-cutter', anchor: $('size-title').closest('section'),
   settings: kind => ({controls: window.proControlValues(proCutterControls), sizingAxis,
     ...(kind === 'project' && {manual, shape: $('shape').value})}),
   files: () => sourceFile ? [sourceFile] : [],

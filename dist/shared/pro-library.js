@@ -61,12 +61,9 @@ window.mountProLibrary = async function mountProLibrary({maker, anchor, settings
       <div class="pro-library-actions">
         <button type="button" data-action="save">Save new project</button>
         <button type="button" data-action="update" hidden>Save project changes</button>
+        <button type="button" data-action="browse" aria-haspopup="dialog">Browse saved projects</button>
       </div>
       <p role="status" aria-live="polite"></p>
-      <h3>Saved projects</h3>
-      <label>Find a project <input type="search" maxlength="80"></label>
-      <p class="pro-project-empty"></p>
-      <ul class="pro-project-grid"></ul>
     </details>
     <details class="pro-presets">
       <summary>Pro Presets</summary>
@@ -82,12 +79,26 @@ window.mountProLibrary = async function mountProLibrary({maker, anchor, settings
         <button type="button" data-action="delete" disabled>Delete preset</button>
       </div>
       <p role="status" aria-live="polite"></p>
-    </details>`;
+    </details>
+    <dialog class="pro-project-dialog" aria-labelledby="pro-project-dialog-title">
+      <div class="pro-dialog-heading">
+        <h2 id="pro-project-dialog-title">Saved projects</h2>
+        <form method="dialog" class="pro-library-actions"><button>Close</button></form>
+      </div>
+      <label>Find a project <input type="search" maxlength="80"></label>
+      <p role="status" aria-live="polite"></p>
+      <p class="pro-project-empty"></p>
+      <ul class="pro-project-grid"></ul>
+    </dialog>`;
   anchor.after(panel);
   const projects = panel.querySelector('.pro-projects');
   const presets = panel.querySelector('.pro-presets');
-  const grid = projects.querySelector('ul');
-  const search = projects.querySelector('[type=search]');
+  const gallery = panel.querySelector('dialog');
+  const browse = projects.querySelector('[data-action=browse]');
+  const projectStatus = projects.querySelector('[role=status]');
+  const galleryStatus = gallery.querySelector('[role=status]');
+  const grid = gallery.querySelector('ul');
+  const search = gallery.querySelector('[type=search]');
   const projectName = projects.querySelector('[type=text]');
   const presetName = presets.querySelector('[type=text]');
   const select = presets.querySelector('select');
@@ -104,10 +115,11 @@ window.mountProLibrary = async function mountProLibrary({maker, anchor, settings
   }
 
   function renderProjects() {
+    if (!gallery.open) return;
     const term = search.value.trim().toLowerCase();
     const matches = entries.filter(item => item.kind === 'project' && item.name.toLowerCase().includes(term));
     grid.replaceChildren();
-    projects.querySelector('.pro-project-empty').textContent = matches.length ? '' :
+    gallery.querySelector('.pro-project-empty').textContent = matches.length ? '' :
       term ? 'No projects match your search.' : 'Save a project to see it here.';
     for (const item of matches) {
       const card = document.createElement('li');
@@ -169,17 +181,26 @@ window.mountProLibrary = async function mountProLibrary({maker, anchor, settings
     controls();
   };
   search.oninput = () => {renderProjects(); controls();};
+  gallery.addEventListener('close', () => grid.replaceChildren());
+  gallery.addEventListener('cancel', event => {if (busy) event.preventDefault();});
 
   panel.addEventListener('click', async event => {
     const button = event.target.closest('button[data-action]');
     if (!button || busy) return;
-    const project = projects.contains(button);
+    const {action} = button.dataset;
+    if (action === 'browse') {
+      search.value = '';
+      galleryStatus.textContent = '';
+      gallery.showModal();
+      renderProjects();
+      return;
+    }
+    const fromGallery = gallery.contains(button);
+    const project = fromGallery || projects.contains(button);
     const kind = project ? 'project' : 'preset';
     const label = project ? 'Project' : 'Preset';
-    const area = project ? projects : presets;
-    const status = area.querySelector('[role=status]');
+    let status = fromGallery ? galleryStatus : project ? projectStatus : presets.querySelector('[role=status]');
     const name = project ? projectName : presetName;
-    const {action} = button.dataset;
     const id = project ? button.dataset.id || openProject : select.value;
     const selected = entries.find(item => item.id === id && item.kind === kind);
     if (action !== 'save' && !selected) return;
@@ -194,6 +215,11 @@ window.mountProLibrary = async function mountProLibrary({maker, anchor, settings
           const blob = await (await fetch(file.data)).blob();
           return new File([blob], file.name, {type: blob.type});
         }));
+        if (fromGallery) {
+          gallery.close();
+          status = projectStatus;
+          status.textContent = 'Opening project…';
+        }
         await apply(payload.settings, restored);
         if (project) {
           openProject = id;
@@ -228,7 +254,8 @@ window.mountProLibrary = async function mountProLibrary({maker, anchor, settings
     finally {
       busy = false;
       controls();
-      if (!button.isConnected) {
+      if (fromGallery && !gallery.open) browse.focus({preventScroll: true});
+      else if (!button.isConnected) {
         const restoredButton = [...grid.querySelectorAll('button')].find(node => node.dataset.id === id && node.dataset.action === action);
         (restoredButton || search).focus({preventScroll: true});
       }

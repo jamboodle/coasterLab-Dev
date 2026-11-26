@@ -533,7 +533,7 @@ $('stls').onclick = () => void exportSTL();
 
 const proPlaqueControls = [...traceControls, 'width', 'largest', 'clean-relief'];
 window.addEventListener('DOMContentLoaded', () => void window.mountProLibrary({
-  maker: 'plaque', anchor: $('trace-status').closest('section'),
+  maker: 'plaque', anchor: $('height-title').closest('section'),
   settings: () => ({controls: window.proControlValues(proPlaqueControls), tiers: [...$('tiers').children].map(row => ({
     source: row.dataset.source, top: row.querySelector('[data-field=top]').valueAsNumber,
     color: row.querySelector('[data-field=color]').value

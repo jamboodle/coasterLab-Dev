@@ -166,7 +166,7 @@ for(const id of ['bw','color'])$(id).addEventListener('click',invalidateTraceOut
 const proCoasterControls=['colors','threshold','detail','removeBackground','smoothOuter','cleanEdgeSpecks','sealOuterRim','edgeStrength','pinholeArea','modelWidth','baseHeight','topHeight','autoSTL'];
 window.addEventListener('DOMContentLoaded',()=>{
  void window.mountProLibrary({
-  maker:'coaster',anchor:$('upload-artwork'),
+  maker:'coaster',anchor:$('customize-coaster'),
   settings:()=>({mode,controls:window.proControlValues(proCoasterControls)}),
   files:()=>items.map(item=>item.file),
   async apply(saved,files){
