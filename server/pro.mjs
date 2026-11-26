@@ -65,9 +65,12 @@ export async function proBilling({req, path, send, ledger, account, mode, enable
   const identity = ledger.identityForAccount(account);
   if (!identity) return send(403, {error: 'Sign in with a CoasterPrint email account.'});
   const subscription = ledger.proSubscription(account, mode);
+  const complimentaryUntil = ledger.complimentaryProUntil(account, mode);
+  const complimentary = complimentaryUntil > Date.now();
   if (req.method === 'GET' && path === '/api/pro') {
     return send(200, {active: ledger.isPro(account, mode), mode, status: subscription?.status ?? null,
-      canManage: manageEnabled && Boolean(subscription), canSubscribe: checkoutEnabled && !subscription});
+      complimentaryUntil: complimentary ? complimentaryUntil : null,
+      canManage: manageEnabled && Boolean(subscription), canSubscribe: checkoutEnabled && !subscription && !complimentary});
   }
   if (req.method !== 'POST' || !['/api/pro/checkout', '/api/pro/portal'].includes(path)) return send(404, {error: 'Not found'});
   if (req.headers.origin !== origin) return send(403, {error: 'Origin rejected'});
@@ -83,6 +86,7 @@ export async function proBilling({req, path, send, ledger, account, mode, enable
       return send(200, {url: portal.url});
     }
     if (subscription) return send(409, {error: 'Manage your current subscription instead.'});
+    if (complimentary) return send(409, {error: 'Complimentary Pro is already active on your account.'});
     const previous = ledger.pendingProCheckout(account, mode);
     if (previous?.session && previous.expires <= Date.now()) {
       const checkout = await stripe(fetchImpl, secret, 'checkout/sessions/' + previous.session);
@@ -134,7 +138,7 @@ export async function proBilling({req, path, send, ledger, account, mode, enable
 
 const maxSize = 26000000;
 export async function proLibrary({req, path, send, ledger, account, mode, origin}) {
-  if (!ledger.isPro(account, mode)) return send(403, {error: 'An active Pro subscription is required.'});
+  if (!ledger.isPro(account, mode)) return send(403, {error: 'Active Pro access is required.'});
   const match = path.match(/^\/api\/pro\/library\/(coaster|plaque|cookie-cutter)(?:\/([a-f0-9-]{36}))?$/);
   if (!match) return send(404, {error: 'Not found'});
   const [, maker, id] = match;

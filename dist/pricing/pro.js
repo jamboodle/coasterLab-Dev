@@ -34,7 +34,9 @@
         signup.hidden = !subscription.canSubscribe || (returned && !subscription.active);
         manage.hidden = !subscription.canManage;
         signup.textContent = subscription.mode === 'test' ? 'Open Pro test checkout' : 'Subscribe to Pro';
-        status.textContent = subscription.active ? 'Pro is active on your account.' :
+        status.textContent = subscription.active ? (subscription.complimentaryUntil ?
+          'Complimentary Pro is active through ' + new Date(subscription.complimentaryUntil).toLocaleString() + '.' :
+          'Pro is active on your account.') :
           returned ? 'Stripe confirmation is still pending. Refresh this page in a moment.' :
           subscription.canManage ? 'Manage your subscription or update your payment method in Stripe.' :
           subscription.canSubscribe ? (subscription.mode === 'test' ? 'Sandbox checkout. No real money is charged.' : '') : 'Subscriptions are currently unavailable.';

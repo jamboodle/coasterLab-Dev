@@ -115,3 +115,34 @@ test('admin welcome-credit setting applies to future registrations only, support
  const free=await call('/api/register',{body:{...registration,email:'zero@example.com'},cookie:''});assert.equal(free.status,201);assert.equal(free.data.credits,0);assert.deepEqual(ledger.activity(ledger.identity('zero@example.com').account),[]);
  assert.equal((await call('/api/admin/settings')).data.welcomeCredits,0);
 }));
+
+test('complimentary Pro grants are admin-only, scoped, audited and independent of Stripe',()=>fixture(async({call,user,ledger,userCookie})=>{
+ const path='/api/admin/pro-grant';
+ const expires=Date.now()+3600000;
+ const body={account:user,mode:'test',expires,reason:'Customer trial',key:randomUUID()};
+ assert.equal((await call(path,{body,cookie:userCookie})).status,403);
+ assert.equal((await call(path,{body,requestOrigin:'https://other.example'})).status,403);
+ assert.equal((await call(path,{body:{...body,mode:'live'}})).status,409);
+ assert.equal((await call(path,{body:{...body,expires:Date.now()-1000}})).status,400);
+ for(let n=0;n<2;n++)assert.equal((await call(path,{body})).data.complimentaryUntil,expires);
+ assert.equal(ledger.auditLog().filter(row=>row.action==='pro_grant').length,1);
+ assert.equal(ledger.isPro(user,'test',expires),false);
+ assert.equal(ledger.isPro(user,'live'),false);
+ assert.equal((await call('/api/maker-access',{cookie:userCookie})).data.pro,true);
+ const pro=(await call('/api/pro',{cookie:userCookie})).data;
+ assert.equal(pro.active,true);
+ assert.equal(pro.canSubscribe,false);
+ assert.equal(pro.canManage,false);
+ assert.equal(pro.complimentaryUntil,expires);
+ assert.equal((await call('/api/pro/library/coaster',{cookie:userCookie})).status,200);
+ assert.equal((await call('/api/admin/users?plan=pro')).data.users[0].pro_complimentary_until,expires);
+ const job=ledger.storeExport(user,{fingerprint:'comp-pro',count:2,format:'project',bytes:Buffer.from('fixture')});
+ assert.equal(ledger.releaseExport(user,job,true,0,'test').cost,0);
+ assert.equal(ledger.balance(user),15);
+ const revoke={...body,expires:null,reason:'Trial ended',key:randomUUID()};
+ assert.equal((await call(path,{body:revoke})).data.complimentaryUntil,0);
+ assert.equal((await call('/api/admin/users?plan=pro')).data.total,0);
+ ledger.savePro(user,'test','sub_fixture','cus_fixture','active',expires);
+ assert.equal((await call(path,{body:{...revoke,key:randomUUID()}})).status,200);
+ assert.equal(ledger.isPro(user,'test'),true);
+}));

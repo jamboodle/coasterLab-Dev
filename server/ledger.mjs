@@ -3,7 +3,8 @@ import {randomBytes, createHash} from 'node:crypto';
 const hash = token => createHash('sha256').update(token).digest('hex');
 const adminUserFilter = `instr(LOWER(i.email||' '||i.name),$search)>0
   AND ($plan='all' OR EXISTS(SELECT 1 FROM pro_subscriptions p WHERE p.account=i.account
-    AND p.mode=$mode AND p.status NOT IN ('canceled','incomplete_expired') AND p.expires>$now))`;
+    AND p.mode=$mode AND p.status NOT IN ('canceled','incomplete_expired') AND p.expires>$now)
+  OR EXISTS(SELECT 1 FROM pro_grants g WHERE g.account=i.account AND g.mode=$mode AND g.expires>$now))`;
 export class Ledger {
   constructor(path) {
     this.db = new DatabaseSync(path);
@@ -15,6 +16,7 @@ export class Ledger {
       CREATE TABLE IF NOT EXISTS export_jobs(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), fingerprint TEXT NOT NULL, count INTEGER NOT NULL, format TEXT NOT NULL, bytes BLOB NOT NULL, released INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL, UNIQUE(account,fingerprint));
       CREATE TABLE IF NOT EXISTS pro_subscriptions(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,id TEXT PRIMARY KEY,customer TEXT NOT NULL,status TEXT NOT NULL,expires INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS pro_subscriptions_account ON pro_subscriptions(account,mode);
+      CREATE TABLE IF NOT EXISTS pro_grants(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,expires INTEGER NOT NULL,PRIMARY KEY(account,mode));
       CREATE TABLE IF NOT EXISTS pro_export_savings(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,fingerprint TEXT NOT NULL,credits INTEGER NOT NULL,PRIMARY KEY(account,mode,fingerprint));
       CREATE TABLE IF NOT EXISTS pro_checkouts(account TEXT NOT NULL REFERENCES accounts(id),mode TEXT NOT NULL,id TEXT NOT NULL UNIQUE,expires INTEGER NOT NULL,url TEXT,session TEXT,PRIMARY KEY(account,mode));
       CREATE TABLE IF NOT EXISTS pro_library(id TEXT PRIMARY KEY,account TEXT NOT NULL REFERENCES accounts(id),maker TEXT NOT NULL,kind TEXT NOT NULL,name TEXT NOT NULL,payload TEXT NOT NULL,updated INTEGER NOT NULL);
@@ -71,7 +73,36 @@ export class Ledger {
   proSubscription(account,mode){
     return this.db.prepare("SELECT * FROM pro_subscriptions WHERE account=? AND mode=? AND status NOT IN ('canceled','incomplete_expired') ORDER BY expires DESC LIMIT 1").get(account,mode);
   }
-  isPro(account,mode,now=Date.now()){return Boolean(account && this.proSubscription(account,mode)?.expires>now);}
+  complimentaryProUntil(account,mode){
+    return this.db.prepare('SELECT expires FROM pro_grants WHERE account=? AND mode=?').get(account,mode)?.expires ?? 0;
+  }
+  isPro(account,mode,now=Date.now()){
+    return Boolean(account && (this.complimentaryProUntil(account,mode)>now || this.proSubscription(account,mode)?.expires>now));
+  }
+  setProGrant(actor,target,mode,expires,reason,key){
+    this.db.exec('BEGIN IMMEDIATE');
+    try{
+      const action=expires===null?'pro_revoke':'pro_grant';
+      const detail={mode,expires,reason};
+      const prior=this.db.prepare('SELECT * FROM admin_audit WHERE id=?').get(key);
+      if(prior){
+        if(prior.actor!==actor||prior.target!==target||prior.action!==action||prior.detail!==JSON.stringify(detail)){
+          throw Error('Grant reference already used.');
+        }
+      }else{
+        if(!this.identityForAccount(target))throw Error('Account not found.');
+        if(expires===null)this.db.prepare('DELETE FROM pro_grants WHERE account=? AND mode=?').run(target,mode);
+        else{
+          if(expires<=Date.now())throw Error('Choose a future expiration date.');
+          this.db.prepare('INSERT INTO pro_grants VALUES (?,?,?) ON CONFLICT(account,mode) DO UPDATE SET expires=excluded.expires')
+            .run(target,mode,expires);
+        }
+        this.audit(actor,action,target,detail,key);
+      }
+      const complimentaryUntil=this.complimentaryProUntil(target,mode);
+      this.db.exec('COMMIT');return complimentaryUntil;
+    }catch(error){this.db.exec('ROLLBACK');throw error;}
+  }
   savePro(account,mode,id,customer,status,expires){
     this.db.prepare('INSERT INTO pro_subscriptions VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,expires=excluded.expires WHERE account=excluded.account AND mode=excluded.mode')
       .run(account,mode,id,customer,status,expires);
@@ -258,7 +289,8 @@ export class Ledger {
       (SELECT p.status FROM pro_subscriptions p WHERE p.account=i.account AND p.mode=$mode
        ORDER BY (p.status NOT IN ('canceled','incomplete_expired')) DESC,p.expires DESC,p.id LIMIT 1) AS pro_status,
       COALESCE((SELECT MAX(p.expires) FROM pro_subscriptions p WHERE p.account=i.account AND p.mode=$mode
-       AND p.status NOT IN ('canceled','incomplete_expired') AND p.expires>$now),0) AS pro_until
+       AND p.status NOT IN ('canceled','incomplete_expired') AND p.expires>$now),0) AS pro_until,
+      COALESCE((SELECT g.expires FROM pro_grants g WHERE g.account=i.account AND g.mode=$mode),0) AS pro_complimentary_until
       FROM identities i LEFT JOIN account_controls c ON c.account=i.account
       WHERE ${adminUserFilter}
       ORDER BY ${sorts[sort]} IS NULL ASC,${sorts[sort]} ${direction},i.email ASC LIMIT $limit OFFSET $offset`)

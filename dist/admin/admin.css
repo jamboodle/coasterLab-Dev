@@ -7,3 +7,7 @@
 .plan-filter { display:inline-flex; align-items:center; gap:.65rem; }
 .plan-filter select { min-height:44px; padding:.45rem .65rem; color:inherit; background:#191919; border:1px solid #555; border-radius:6px; }
 .users-table .active-pro { color:#ffe926; font-weight:700; }
+
+.pro-grant-form fieldset { min-width:0; margin:1.25rem 0; padding:.9rem; border:1px solid #555; border-radius:.5rem; }
+.pro-grant-form legend { padding:0 .35rem; font-weight:700; }
+.pro-grant-form input { display:block; box-sizing:border-box; margin-top:.35rem; }

@@ -17,7 +17,7 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
   const offset=Number(params.get('offset') || 0),search=(params.get('search') || '').slice(0,254),limit=Number(params.get('limit') || 25),sort=params.get('sort') || 'name',direction=params.get('direction') || 'asc',plan=params.get('plan') || 'all';
   if(!Number.isSafeInteger(offset)||offset<0||![10,25,50].includes(limit)||!['name','joined','lastVisited','credits','creditsSaved'].includes(sort)||!['asc','desc'].includes(direction)||!['all','pro'].includes(plan))return send(400,{error:'Invalid page or sorting.'});
   const scope={plan,mode:payments.mode,now:Date.now()};
-  return send(200,{users:ledger.users(search,offset,{...scope,sort,direction,limit}),total:ledger.usersCount(search,scope),offset,limit,sort,direction});
+  return send(200,{users:ledger.users(search,offset,{...scope,sort,direction,limit}),total:ledger.usersCount(search,scope),offset,limit,sort,direction,mode:scope.mode});
  }
  if(req.method==='GET' && path==='/api/admin/audit')return send(200,{entries:ledger.auditLog()});
  if(req.method==='GET' && path==='/api/admin/settings'){
@@ -59,6 +59,14 @@ export async function adminRequest({req,path,send,ledger,account,origin,secretKe
    if(typeof body.reason!=='string'||body.reason.trim().length<3||body.reason.length>300)throw Error('Enter a reason (3 to 300 characters).');
    if(typeof body.key!=='string'||!/^[a-f0-9-]{36}$/.test(body.key))throw Error('Invalid adjustment reference.');
    const credits=ledger.adjustCredits(account,body.account,body.delta,body.reason.trim(),body.key);return send(200,{credits});
+  }
+  if(path==='/api/admin/pro-grant'){
+   if(body.expires!==null && (!Number.isSafeInteger(body.expires)||!Number.isFinite(new Date(body.expires).getTime())))throw Error('Choose a valid expiration date.');
+   if(typeof body.reason!=='string'||body.reason.trim().length<3||body.reason.length>300)throw Error('Enter a reason (3 to 300 characters).');
+   if(typeof body.key!=='string'||!/^[a-f0-9-]{36}$/.test(body.key))throw Error('Invalid grant reference.');
+   if(body.mode!==payments.mode)return send(409,{error:'Payment mode changed. Reload Admin before managing Pro access.'});
+   const complimentaryUntil=ledger.setProGrant(account,body.account,payments.mode,body.expires,body.reason.trim(),body.key);
+   return send(200,{complimentaryUntil});
   }
   if(path==='/api/admin/suspend'){
    if(typeof body.suspended!=='boolean')throw Error('Invalid suspension setting.');
