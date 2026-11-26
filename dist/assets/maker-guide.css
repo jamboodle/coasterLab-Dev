@@ -5,5 +5,5 @@
 .maker-guide section { margin-top: 2rem; }
 .maker-guide ol { padding-left: 1.5rem; }
 .maker-guide li + li { margin-top: .65rem; }
-.maker-guide-links { margin: 2rem 0; line-height: 1.6; }
-.maker-guide-links a { color: #ffe32b; text-underline-offset: .2em; }
+.maker-guide-link { margin: .75rem 0 1.25rem; }
+.maker-guide-link a { color: #ffe32b; text-underline-offset: .2em; }

@@ -41,7 +41,7 @@ test('production sitemap lists canonical public pages and keeps account pages ou
   const sitemap=await fetch(origin+'/sitemap.xml');
   assert.match(sitemap.headers.get('content-type'),/^application\/xml/);
   const urls=[...(await sitemap.text()).matchAll(/<loc>(.*?)<\/loc>/g)].map(match=>match[1]);
-  assert.equal(urls.length,6);
+  assert.equal(urls.length,8);
   for(const url of urls){
    assert.equal(new URL(url).origin,'https://coasterprint.com');
    const page=await fetch(origin+new URL(url).pathname,{redirect:'manual'});
@@ -55,6 +55,11 @@ test('production sitemap lists canonical public pages and keeps account pages ou
   for(const path of ['/admin/','/account/','/suncatcher/','/artwork/','/dev/inbox/']){
    assert.match(await (await fetch(origin+path)).text(),/<meta name="robots" content="noindex">/);
   }
-  assert.match(await (await fetch(origin)).text(),/href="\/guides\/image-to-coaster\/"/);
+  for(const [maker,guide,anchor] of [['/','image-to-coaster','upload-artwork'],
+   ['/plaque/','image-to-plaque','trace-title'],['/cookie-cutter/','image-to-cookie-cutter','outline-title']]){
+   const path='/guides/'+guide+'/';
+   assert.ok((await (await fetch(origin+maker)).text()).includes('href="'+path+'"'));
+   assert.ok((await (await fetch(origin+path)).text()).includes('href="'+maker+'#'+anchor+'"'));
+  }
  }finally{await new Promise(resolve=>server.close(resolve));}
 });
